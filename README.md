@@ -1,4 +1,4 @@
-# Snake using the Bevy Game Engine
+# Template Bevy project with WebGL enabled
 
 ## Prerequisites
 
