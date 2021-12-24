@@ -46,7 +46,7 @@ dependencies = ["build-native"]
 
 [tasks.serve]
 command = "basic-http-server"
-args = ["-x", "-a", "10.0.0.12:4000"]
+args = ["-x", "-a", "localhost:4000"]
 dependencies = ["build-web", "basic-http-server"]
 
 [tasks.test]
