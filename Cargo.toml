@@ -28,6 +28,8 @@ bevy_flycam = "0.7"
 # [patch.'https://github.com/mrk-its/bevy_webgl2']
 # bevy_webgl2 = {git = "https://github.com/mrk-its/bevy_webgl2//", rev="035236b8d7ec52b8e9e20399662e89c73e4521f6", default-features=false}
 
+#gloo = {version = "0.2.0", optional = true}
+
 [profile.dev]
 opt-level = 1
 
@@ -36,3 +38,9 @@ opt-level = 1
 [features]
 # lto = true
 # opt-level = 's'
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+  "Window"
+]

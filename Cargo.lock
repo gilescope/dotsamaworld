@@ -244,6 +244,7 @@ dependencies = [
  "getrandom 0.2.3",
  "rand 0.8.4",
  "tracing-wasm 0.2.1",
+ "web-sys",
 ]
 
 [[package]]

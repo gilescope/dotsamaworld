@@ -5,6 +5,8 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::PlayerPlugin;
 use bevy_flycam::FlyCam;
 use bevy::render::camera::CameraProjection;
+use bevy::input::mouse::MouseWheel;
+use bevy_flycam::MovementSettings;
 
 /// the mouse-scroll changes the field-of-view of the camera
 fn scroll(
@@ -37,16 +39,56 @@ fn main() {
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
     app.add_plugin(HelloPlugin);
+    app.insert_resource(MovementSettings {
+        sensitivity: 0.00015, // default: 0.00012
+        speed: 12.0,          // default: 12.0
+    });
     app.add_plugin(PlayerPlugin)
     .add_system(scroll);
     app.add_startup_system(setup.system());
     app.add_system(hello_world);
+    app.add_system(player_move_arrows);
     app.run();
 
 
     // app.insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
     // .add_startup_system(add_people)
     // .add_system(greet_people);
+}
+
+/// Handles keyboard input and movement
+fn player_move_arrows(
+    keys: Res<Input<KeyCode>>,
+    time: Res<Time>,
+    windows: Res<Windows>,
+    settings: Res<MovementSettings>,
+    mut query: Query<&mut Transform, With<FlyCam>>,
+) {
+    let window = windows.get_primary().unwrap();
+    for mut transform in query.iter_mut() {
+        let mut velocity = Vec3::ZERO;
+        let local_z = transform.local_z();
+        let forward = -Vec3::new(local_z.x, 0., local_z.z);
+        let right = Vec3::new(local_z.z, 0., -local_z.x);
+
+        for key in keys.get_pressed() {
+            if window.cursor_locked() {
+                match key {
+                    KeyCode::Up => velocity += forward,
+                    KeyCode::Down => velocity -= forward,
+                    KeyCode::Left => velocity -= right,
+                    KeyCode::Right => velocity += right,
+                    // KeyCode::Space => velocity += Vec3::Y,
+                    // KeyCode::LShift => velocity -= Vec3::Y,
+                    _ => (),
+                }
+            }
+        }
+
+        velocity = velocity.normalize_or_zero();
+
+        transform.translation += velocity * time.delta_seconds() * settings.speed
+    }
 }
 
 pub struct HelloPlugin;
@@ -168,12 +210,55 @@ fn setup(
         transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
         ..Default::default()
     });
-    // camera
-    // commands.spawn_bundle(PerspectiveCameraBundle {
-    //     transform: Transform::from_translation(Vec3::new(-2.0, 2.5, 5.0))
-    //         .looking_ at(Vec3::default(), Vec3::Y),
-    //     ..Default::default()
-    // });
+}
 
-    //spawn_camera(commands);
+use web_sys::window;
+use bevy::ecs::event::Events;
+use bevy::input::mouse::MouseButtonInput;
+pub struct UiPlugin;
+
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app
+        //.init_resource::<TrackInputState>()
+            .add_system(capture_mouse_on_click.system());
+    }
+}
+
+// #[derive(Default)]
+// struct TrackInputState<'a> {
+//     mousebtn: EventReader<'a, 'a, MouseButtonInput>,
+// }
+
+fn capture_mouse_on_click(
+    mouse: Res<Input<MouseButton>>,
+//    mut state: ResMut<'a, TrackInputState>,
+  //  ev_mousebtn: Res<Events<MouseButtonInput>>,
+  //key: Res<Input<KeyCode>>,
+) {
+    if mouse.just_pressed(MouseButton::Left) {
+        html_body::get().request_pointer_lock();
+       // window.set_cursor_visibility(false);
+       // window.set_cursor_lock_mode(true);
+    }
+    // if key.just_pressed(KeyCode::Escape) {
+    //     //window.set_cursor_visibility(true);
+    //     //window.set_cursor_lock_mode(false);
+    // }
+    // for _ev in state.mousebtn.iter(&ev_mousebtn) {
+    //     html_body::get().request_pointer_lock();
+    //     break;
+    // }
+}
+
+pub mod html_body { 
+    use web_sys::HtmlElement;
+
+    pub fn get() -> HtmlElement {
+        // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+        let window = web_sys::window().expect("no global `window` exists");
+        let document = window.document().expect("should have a document on window");
+        let body = document.body().expect("document should have a body");
+        body
+    }
 }
