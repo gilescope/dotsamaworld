@@ -2,11 +2,43 @@ use bevy::prelude::*;
 use bevy::ecs as bevy_ecs;
 use bevy_ecs::prelude::Component;
 
+use bevy_flycam::PlayerPlugin;
+use bevy_flycam::FlyCam;
+use bevy::render::camera::CameraProjection;
+
+/// the mouse-scroll changes the field-of-view of the camera
+fn scroll(
+    mut mouse_wheel_events: EventReader<MouseWheel>,
+    windows: Res<Windows>,
+    mut query: Query<(&FlyCam, &mut Camera, &mut PerspectiveProjection)>,
+) {
+    for event in mouse_wheel_events.iter() {
+        for (_camera, mut camera, mut project) in query.iter_mut() {
+            project.fov = (project.fov - event.y * 0.01).abs();
+            let prim = windows.get_primary().unwrap();
+
+            //Calculate projection with new fov
+            project.update(prim.width(), prim.height());
+
+            //Update camera with the new fov
+            camera.projection_matrix = project.get_projection_matrix();
+            camera.depth_calculation = project.depth_calculation();
+
+            println!("FOV: {:?}", project.fov);
+        }
+    }
+}
+
 fn main() {
+   
+ 
+
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
     app.add_plugin(HelloPlugin);
+    app.add_plugin(PlayerPlugin)
+    .add_system(scroll);
     app.add_startup_system(setup.system());
     app.add_system(hello_world);
     app.run();
@@ -137,9 +169,11 @@ fn setup(
         ..Default::default()
     });
     // camera
-    commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_translation(Vec3::new(-2.0, 2.5, 5.0))
-            .looking_at(Vec3::default(), Vec3::Y),
-        ..Default::default()
-    });
+    // commands.spawn_bundle(PerspectiveCameraBundle {
+    //     transform: Transform::from_translation(Vec3::new(-2.0, 2.5, 5.0))
+    //         .looking_ at(Vec3::default(), Vec3::Y),
+    //     ..Default::default()
+    // });
+
+    //spawn_camera(commands);
 }
