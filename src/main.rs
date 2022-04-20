@@ -9,7 +9,7 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_flycam::PlayerPlugin;
-
+use bevy_text_mesh::prelude::*;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -48,19 +48,21 @@ fn scroll(
 //     numbers.par_iter().sum()
 // }
 use futures::StreamExt;
-use sp_keyring::AccountKeyring;
-use subxt::{ClientBuilder, DefaultConfig, DefaultExtra, PairSigner};
+//use sp_keyring::AccountKeyring;
+use subxt::{ClientBuilder, DefaultConfig, DefaultExtra, //PairSigner
+};
 //use smoldot::*;
 
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
 
-struct BlockEvent {
+struct PolkaBlock {
     blocknum: usize,
-    raw_event: RawEventDetails,
+    blockhash: String,
+    events: Vec<RawEventDetails>,
 }
 
-async fn block_chain(tx: Arc<Mutex<Vec<BlockEvent>>>, url: String) -> Result<(), Box<dyn std::error::Error>> {
+async fn block_chain(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
     let api = ClientBuilder::new()
     .set_url(&url)
 //    .set_url("ws://127.0.0.1:9944")
@@ -75,58 +77,71 @@ async fn block_chain(tx: Arc<Mutex<Vec<BlockEvent>>>, url: String) -> Result<(),
     while let Some(events) = event_sub.next().await {
         let events = events?;
         let block_hash = events.block_hash();
-        for event in events.iter_raw() {
-            let event: RawEventDetails = event?;
-            // match event.pallet.as_str() {
-            //     "ImOnline" | "ParaInclusion" | "PhragmenElection" => {
-            //         continue;
-            //     }
-            //     _ => {}
-            // }
+        blocknum += 1;
 
-            // if event.pallet == "System" {
-            //     if event.variant == "ExtrinsicSuccess" {
-            //         continue;
-            //     }
-            // }
+        tx.lock().unwrap().push(PolkaBlock {
+            blocknum,
+            blockhash: events.block_hash().to_string(),
+            events: events.iter_raw().map(|c|c.unwrap()).collect::<Vec<_>>(),
+        });
 
-            let is_balance_transfer = event
-                .as_event::<polkadot::balances::events::Transfer>()?
-                .is_some();
+        // for event in events.iter_raw() {
+        //     let event: RawEventDetails = event?;
+        //     // match event.pallet.as_str() {
+        //     //     "ImOnline" | "ParaInclusion" | "PhragmenElection" => {
+        //     //         continue;
+        //     //     }
+        //     //     _ => {}
+        //     // }
 
-            let is_online = event
-                .as_event::<polkadot::im_online::events::AllGood>()?
-                .is_some();
+        //     // if event.pallet == "System" {
+        //     //     if event.variant == "ExtrinsicSuccess" {
+        //     //         continue;
+        //     //     }
+        //     // }
 
-            let is_new_session = event
-                .as_event::<polkadot::session::events::NewSession>()?
-                .is_some();
+        //     let is_balance_transfer = event
+        //         .as_event::<polkadot::balances::events::Transfer>()?
+        //         .is_some();
 
-            if !is_online && !is_new_session {
-                tx.lock().unwrap().push(BlockEvent {
-                    blocknum,
-                    raw_event: event.clone(),
-                });
-                println!("    {:?}\n", event.pallet);
-                println!("    {:#?}\n", event);
-                blocknum += 1;
-                // stdout()
-                // .execute(SetForegroundColor(Color::Green)).unwrap()
-                // .execute(SetBackgroundColor(Color::Black)).unwrap()
-                // .execute(Print(format!("    {:?}\r\n", event))).unwrap()
-                // .execute(ResetColor).unwrap();
-            }
-        }
+        //     let is_online = event
+        //         .as_event::<polkadot::im_online::events::AllGood>()?
+        //         .is_some();
+
+        //     let is_new_session = event
+        //         .as_event::<polkadot::session::events::NewSession>()?
+        //         .is_some();
+
+        //     if !is_online && !is_new_session {
+        //         tx.lock().unwrap().push(BlockEvent {
+        //             blocknum,
+        //             raw_event: event.clone(),
+        //         });
+        //         println!("    {:?}\n", event.pallet);
+        //         println!("    {:#?}\n", event);
+           
+        //         // stdout()
+        //         // .execute(SetForegroundColor(Color::Green)).unwrap()
+        //         // .execute(SetBackgroundColor(Color::Black)).unwrap()
+        //         // .execute(Print(format!("    {:?}\r\n", event))).unwrap()
+        //         // .execute(ResetColor).unwrap();
+        //     }
+        // }
     }
     Ok(())
 }
 
+type ABlocks = Arc<Mutex::<Vec<PolkaBlock>>>;
+
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let lock = Arc::new(Mutex::<Vec<BlockEvent>>::default());
-    let lock_statemint = Arc::new(Mutex::<Vec<BlockEvent>>::default());
+    let lock = ABlocks::default();
+    let lock_statemint = ABlocks::default();
     let lock_clone = lock.clone();
     let lock_statemint_clone = lock_statemint.clone();
+    let relay = "kusama-rpc.polkadot.io";
+    let statemint = "statemine-rpc.dwellir.com";
+
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
@@ -136,162 +151,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             speed: 12.0,          // default: 12.0
         })
         .add_plugin(PlayerPlugin)
+        .add_plugin(TextMeshPlugin)
         .add_system(scroll)
         .add_startup_system(setup)
-        .add_system(hello_world)
         .add_startup_system(spawn_tasks)
         .add_system(player_move_arrows)
         .add_system(
             move |mut commands: Commands,
-                  mut meshes: ResMut<Assets<Mesh>>,
-                  mut materials: ResMut<Assets<StandardMaterial>>| {
-
-                if let Ok(ref mut block_events) = lock_statemint_clone.try_lock() {
-                    if let Some(event) = block_events.pop() {
-                        match event.raw_event.pallet.as_str() {
-                            _ => {
-                                commands.spawn_bundle(PbrBundle {
-                                    mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-                                    ///* event.blocknum as f32
-                                    material: materials.add(Color::hex("e6007a").unwrap().into()),
-                                    transform: Transform::from_translation(Vec3::new(
-                                        0.2 + (1.1 * event.blocknum as f32),
-                                        0.2,
-                                        3.2,
-                                    )),
-                                    ..Default::default()
-                                });
-                            }
-                        }
-                    }
-                }
-                if let Ok(ref mut block_events) = lock_clone.try_lock() {
-                    if let Some(event) = block_events.pop() {
-                        match event.raw_event.pallet.as_str() {
-                            "XcmpQueue" => {
-                                commands.spawn_bundle(PbrBundle {
-                                    mesh: meshes.add(Mesh::from(shape::Icosphere {
-                                        radius: 0.45,
-                                        subdivisions: 32,
-                                    })),
-                                    ///* event.blocknum as f32
-                                    material: materials.add(Color::hex("FFFF00").unwrap().into()),
-                                    transform: Transform::from_translation(Vec3::new(
-                                        0.2 + (1.1 * scale(event.blocknum)),
-                                        0.2,
-                                        0.2,
-                                    )),
-                                    ..Default::default()
-                                });
-                                if event.raw_event.variant == "fail" {
-                                    // TODO: Xcmp pallet is not on the relay chain.
-                                    // use crate::polkadot::balances::events::Deposit;
-                                    // let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
-                                    // println!("{:?}", deposit);
-                                }
-                            }
-                            "Staking" => {
-                                commands.spawn_bundle(PbrBundle {
-                                    mesh: meshes.add(Mesh::from(shape::Icosphere {
-                                        radius: 0.45,
-                                        subdivisions: 32,
-                                    })),
-                                    ///* event.blocknum as f32
-                                    material: materials.add(Color::hex("00ffff").unwrap().into()),
-                                    transform: Transform::from_translation(Vec3::new(
-                                        0.2 + (1.1 * scale(event.blocknum)),
-                                        0.2,
-                                        0.2,
-                                    )),
-                                    ..Default::default()
-                                });
-                            }
-                            "Balances" => {
-                                match event.raw_event.variant.as_str() {
-                                    "Deposit" => {
-                                        use crate::polkadot::balances::events::Deposit;
-                                        use codec::Decode;
-                                        use  bevy::prelude::shape::CapsuleUvProfile;
-                                        let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
-                                        println!("{:?}", deposit);
-                                        //use num_integer::roots::Roots;
-
-                                        commands.spawn_bundle(PbrBundle {
-                                            mesh: meshes.add(Mesh::from(shape::Capsule {
-                                                radius: 0.45,
-                                                depth: 0.4 * scale(deposit.amount as usize),
-                                                // latitudes: 2,
-                                                // longitudes: 1,
-                                                // rings: 2,
-                                                // uv_profile:CapsuleUvProfile::Aspect
-                                                ..Default::default()
-//                                                subdivisions: 32,
-                                            })),
-                                            ///* event.blocknum as f32
-                                            material: materials
-                                                .add(Color::hex("e6007a").unwrap().into()),
-                                            transform: Transform::from_translation(Vec3::new(
-                                                0.2 + (1.1 * scale(event.blocknum)),
-                                                0.2,
-                                                0.2,
-                                            )),
-                                            ..Default::default()
-                                        });
-                                    }
-                                    "Withdraw" => {
-                                        commands.spawn_bundle(PbrBundle {
-                                            mesh: meshes.add(Mesh::from(shape::Icosphere {
-                                                radius: 0.45,
-                                                subdivisions: 32,
-                                            })),
-                                            ///* event.blocknum as f32
-                                            material: materials
-                                                .add(Color::hex("000000").unwrap().into()),
-                                            transform: Transform::from_translation(Vec3::new(
-                                                0.2 + (1.1 * scale(event.blocknum)),
-                                                0.2,
-                                                0.2,
-                                            )),
-                                            ..Default::default()
-                                        });
-                                    }
-                                    _ => {
-                                        commands.spawn_bundle(PbrBundle {
-                                            mesh: meshes.add(Mesh::from(shape::Icosphere {
-                                                radius: 0.45,
-                                                subdivisions: 32,
-                                            })),
-                                            ///* event.blocknum as f32
-                                            material: materials
-                                                .add(Color::hex("ff0000").unwrap().into()),
-                                            transform: Transform::from_translation(Vec3::new(
-                                                0.2 + (1.1 * scale(event.blocknum)),
-                                                0.2,
-                                                0.2,
-                                            )),
-                                            ..Default::default()
-                                        });
-                                    }
-                                }
-                            }
-                            _ => {
-                                commands.spawn_bundle(PbrBundle {
-                                    mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-                                    ///* event.blocknum as f32
-                                    material: materials.add(Color::hex("e6007a").unwrap().into()),
-                                    transform: Transform::from_translation(Vec3::new(
-                                        0.2 + (1.1 * scale(event.blocknum)),
-                                        0.2,
-                                        0.2,
-                                    )),
-                                    ..Default::default()
-                                });
-                            }
-                        }
-                    }
-                }
-            },
+                  meshes: ResMut<Assets<Mesh>>,
+                  materials: ResMut<Assets<StandardMaterial>>,
+                  asset_server: Res<AssetServer>
+                  | {
+                      // Can't have too many clones!
+                      let c = lock_statemint_clone.clone();
+                      let cc = lock_clone.clone();
+                render_new_events(commands, meshes, materials, asset_server, vec![(c,statemint.to_owned()), (cc, relay.to_owned())])
+            }
         );
+
 
     let lock_clone = lock.clone();
     let lock_statemint_clone = lock_statemint.clone();
@@ -312,6 +189,296 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // .add_startup_system(add_people)
     // .add_system(greet_people);
     Ok(())
+}
+
+fn text(text:String, t: Transform, font: Handle<TextMeshFont> ) -> TextMeshBundle {
+   
+    TextMeshBundle {
+        // text_mesh: TextMesh::new_with_color(
+            // format!("Block {}", block.blockhash), font.clone(), Color::rgb(0., 0., 1.)),
+            text_mesh: TextMesh {
+                text,
+                style: TextMeshStyle {
+                    font:font.clone(),
+                    font_size: SizeUnit::NonStandard(36.),
+                    color: Color::rgb(1.0, 1.0, 0.0),
+                    font_style: FontStyle::UPPERCASE, // only UPPERCASE & LOWERCASE implemented currently
+                    mesh_quality: Quality::Low,
+                    ..Default::default()
+                },
+                alignment: TextMeshAlignment {
+                    // vertical: VerticalAlign::Top, // FUNCTIONALITY NOT IMPLEMENTED YET - NO EFFECT
+                    // horizontal: HorizontalAlign::Left, // FUNCTIONALITY NOT IMPLEMENTED YET - NO EFFECT
+                    ..Default::default()
+                },
+                size: TextMeshSize {
+                    width: SizeUnit::NonStandard(700.),       // partially implemented
+                    height: SizeUnit::NonStandard(50.),       // partially implemented
+                    depth: Some(SizeUnit::NonStandard(1.0)), // must be > 0 currently, 2d mesh not supported yet
+                    wrapping: true,                           // partially implemented
+                    overflow: false,                          // NOT IMPLEMENTED YET
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        
+            transform: t,
+        
+        // size: TextMeshSize {
+        //     width: SizeUnit::NonStandard(135.),   
+        //     ..Default::default()
+        // },
+
+        ..Default::default()
+        }
+}
+
+fn render_new_events(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
+    locks: Vec<(ABlocks, String)>,
+) {
+    for (chain, (lock, chain_name)) in locks.iter().enumerate() {
+        if let Ok(ref mut block_events) = lock.try_lock() {
+            if let Some(block) = block_events.pop() {
+
+                // commands.spawn_bundle(NodeBundle {
+                //     style: Style {
+                //         size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                //         justify_content: JustifyContent::SpaceBetween,
+                //         ..default()
+                //     },
+                //     color: Color::NONE.into(),
+                //     ..default()
+                // })
+                // .with_children(|parent| {
+                let font: Handle<TextMeshFont> = asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
+                let mut t = Transform::from_xyz(0., 0., 0.);
+                t.rotate(Quat::from_rotation_x(-90.));
+                t = t.with_translation(Vec3::new(-4.,0.,4.));
+
+                let mut t2 = Transform::from_xyz(0., 0., 0.);
+                t2.rotate(Quat::from_rotation_x(-90.));
+                t2 = t2.with_translation(Vec3::new(-4.,0.,2.));
+
+                commands.spawn_bundle(PbrBundle {
+                    mesh: meshes.add(Mesh::from(shape::Plane { size: 10.0 })),
+                    material: materials.add(
+                        StandardMaterial {
+                            base_color: Color::rgba(0.1, 0.9, 0.1, 0.6),
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: 0.08,
+                            ..default()
+                        },
+                    ),
+                    transform: Transform::from_translation(Vec3::new(
+                        0. + (11. * block.blocknum as f32),
+                        
+                        0.,
+                        11. * chain as f32,
+                    )),
+                    ..Default::default()
+                }).with_children(|parent| {
+                    parent.spawn_bundle(text(format!("Block {}", block.blockhash), t, font.clone()));
+                    parent.spawn_bundle(text(format!("{}", chain_name), t2, font));
+                });
+
+               
+                // commands.spawn_bundle();
+               
+//                 commands.spawn_bundle(UiCameraBundle::default());
+//                     commands.spawn_bundle(TextBundle {
+//                         style: Style {
+//                             size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+//                             // align_self: AlignSelf::FlexEnd,
+//                             // position_type: PositionType::Relative,
+//                             // position: Rect {
+//                             // //    bottom: Val::Px(5.0),
+//                             //   //  right: Val::Px(15.0),
+//                             //     ..default()
+//                             // },
+//                             ..default()
+//                         },
+//                         // Use the `Text::with_section` constructor
+//                         text: Text::with_section(
+//                             // Accepts a `String` or any type that converts into a `String`, such as `&str`
+//                             "hello\nbevy!",
+//                             TextStyle {
+//                                 font: asset_server.load("/home/gilescope/fonts/Audiowide-Mono-Latest.ttf"),
+//                                 font_size: 100.0,
+//                                 color: Color::BLACK,
+//                             },
+//                             // Note: You can use `Default::default()` in place of the `TextAlignment`
+//                             TextAlignment {
+// //                                horizontal: HorizontalAlign::Center,
+//                                 ..default()
+//                             },
+//                         ),
+//                         ..default()
+//                     });
+                // });
+                // .insert(ColorText);
+            // commands
+            // .spawn(TextBundle{
+            //     text: Text{value: "Score:".to_string(),
+            //     font: assets.load("FiraSans-Bold.ttf"),
+            //     style:TextStyle{
+            //         font_size:30.0,
+            //         color:Color::WHITE,
+            //         ..Default::default()},..Default::default()},
+            //     transform: Transform::from_translation(Vec3::new(-380.0,-380.0,2.0)),
+            //     ..Default::default()
+            // })
+            // .with(TextTag);
+
+
+            // for event in block.events {
+            //     match event.pallet.as_str() {
+            //         _ => {
+            //             commands.spawn_bundle(PbrBundle {
+            //                 mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+            //                 ///* event.blocknum as f32
+            //                 material: materials.add(Color::hex("e6007a").unwrap().into()),
+            //                 transform: Transform::from_translation(Vec3::new(
+            //                     0.2 + (1.1 * block.blocknum as f32),
+            //                     0.2,
+            //                     3.2,
+            //                 )),
+            //                 ..Default::default()
+            //             });
+            //         }
+            //     }
+            // }
+            }
+        }
+    }
+//     if let Ok(ref mut block_events) = lock_clone.try_lock() {
+//         if let Some(event) = block_events.pop() {
+//             match event.raw_event.pallet.as_str() {
+//                 "XcmpQueue" => {
+//                     commands.spawn_bundle(PbrBundle {
+//                         mesh: meshes.add(Mesh::from(shape::Icosphere {
+//                             radius: 0.45,
+//                             subdivisions: 32,
+//                         })),
+//                         ///* event.blocknum as f32
+//                         material: materials.add(Color::hex("FFFF00").unwrap().into()),
+//                         transform: Transform::from_translation(Vec3::new(
+//                             0.2 + (1.1 * scale(event.blocknum)),
+//                             0.2,
+//                             0.2,
+//                         )),
+//                         ..Default::default()
+//                     });
+//                     if event.raw_event.variant == "fail" {
+//                         // TODO: Xcmp pallet is not on the relay chain.
+//                         // use crate::polkadot::balances::events::Deposit;
+//                         // let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
+//                         // println!("{:?}", deposit);
+//                     }
+//                 }
+//                 "Staking" => {
+//                     commands.spawn_bundle(PbrBundle {
+//                         mesh: meshes.add(Mesh::from(shape::Icosphere {
+//                             radius: 0.45,
+//                             subdivisions: 32,
+//                         })),
+//                         ///* event.blocknum as f32
+//                         material: materials.add(Color::hex("00ffff").unwrap().into()),
+//                         transform: Transform::from_translation(Vec3::new(
+//                             0.2 + (1.1 * scale(event.blocknum)),
+//                             0.2,
+//                             0.2,
+//                         )),
+//                         ..Default::default()
+//                     });
+//                 }
+//                 "Balances" => {
+//                     match event.raw_event.variant.as_str() {
+//                         "Deposit" => {
+//                             use crate::polkadot::balances::events::Deposit;
+//                             use codec::Decode;
+//                             use  bevy::prelude::shape::CapsuleUvProfile;
+//                             let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
+//                             println!("{:?}", deposit);
+//                             //use num_integer::roots::Roots;
+
+//                             commands.spawn_bundle(PbrBundle {
+//                                 mesh: meshes.add(Mesh::from(shape::Capsule {
+//                                     radius: 0.45,
+//                                     depth: 0.4 * scale(deposit.amount as usize),
+//                                     // latitudes: 2,
+//                                     // longitudes: 1,
+//                                     // rings: 2,
+//                                     // uv_profile:CapsuleUvProfile::Aspect
+//                                     ..Default::default()
+// //                                                subdivisions: 32,
+//                                 })),
+//                                 ///* event.blocknum as f32
+//                                 material: materials
+//                                     .add(Color::hex("e6007a").unwrap().into()),
+//                                 transform: Transform::from_translation(Vec3::new(
+//                                     0.2 + (1.1 * scale(event.blocknum)),
+//                                     0.2,
+//                                     0.2,
+//                                 )),
+//                                 ..Default::default()
+//                             });
+//                         }
+//                         "Withdraw" => {
+//                             commands.spawn_bundle(PbrBundle {
+//                                 mesh: meshes.add(Mesh::from(shape::Icosphere {
+//                                     radius: 0.45,
+//                                     subdivisions: 32,
+//                                 })),
+//                                 ///* event.blocknum as f32
+//                                 material: materials
+//                                     .add(Color::hex("000000").unwrap().into()),
+//                                 transform: Transform::from_translation(Vec3::new(
+//                                     0.2 + (1.1 * scale(event.blocknum)),
+//                                     0.2,
+//                                     0.2,
+//                                 )),
+//                                 ..Default::default()
+//                             });
+//                         }
+//                         _ => {
+//                             commands.spawn_bundle(PbrBundle {
+//                                 mesh: meshes.add(Mesh::from(shape::Icosphere {
+//                                     radius: 0.45,
+//                                     subdivisions: 32,
+//                                 })),
+//                                 ///* event.blocknum as f32
+//                                 material: materials
+//                                     .add(Color::hex("ff0000").unwrap().into()),
+//                                 transform: Transform::from_translation(Vec3::new(
+//                                     0.2 + (1.1 * scale(event.blocknum)),
+//                                     0.2,
+//                                     0.2,
+//                                 )),
+//                                 ..Default::default()
+//                             });
+//                         }
+//                     }
+//                 }
+//                 _ => {
+//                     commands.spawn_bundle(PbrBundle {
+//                         mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+//                         ///* event.blocknum as f32
+//                         material: materials.add(Color::hex("e6007a").unwrap().into()),
+//                         transform: Transform::from_translation(Vec3::new(
+//                             0.2 + (1.1 * scale(event.blocknum)),
+//                             0.2,
+//                             0.2,
+//                         )),
+//                         ..Default::default()
+//                     });
+//                 }
+//             }
+//         }
+    // }
 }
 
 
@@ -376,8 +543,6 @@ fn player_move_arrows(
                     KeyCode::Down => velocity -= forward,
                     KeyCode::Left => velocity -= right,
                     KeyCode::Right => velocity += right,
-                    // KeyCode::Space => velocity += Vec3::Y,
-                    // KeyCode::LShift => velocity -= Vec3::Y,
                     _ => (),
                 }
             }
@@ -400,31 +565,6 @@ impl Plugin for HelloPlugin {
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
 
-fn hello_world(
-    time: Res<Time>,
-    // texture_atlases: Res<Assets<TextureAtlas>>,
-    // mut query: Query<(
-    //     &mut AnimationTimer,
-    //     &mut TextureAtlasSprite,
-    //     &Handle<TextureAtlas>,
-    // )>
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    //   std::thread::sleep(std::time::Duration::from_millis(1000));
-    //  println!("hello world!");
-    // cube
-    // commands.spawn_bundle(PbrBundle {
-    //     mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-    //     material: materials.add(Color::hex("e6007a").unwrap().into()),
-    //     transform: Transform::from_translation(Vec3::new(0.2, 0.2, 0.1)),
-    //     ..Default::default()
-    // });
-}
-
-//#[derive(Component)]
-struct Block;
 
 /// set up a simple 3D scene
 fn setup(
@@ -438,7 +578,7 @@ fn setup(
         mesh: meshes.add(Mesh::from(shape::Plane { size: 500.0 })),
         material: materials.add(
             StandardMaterial {
-                base_color: Color::rgba(0.2, 0.2, 0.2, 0.5),
+                base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: 0.08,
                 ..default()
@@ -527,6 +667,7 @@ fn capture_mouse_on_click(
     //key: Res<Input<KeyCode>>,
 ) {
     if mouse.just_pressed(MouseButton::Left) {
+        #[cfg(target_arch="wasm32")]
         html_body::get().request_pointer_lock();
         // window.set_cursor_visibility(false);
         // window.set_cursor_lock_mode(true);
@@ -541,6 +682,7 @@ fn capture_mouse_on_click(
     // }
 }
 
+#[cfg(target_arch="wasm32")]
 pub mod html_body {
     use web_sys::HtmlElement;
 

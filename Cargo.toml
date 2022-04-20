@@ -19,6 +19,7 @@ futures = "0.3.13"
 winit = { version = "*", features=["x11" ] }
 sp-keyring = "5.0.0"
 bevy_flycam = "0.7"
+bevy_text_mesh = "0.2"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 
