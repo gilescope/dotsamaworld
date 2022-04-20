@@ -138,22 +138,22 @@ async fn block_chain(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-struct Style {
+struct ExStyle {
     color: Color,
 }
 
-fn get_color(event: &RawEventDetails) -> Style {
+fn get_color(event: &RawEventDetails) -> ExStyle {
     match event.pallet.as_str() {
-        "Staking" => Style {
+        "Staking" => ExStyle {
             color: Color::hex("00ffff").unwrap(),
         },
-        "Deposit" => Style {
+        "Deposit" => ExStyle {
             color: Color::hex("e6007a").unwrap(),
         },
-        "Withdraw" => Style {
+        "Withdraw" => ExStyle {
             color: Color::hex("e6007a").unwrap(),
         },
-        _ => Style {
+        _ => ExStyle {
             color: Color::hex("000000").unwrap(),
         },
     }
@@ -207,8 +207,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_plugin(NoCameraPlayerPlugin)
         .add_plugin(TextMeshPlugin)
         .add_plugins(DefaultPickingPlugins)
-        .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
-        .add_plugin(DebugEventsPickingPlugin)
+        // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+        // .add_plugin(DebugEventsPickingPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // .add_plugin(LogDiagnosticsPlugin::default())
         .add_system(scroll)
@@ -223,7 +223,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let clone_chains = clone_chains.clone();
                 render_new_events(commands, meshes, materials, asset_server, clone_chains)
             },
-        );
+        )
+        .add_system_to_stage(CoreStage::PostUpdate, print_events)
+        ;
 
     for (arc, chain_name) in chains {
         let lock_clone = arc.clone();
@@ -329,37 +331,8 @@ fn render_new_events(
 
                 //How to do UI text:
 
-                //                 commands.spawn_bundle(UiCameraBundle::default());
-                //                     commands.spawn_bundle(TextBundle {
-                //                         style: Style {
-                //                             size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                //                             // align_self: AlignSelf::FlexEnd,
-                //                             // position_type: PositionType::Relative,
-                //                             // position: Rect {
-                //                             // //    bottom: Val::Px(5.0),
-                //                             //   //  right: Val::Px(15.0),
-                //                             //     ..default()
-                //                             // },
-                //                             ..default()
-                //                         },
-                //                         // Use the `Text::with_section` constructor
-                //                         text: Text::with_section(
-                //                             // Accepts a `String` or any type that converts into a `String`, such as `&str`
-                //                             "hello\nbevy!",
-                //                             TextStyle {
-                //                                 font: asset_server.load("/home/gilescope/fonts/Audiowide-Mono-Latest.ttf"),
-                //                                 font_size: 100.0,
-                //                                 color: Color::BLACK,
-                //                             },
-                //                             // Note: You can use `Default::default()` in place of the `TextAlignment`
-                //                             TextAlignment {
-                // //                                horizontal: HorizontalAlign::Center,
-                //                                 ..default()
-                //                             },
-                //                         ),
-                //                         ..default()
-                //                     });
-                // });
+                  
+                
                 // .insert(ColorText);
                 // commands
                 // .spawn(TextBundle{
@@ -399,7 +372,10 @@ fn render_new_events(
                                     )),
                                     ..Default::default()
                                 })
-                                .insert_bundle(PickableBundle::default());
+                                .insert_bundle(PickableBundle::default())
+                                .insert(Details{ hover: format!("{} {}",event.pallet, event.variant) });
+
+                                ;
                         }
                     }
                 }
@@ -615,11 +591,42 @@ impl Plugin for HelloPlugin {
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
 
+// A unit struct to help identify the color-changing Text component
+#[derive(Component)]
+struct ColorText;
+
+
+#[derive(Component)]
+pub struct Details{
+    hover: String
+}
+
+pub fn print_events(mut events: EventReader<PickingEvent>,   mut query: Query<&mut Selection>,   mut query2: Query<&mut Details>) {
+    for event in events.iter() {
+        match event {
+            PickingEvent::Selection(selection) =>{ 
+                info!("A selection event happened: {:?}", &selection);
+                if let SelectionEvent::JustSelected(entity) = selection {
+                    let mut selection = query.get_mut(*entity).unwrap();
+                    let mut details = query2.get_mut(*entity).unwrap();
+                    println!("found {:?} {}!", entity, details.hover);
+                    // selection.set_selected(false);
+                }
+        },
+            PickingEvent::Hover(e) => {info!("Egads! A hover event!? {:?}", e)},
+            PickingEvent::Clicked(e) => {info!("Gee Willikers, it's a click! {:?}", e)},
+        }
+    }
+}
+
+
+
 /// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     // add entities to the world
     // plane
@@ -635,6 +642,92 @@ fn setup(
         ),
         ..Default::default()
     });
+
+
+//somehow this can change the color
+//    mesh_highlighting(None, None, None);
+
+
+
+    commands.spawn_bundle(UiCameraBundle::default());
+    commands
+        .spawn_bundle(TextBundle {
+            // style: Style {
+            //     align_self: AlignSelf::FlexEnd,
+            //     position_type: PositionType::Absolute,
+            //     position: Rect {
+            //         bottom: Val::Px(5.0),
+            //         right: Val::Px(15.0),
+            //         ..default()
+            //     },
+            //     ..default()
+            // },
+                                                style: Style {
+                                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                                        // align_self: AlignSelf::FlexEnd,
+                                        // position_type: PositionType::Relative,
+                                        // position: Rect {
+                                        // //    bottom: Val::Px(5.0),
+                                        //   //  right: Val::Px(15.0),
+                                        //     ..default()
+                                        // },
+                                        ..default()
+                                    },
+            // Use the `Text::with_section` constructor
+            text: Text::with_section(
+                // Accepts a `String` or any type that converts into a `String`, such as `&str`
+                "hello\nbevy!",
+                TextStyle {
+                    font:  asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
+                    font_size: 100.0,
+                    color: Color::RED,
+                },
+                // Note: You can use `Default::default()` in place of the `TextAlignment`
+                TextAlignment {
+                    horizontal: bevy::prelude::HorizontalAlign::Center,
+                    ..default()
+                },
+            ),
+            ..default()
+        })
+        .insert(ColorText);
+
+    // commands.spawn_bundle(TextBundle {
+    //     style: Style {
+    //         align_self: AlignSelf::FlexEnd,
+    //         position_type: PositionType::Absolute,
+    //         position: Rect {
+    //             bottom: Val::Px(5.0),
+    //             right: Val::Px(15.0),
+    //             ..default()
+    //         },
+    //         ..default()
+    //     },
+    //     // Use the `Text::with_section` constructor
+    //     text: Text::with_section(
+    //         // Accepts a `String` or any type that converts into a `String`, such as `&str`
+    //         "hello\nbevy!",
+    //         TextStyle {
+    //             font: asset_server.load("/home/gilescope/fonts/Audiowide-Mono-Latest.ttf"),
+    //             font_size: 100.0,
+    //             color: Color::BLACK,
+    //         },
+    //         // Note: You can use `Default::default()` in place of the `TextAlignment`
+    //         TextAlignment {
+    //                             horizontal: HorizontalAlign::Center,
+    //             ..default()
+    //         },
+    //     ),
+    //     ..default()
+    // });
+
+
+
+
+
+
+
+
     // cube
     // commands.spawn_bundle(PbrBundle {
     //     mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
