@@ -9,12 +9,16 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_flycam::PlayerPlugin;
+use bevy_mod_picking::*;
 use bevy_text_mesh::prelude::*;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
 // pub use wasm_bindgen_rayon::init_thread_pool;
 //mod coded;
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy_flycam::NoCameraPlayerPlugin;
+use bevy::diagnostic::LogDiagnosticsPlugin;
 use subxt::RawEventDetails;
 /// the mouse-scroll changes the field-of-view of the camera
 fn scroll(
@@ -34,7 +38,7 @@ fn scroll(
             camera.projection_matrix = project.get_projection_matrix();
             camera.depth_calculation = project.depth_calculation();
 
-            println!("FOV: {:?}", project.fov);
+            // println!("FOV: {:?}", project.fov);
         }
     }
 }
@@ -168,25 +172,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "statemine-rpc.dwellir.com",
         "wss.api.moonriver.moonbeam.network",
         "karura-rpc.dwellir.com",
-        "bifrost-rpc.dwellir.com",
-        "khala-rpc.dwellir.com",
-        "shiden-rpc.dwellir.com",
-        "rpc-shadow.crust.network",
-        "kusama.api.integritee.network",
-        "kusama.rpc.robonomics.network",
-        "calamari-rpc.dwellir.com",
-        "heiko-rpc.parallel.fi",
-        "kilt-rpc.dwellir.com",
-        "picasso-rpc.composable.finance",
-        "basilisk-rpc.dwellir.com",
-        "kintsugi-rpc.dwellir.com",
-        "us-ws-quartz.unique.network",
-        "para.subsocial.network",
-        "zeitgeist-rpc.dwellir.com",
-        "crab-parachain-rpc.darwinia.network",
-        "rpc.litmus-parachain.litentry.io",
-        "rpc.api.kico.dico.io"
-    ]//wss://altair.api.onfinality.io/public-ws wss://pioneer.api.onfinality.io/public-ws wss://turing.api.onfinality.io/public-ws
+        // "bifrost-rpc.dwellir.com",
+        // "khala-rpc.dwellir.com",
+        // "shiden-rpc.dwellir.com",
+        // "rpc-shadow.crust.network",
+        // "kusama.api.integritee.network",
+        // "kusama.rpc.robonomics.network",
+        // "calamari-rpc.dwellir.com",
+        // "heiko-rpc.parallel.fi",
+        // "kilt-rpc.dwellir.com",
+        // "picasso-rpc.composable.finance",
+        // "basilisk-rpc.dwellir.com",
+        // "kintsugi-rpc.dwellir.com",
+        // "us-ws-quartz.unique.network",
+        // "para.subsocial.network",
+        // "zeitgeist-rpc.dwellir.com",
+        // "crab-parachain-rpc.darwinia.network",
+        // "rpc.litmus-parachain.litentry.io",
+        // "rpc.api.kico.dico.io",
+    ] //wss://altair.api.onfinality.io/public-ws wss://pioneer.api.onfinality.io/public-ws wss://turing.api.onfinality.io/public-ws
     .into_iter()
     .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
     .collect::<Vec<_>>();
@@ -200,8 +204,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
         })
-        .add_plugin(PlayerPlugin)
+        .add_plugin(NoCameraPlayerPlugin)
         .add_plugin(TextMeshPlugin)
+        .add_plugins(DefaultPickingPlugins)
+        .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+        .add_plugin(DebugEventsPickingPlugin)
+        // .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        // .add_plugin(LogDiagnosticsPlugin::default())
         .add_system(scroll)
         .add_startup_system(setup)
         .add_startup_system(spawn_tasks)
@@ -378,17 +387,19 @@ fn render_new_events(
                         _ => {
                             let style = get_color(event);
 
-                            commands.spawn_bundle(PbrBundle {
-                                mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
-                                ///* event.blocknum as f32
-                                material: materials.add(style.color.into()),
-                                transform: Transform::from_translation(Vec3::new(
-                                    base_x + x as f32,
-                                    0.2 + y as f32,
-                                    base_z + z as f32,
-                                )),
-                                ..Default::default()
-                            });
+                            commands
+                                .spawn_bundle(PbrBundle {
+                                    mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
+                                    ///* event.blocknum as f32
+                                    material: materials.add(style.color.into()),
+                                    transform: Transform::from_translation(Vec3::new(
+                                        base_x + x as f32,
+                                        0.2 + y as f32,
+                                        base_z + z as f32,
+                                    )),
+                                    ..Default::default()
+                                })
+                                .insert_bundle(PickableBundle::default());
                         }
                     }
                 }
@@ -681,6 +692,15 @@ fn setup(
         transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
         ..Default::default()
     });
+
+    // camera
+    commands
+        .spawn_bundle(PerspectiveCameraBundle {
+            transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        })
+        .insert_bundle(PickingCameraBundle::default())
+        .insert(FlyCam);
 }
 
 pub struct UiPlugin;

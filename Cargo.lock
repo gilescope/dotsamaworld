@@ -431,6 +431,7 @@ dependencies = [
  "async-std",
  "bevy 0.7.0",
  "bevy_flycam",
+ "bevy_mod_picking",
  "bevy_text_mesh",
  "bevy_webgl2",
  "futures",
@@ -909,6 +910,25 @@ checksum = "20288df0f70ff258bbaffaf55209f1271a7436438591bbffc3d81e4d84b423f2"
 dependencies = [
  "bevy_reflect 0.7.0",
  "glam 0.20.5",
+]
+
+[[package]]
+name = "bevy_mod_picking"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d1be4bfb7c50e8c0dd471af3cdc0b1cbe18417cbc225b28d6724cf68e7db704"
+dependencies = [
+ "bevy 0.7.0",
+ "bevy_mod_raycast",
+]
+
+[[package]]
+name = "bevy_mod_raycast"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f197fdb27012bc41a5a0086a784aca78b35aea2a10e38a0ea0f1e5b673ca4cfc"
+dependencies = [
+ "bevy 0.7.0",
 ]
 
 [[package]]

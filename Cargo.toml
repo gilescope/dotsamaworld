@@ -8,7 +8,6 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#rand = "*"
 
 async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
 tracing-wasm = "*"
@@ -20,6 +19,7 @@ winit = { version = "*", features=["x11" ] }
 sp-keyring = "5.0.0"
 bevy_flycam = "0.7"
 bevy_text_mesh = "0.2"
+bevy_mod_picking = "0.6"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 
