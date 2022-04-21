@@ -20,6 +20,7 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
 use bevy::diagnostic::LogDiagnosticsPlugin;
 use subxt::RawEventDetails;
+use std::sync::atomic::{AtomicU32, Ordering};
 /// the mouse-scroll changes the field-of-view of the camera
 fn scroll(
     mut mouse_wheel_events: EventReader<MouseWheel>,
@@ -141,28 +142,49 @@ async fn block_chain(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error:
 struct ExStyle {
     color: Color,
 }
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
 
 fn get_color(event: &RawEventDetails) -> ExStyle {
-    match event.pallet.as_str() {
-        "Staking" => ExStyle {
-            color: Color::hex("00ffff").unwrap(),
-        },
-        "Deposit" => ExStyle {
-            color: Color::hex("e6007a").unwrap(),
-        },
-        "Withdraw" => ExStyle {
-            color: Color::hex("e6007a").unwrap(),
-        },
-        _ => ExStyle {
-            color: Color::hex("000000").unwrap(),
-        },
+    let mut hash = calculate_hash(&event.pallet) as u32;
+    let r = (hash % 255) as u8;
+    hash = hash / 255;
+    let b = (hash % 255) as u8;
+    hash = hash / 255;
+    let g = (hash % 255) as u8;
+
+    ExStyle {
+                 color: Color::rgb_u8(r, g, b)
     }
+    // match event.pallet.as_str() {
+    //     "Staking" => ExStyle {
+    //         color: Color::hex("00ffff").unwrap(),
+    //     },
+    //     "Deposit" => ExStyle {
+    //         color: Color::hex("e6007a").unwrap(),
+    //     },
+    //     "Withdraw" => ExStyle {
+    //         color: Color::hex("e6007a").unwrap(),
+    //     },
+    //     _ => ExStyle {
+    //         color: Color::hex("000000").unwrap(),
+    //     },
+    // }
 }
+
+static relayblocks : AtomicU32 = AtomicU32::new(0);
 
 type ABlocks = Arc<Mutex<Vec<PolkaBlock>>>;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+
     // let lock = ABlocks::default();
     // let lock_statemint = ABlocks::default();
     // let lock_clone = lock.clone();
@@ -294,6 +316,11 @@ fn render_new_events(
     for (chain, (lock, chain_name)) in locks.iter().enumerate() {
         if let Ok(ref mut block_events) = lock.try_lock() {
             if let Some(block) = block_events.pop() {
+                if chain == 0 { //relay
+                    relayblocks.store(relayblocks.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+                }
+
+                let block_num = relayblocks.load(Ordering::Relaxed);//block.blocknum;
                 let font: Handle<TextMeshFont> =
                     asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
                 let mut t = Transform::from_xyz(0., 0., 0.);
@@ -314,7 +341,7 @@ fn render_new_events(
                             ..default()
                         }),
                         transform: Transform::from_translation(Vec3::new(
-                            0. + (11. * block.blocknum as f32),
+                            0. + (11. * block_num as f32),
                             0.,
                             11. * chain as f32,
                         )),
@@ -346,9 +373,10 @@ fn render_new_events(
                 //     ..Default::default()
                 // })
                 // .with(TextTag);
+               
 
                 let (base_x, base_z) = (
-                    0. + (11. * block.blocknum as f32) - 4.,
+                    0. + (11. * block_num as f32) - 4.,
                     11. * chain as f32 - 4.,
                 );
 
