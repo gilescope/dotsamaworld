@@ -8,6 +8,8 @@ PRs and suggestions (issuse) welcome along with crazy forks!
 
 Thank you Bevy and all your plugin ecosystem for making this project a real joy to do.
 
+! This is very experimental and under active dev. I'll clean up the code once I know what it is I'm creating. !
+
 ## Prerequisites
 
 There's probably some prerequites but if you have nix or run nixos then you can just 
