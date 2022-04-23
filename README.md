@@ -1,28 +1,30 @@
-# Template Bevy project with WebGL enabled
+# Dotsama Town
+
+Dotsama town is one vision of what's happening in the polkadot ecosystem.
+It's an experiment to see what we can see and I look forward to evolving it
+and seeing where it leads to.
+
+PRs and suggestions (issuse) welcome along with crazy forks!
+
+Thank you Bevy and all your plugin ecosystem for making this project a real joy to do.
 
 ## Prerequisites
 
-```
-cargo install cargo-make
-```
+There's probably some prerequites but if you have nix or run nixos then you can just 
+`nix-shell ./shell.nix` to install whatever is needed.
 
 ## Build and serve WASM version
 
-Set your local ip address in `Makefile.toml` (`localhost` will work if you want to connect to your own device)
-```toml
-[tasks.serve]
-command = "basic-http-server"
-args = ["-x", "-a", "<your-ip>:4000"]
-dependencies = ["build-web", "basic-http-server"]
-```
+You can't at the moment.
 
-```
-cargo make serve
-```
-then point your browser to http://<your-ip>:4000/
-
+I was using `trunk serve` to run up a wasm version but at the moment I'm using subxt which is not no_std
+(could use smaldot or substrate-api-client instead?). Also the wasm multithreading story seems a tad early.
 
 ## Build and run native version
 ```
-cargo make run
+cargo run
 ```
+
+You will need to change Cargo.toml to wayland if your using that - at the moment it's set to X11.
+
+License: MIT/Apache2 just like rust.
