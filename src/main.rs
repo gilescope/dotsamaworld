@@ -17,6 +17,7 @@ use std::sync::Mutex;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::collections::HashMap;
 use subxt::RawEventDetails;
 
 mod style;
@@ -165,11 +166,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "ws://127.0.0.1:9944",
         // "ws://127.0.0.1:9966",
         // "ws://127.0.0.1:9920",
-        "kusama-rpc.polkadot.io",
-        "statemine-rpc.dwellir.com",
-        "wss.api.moonriver.moonbeam.network",
-        "karura-rpc.dwellir.com",
-        "bifrost-rpc.dwellir.com",
+        "rpc.polkadot.io",
+        "statemint-rpc.polkadot.io",
+        "acala.polkawallet.io",
+        "wss.odyssey.aresprotocol.io",
+        "astar-rpc.dwellir.com",
+        "fullnode.parachain.centrifuge.io",
+        "clover.api.onfinality.io/public-ws",
+        "rpc.efinity.io",
+        "rpc-01.hydradx.io",
+        "interlay.api.onfinality.io/public-ws",
+        "k-ui.kapex.network",
+        "wss.api.moonbeam.network",
+        "eden-rpc.dwellir.com",
+        "rpc.parallel.fi",
+        "api.phala.network/ws",
+        "polkadex.api.onfinality.io/public-ws",
+        "ws.unique.network",
+        // "kusama-rpc.polkadot.io",
+        // "statemine-rpc.dwellir.com",
+        // "wss.api.moonriver.moonbeam.network",
+        // "karura-rpc.dwellir.com",
+        // "bifrost-rpc.dwellir.com",
         // "khala-rpc.dwellir.com",
         // "shiden-rpc.dwellir.com",
         // "rpc-shadow.crust.network",
@@ -331,14 +349,12 @@ fn render_new_events(
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
-                        material: materials.add(
-                            StandardMaterial {
-                                base_color: Color::rgba(0., 0., 0., 0.7),
-                                alpha_mode: AlphaMode::Blend,
-                                perceptual_roughness: 0.08,
-                                ..default()
-                            },
-                        ),
+                        material: materials.add(StandardMaterial {
+                            base_color: Color::rgba(0., 0., 0., 0.7),
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: 0.08,
+                            ..default()
+                        }),
                         transform: Transform::from_translation(Vec3::new(
                             0. + (11. * block_num as f32),
                             0.,
@@ -585,6 +601,10 @@ fn add_blocks<'a>(
         -1.0
     };
     // Add all the useful blocks
+    
+    let mesh = meshes.add(Mesh::from(shape::Cube { size: 0.8 }));
+    let mut mat_map = HashMap::new();
+
     let (base_x, base_z) = (0. + (11. * block_num as f32) - 4., 11. * chain as f32 - 4.);
     for (event_num, event) in block_events.enumerate() {
         let x = event_num % 9;
@@ -594,11 +614,15 @@ fn add_blocks<'a>(
             _ => {
                 let style = style::style_event(event);
 
+                let material = mat_map
+                    .entry(style.clone())
+                    .or_insert_with(|| materials.add(style.color.clone().into()));
+
                 commands
                     .spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
+                        mesh: mesh.clone(),
                         ///* event.blocknum as f32
-                        material: materials.add(style.color.into()),
+                        material: material.clone(),
                         transform: Transform::from_translation(Vec3::new(
                             base_x + x as f32,
                             (0.5 + y as f32) * build_direction,

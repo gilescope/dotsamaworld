@@ -1,9 +1,26 @@
 use bevy::render::color::Color;
 use subxt::RawEventDetails;
 
+#[derive(Clone)]
 pub struct ExStyle {
     pub color: Color,
 }
+
+impl Hash for ExStyle {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.color.r() as u32).hash(state);
+        (self.color.g() as u32).hash(state);
+        (self.color.b() as u32).hash(state);
+    }
+}
+
+impl Eq for ExStyle {}
+impl PartialEq for ExStyle {
+    fn eq(&self, other: &Self) -> bool {
+        self.color == other.color
+    }
+}
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
