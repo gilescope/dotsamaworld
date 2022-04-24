@@ -435,6 +435,7 @@ dependencies = [
  "bevy_mod_picking",
  "bevy_text_mesh",
  "bevy_webgl2",
+ "fastrand",
  "futures",
  "getrandom 0.2.6",
  "palette",

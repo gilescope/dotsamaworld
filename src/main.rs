@@ -7,6 +7,7 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
+use bevy_text_mesh::TextMesh;
 // use bevy_text_mesh::prelude::*;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -15,14 +16,16 @@ use std::sync::Mutex;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
+// use bevy_rapier3d::prelude::NoUserData;
+// use bevy_rapier3d::prelude::RapierPhysicsPlugin;
+// use bevy_rapier3d::prelude::*;
 use codec::Decode;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use subxt::RawEventDetails;
+mod content;
 mod movement;
 mod style;
-
-mod content;
 
 use futures::StreamExt;
 
@@ -212,6 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             speed: 12.0,          // default: 12.0
         })
         .add_plugin(NoCameraPlayerPlugin)
+        // .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         //.add_plugin(TextMeshPlugin)
         .add_plugins(DefaultPickingPlugins)
         .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
@@ -229,6 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         // .add_startup_system(spawn_tasks)
         .add_system(movement::player_move_arrows)
+        .add_system(rain)
         .add_system(
             move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
@@ -641,6 +646,8 @@ fn add_blocks<'a>(
         0. + (11. * block_num as f32) - 4.,
         5.5 + 11. * chain as f32 - 4.,
     );
+
+    let mut random_spacing: [f32; 81] = [0.; 81];
     for (event_num, event) in block_events.enumerate() {
         let x = event_num % 9;
         let z = (event_num / 9) % 9;
@@ -662,6 +669,8 @@ fn add_blocks<'a>(
                     mesh.clone()
                 };
 
+                random_spacing[event_num % 81] += fastrand::f32() % 10000.;
+
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh,
@@ -669,7 +678,8 @@ fn add_blocks<'a>(
                         material: material.clone(),
                         transform: Transform::from_translation(Vec3::new(
                             base_x + x as f32,
-                            (0.5 + y as f32) * build_direction,
+                            ((0.5 + y as f32) + 100. + random_spacing[event_num % 81])
+                                * build_direction,
                             (base_z + z as f32) * rflip,
                         )),
                         ..Default::default()
@@ -678,10 +688,18 @@ fn add_blocks<'a>(
                     .insert(Details {
                         hover: format!("{} - {}", event.pallet, event.variant),
                         raw: event.clone(),
+                    })
+                    .insert(Rainable {
+                        dest: (0.5 + y as f32) * build_direction,
                     });
             }
         }
     }
+}
+
+#[derive(Component)]
+pub struct Rainable {
+    dest: f32,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -713,6 +731,65 @@ pub struct Details {
 //         }
 //     };
 // }
+
+// https://stackoverflow.com/questions/53706611/rust-max-of-multiple-floats
+macro_rules! max {
+    ($x: expr) => ($x);
+    ($x: expr, $($z: expr),+) => {{
+        let y = max!($($z),*);
+        if $x > y {
+            $x
+        } else {
+            y
+        }
+    }}
+}
+macro_rules! min {
+    ($x: expr) => ($x);
+    ($x: expr, $($z: expr),+) => {{
+        let y = min!($($z),*);
+        if $x < y {
+            $x
+        } else {
+            y
+        }
+    }}
+}
+
+pub fn rain(
+    time: Res<Time>,
+    mut commands: Commands,
+    // mut events: EventReader<PickingEvent>,
+    // query: Query<&mut Selection>,
+    // mut query2: Query<&mut Details>,
+    mut drops: Query<(&mut Transform, &Rainable)>,
+    // asset_server: Res<AssetServer>,
+    mut timer: ResMut<UpdateTimer>,
+) {
+    //TODO: remove the Rainable component once it has landed for performance!
+    let delta = 1.;
+    if timer.timer.tick(time.delta()).just_finished() {
+        for (mut transform, rainable) in drops.iter_mut() {
+            if rainable.dest > 0. {
+                if transform.translation.y > rainable.dest {
+                    let todo = transform.translation.y - rainable.dest;
+                    let delta = min!(1., delta * (todo / rainable.dest));
+
+                    transform.translation.y = max!(rainable.dest, transform.translation.y - delta);
+                }
+            } else {
+                // Austrialian down under world. Balls coming up from the depths...
+                if transform.translation.y < rainable.dest {
+                    transform.translation.y = min!(rainable.dest, transform.translation.y + delta);
+                }
+            }
+        }
+    }
+}
+
+pub struct UpdateTimer {
+    timer: Timer,
+}
 
 pub fn print_events(
     mut commands: Commands,
@@ -1041,6 +1118,11 @@ fn setup(
     //     transform: Transform::from_xyz(2.3, -2.5, 1.0),
     //     ..default()
     // });
+
+    use std::time::Duration;
+    commands.insert_resource(UpdateTimer {
+        timer: Timer::new(Duration::from_millis(50), true),
+    });
 
     // light
 
