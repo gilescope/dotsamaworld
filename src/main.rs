@@ -1,3 +1,4 @@
+#![feature(drain_filter)]
 // use std::time::Duration;
 
 use bevy::ecs as bevy_ecs;
@@ -6,7 +7,7 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
-use bevy_text_mesh::prelude::*;
+// use bevy_text_mesh::prelude::*;
 use std::sync::Arc;
 use std::sync::Mutex;
 // pub use wasm_bindgen_rayon::init_thread_pool;
@@ -14,10 +15,10 @@ use std::sync::Mutex;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
+use codec::Decode;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use subxt::RawEventDetails;
-
 mod movement;
 mod style;
 
@@ -27,8 +28,13 @@ use futures::StreamExt;
 
 use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
 
+// #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
+// pub mod polkadot {}
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
+
+// #[subxt::subxt(runtime_metadata_path = "moonbeam.network.json")]
+// pub mod moonbeam {}
 
 struct PolkaBlock {
     blocknum: usize,
@@ -208,7 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_plugin(NoCameraPlayerPlugin)
         //.add_plugin(TextMeshPlugin)
         .add_plugins(DefaultPickingPlugins)
-        // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+        .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         // .add_plugin(DebugEventsPickingPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // .add_plugin(LogDiagnosticsPlugin::default())
@@ -229,7 +235,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                   materials: ResMut<Assets<StandardMaterial>>,
                   asset_server: Res<AssetServer>| {
                 let clone_chains = clone_chains.clone();
-                render_new_events(commands, meshes, materials, asset_server, clone_chains)
+                render_new_events(
+                    commands,
+                    meshes,
+                    materials, //asset_server,
+                    clone_chains,
+                )
             },
         )
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
@@ -311,11 +322,11 @@ fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    // asset_server: Res<AssetServer>,
     relays: Vec<Vec<(ABlocks, String)>>,
 ) {
     for (rcount, relay) in relays.iter().enumerate() {
-        for (chain, (lock, chain_name)) in relay.iter().enumerate() {
+        for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = block_events.pop() {
                     let block_num = if rcount == 0 {
@@ -338,13 +349,13 @@ fn render_new_events(
 
                     // let font: Handle<TextMeshFont> =
                     //     asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
-                    let mut t = Transform::from_xyz(0., 0., 0.);
-                    t.rotate(Quat::from_rotation_x(-90.));
-                    t = t.with_translation(Vec3::new(-4., 0., 4.));
+                    // let mut t = Transform::from_xyz(0., 0., 0.);
+                    // t.rotate(Quat::from_rotation_x(-90.));
+                    // t = t.with_translation(Vec3::new(-4., 0., 4.));
 
-                    let mut t2 = Transform::from_xyz(0., 0., 0.);
-                    t2.rotate(Quat::from_rotation_x(-90.));
-                    t2 = t2.with_translation(Vec3::new(-4., 0., 2.));
+                    // let mut t2 = Transform::from_xyz(0., 0., 0.);
+                    // t2.rotate(Quat::from_rotation_x(-90.));
+                    // t2 = t2.with_translation(Vec3::new(-4., 0., 2.));
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
 
@@ -434,13 +445,22 @@ fn render_new_events(
                     // })
                     // .with(TextTag);
 
+                    let mut payload_blocks = block
+                        .events
+                        .iter()
+                        .filter(|&e| !content::is_utility_extrinsic(e))
+                        .collect::<Vec<_>>();
+
+                    // Stick xcm blocks on top:
+                    let xcm = payload_blocks
+                        .drain_filter(|e| e.pallet == "xcm")
+                        .collect::<Vec<_>>();
+                    payload_blocks.extend(xcm);
+
                     add_blocks(
                         block_num,
                         chain,
-                        block
-                            .events
-                            .iter()
-                            .filter(|&e| !content::is_utiliy_extrinsic(e)),
+                        payload_blocks.iter().map(|b| *b),
                         &mut commands,
                         &mut meshes,
                         &mut materials,
@@ -454,7 +474,7 @@ fn render_new_events(
                         block
                             .events
                             .iter()
-                            .filter(|&e| content::is_utiliy_extrinsic(e)),
+                            .filter(|&e| content::is_utility_extrinsic(e)),
                         &mut commands,
                         &mut meshes,
                         &mut materials,
@@ -609,7 +629,12 @@ fn add_blocks<'a>(
     };
     // Add all the useful blocks
 
-    let mesh = meshes.add(Mesh::from(shape::Cube { size: 0.8 }));
+    // let mesh = meshes.add(Mesh::from(shape::Cube { size: 0.8 }));
+    let mesh = meshes.add(Mesh::from(shape::Icosphere {
+        radius: 0.40,
+        subdivisions: 32,
+    }));
+    let mesh_xcm = meshes.add(Mesh::from(shape::Box::new(0.8, 1000., 0.8)));
     let mut mat_map = HashMap::new();
 
     let (base_x, base_z) = (
@@ -628,9 +653,18 @@ fn add_blocks<'a>(
                     .entry(style.clone())
                     .or_insert_with(|| materials.add(style.color.clone().into()));
 
+                let mesh = if matches!(
+                    event.pallet.as_str().to_ascii_lowercase().as_str(),
+                    "xcm" | "dmp" | "ump"
+                ) {
+                    mesh_xcm.clone()
+                } else {
+                    mesh.clone()
+                };
+
                 commands
                     .spawn_bundle(PbrBundle {
-                        mesh: mesh.clone(),
+                        mesh,
                         ///* event.blocknum as f32
                         material: material.clone(),
                         transform: Transform::from_translation(Vec3::new(
@@ -643,6 +677,7 @@ fn add_blocks<'a>(
                     .insert_bundle(PickableBundle::default())
                     .insert(Details {
                         hover: format!("{} - {}", event.pallet, event.variant),
+                        raw: event.clone(),
                     });
             }
         }
@@ -659,7 +694,25 @@ pub struct ColorText;
 #[derive(Component)]
 pub struct Details {
     hover: String,
+    raw: RawEventDetails,
 }
+
+// macro_rules! decode_ex {
+//     ($pallet_name:ident, $variant_name:ident, $value:ident, $details:ident ) => {
+//         if pallet.to_ascii_lowercase() == stringify!($pallet_name) {
+//             if variant == stringify!($variant_name) {
+//                 // The macro will expand into the contents of this block.
+//                 if let Ok(decoded) = crate::polkadot::$pallet_name::events::$variant_name::decode(
+//                     &mut details.raw.data.to_vec().as_slice(),
+//                 ) {
+//                     $value.push_str(&format!("{:#?}", decoded));
+//                 } else {
+//                     $value.push_str("(missing metadata to decode)");
+//                 }
+//             }
+//         }
+//     };
+// }
 
 pub fn print_events(
     mut commands: Commands,
@@ -685,6 +738,106 @@ pub fn print_events(
                         commands.entity(entity).despawn();
                     });
 
+                    let pallet: &str = &details.raw.pallet;
+                    let variant: &str = &details.raw.variant;
+                    let mut value = details.hover.to_string();
+                    match (pallet, variant) {
+                        ("Balances", "Deposit") => {
+                            if let Ok(decoded) = crate::polkadot::balances::events::Deposit::decode(
+                                &mut details.raw.data.to_vec().as_slice(),
+                            ) {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("Balances", "Transfer") => {
+                            if let Ok(decoded) = crate::polkadot::balances::events::Transfer::decode(
+                                &mut details.raw.data.to_vec().as_slice(),
+                            ) {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("Balances", "Withdraw") => {
+                            if let Ok(decoded) = crate::polkadot::balances::events::Withdraw::decode(
+                                &mut details.raw.data.to_vec().as_slice(),
+                            ) {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("ParaInclusion", "CandidateIncluded") => {
+                            if let Ok(decoded) =
+                                crate::polkadot::para_inclusion::events::CandidateIncluded::decode(
+                                    &mut details.raw.data.to_vec().as_slice(),
+                                )
+                            {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("ParaInclusion", "CandidateBacked") => {
+                            if let Ok(decoded) =
+                                crate::polkadot::para_inclusion::events::CandidateBacked::decode(
+                                    &mut details.raw.data.to_vec().as_slice(),
+                                )
+                            {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("Treasury", "Deposit") => {
+                            if let Ok(decoded) = crate::polkadot::treasury::events::Deposit::decode(
+                                &mut details.raw.data.to_vec().as_slice(),
+                            ) {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        ("System", "ExtrinsicSuccess") => {
+                            if let Ok(decoded) =
+                                crate::polkadot::system::events::ExtrinsicSuccess::decode(
+                                    &mut details.raw.data.to_vec().as_slice(),
+                                )
+                            {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        // ("Ump", "ExecutingUpward") => {
+                        //     if let Ok(decoded) =
+                        //         crate::polkadot::ump::events::ExecutingUpward::decode(
+                        //             &mut details.raw.data.to_vec().as_slice(),
+                        //         )
+                        //     {
+                        //         value.push_str(&format!("{:#?}", decoded));
+                        //     } else {
+                        //         value.push_str("(missing metadata to decode)");
+                        //     }
+                        // }
+                        ("Ump", "UpwardMessagesReceived") => {
+                            if let Ok(decoded) =
+                                crate::polkadot::ump::events::UpwardMessagesReceived::decode(
+                                    &mut details.raw.data.to_vec().as_slice(),
+                                )
+                            {
+                                value.push_str(&format!("{:#?}", decoded));
+                            } else {
+                                value.push_str("(missing metadata to decode)");
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
+
                     commands
                         .spawn_bundle(TextBundle {
                             style: Style {
@@ -692,7 +845,7 @@ pub fn print_events(
                                 ..Default::default()
                             },
                             text: Text::with_section(
-                                details.hover.to_string(),
+                                value,
                                 TextStyle {
                                     font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
                                     font_size: 60.0,
