@@ -193,6 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .collect::<Vec<_>>();
 
     let clone_chains = chains.clone();
+    let clone_chains_for_lanes = chains.clone();
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
@@ -208,7 +209,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // .add_plugin(LogDiagnosticsPlugin::default())
         .add_system(scroll)
-        .add_startup_system(setup)
+        .add_startup_system(
+            move |commands: Commands,
+                  meshes: ResMut<Assets<Mesh>>,
+                  materials: ResMut<Assets<StandardMaterial>>| {
+                let clone_chains_for_lanes = clone_chains_for_lanes.clone();
+                setup(commands, meshes, materials, clone_chains_for_lanes);
+            },
+        )
         // .add_startup_system(spawn_tasks)
         .add_system(player_move_arrows)
         .add_system(
@@ -289,6 +297,11 @@ fn text(text: String, t: Transform, font: Handle<TextMeshFont>) -> TextMeshBundl
     }
 }
 
+enum BuildDirection {
+    Up,
+    Down,
+}
+
 fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -317,13 +330,15 @@ fn render_new_events(
 
                 commands
                     .spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Plane { size: 10.0 })),
-                        material: materials.add(StandardMaterial {
-                            base_color: Color::rgba(0., 0., 0., 0.7),
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: 0.08,
-                            ..default()
-                        }),
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        material: materials.add(
+                            StandardMaterial {
+                                base_color: Color::rgba(0., 0., 0., 0.7),
+                                alpha_mode: AlphaMode::Blend,
+                                perceptual_roughness: 0.08,
+                                ..default()
+                            },
+                        ),
                         transform: Transform::from_translation(Vec3::new(
                             0. + (11. * block_num as f32),
                             0.,
@@ -400,36 +415,31 @@ fn render_new_events(
                 // })
                 // .with(TextTag);
 
-                let (base_x, base_z) =
-                    (0. + (11. * block_num as f32) - 4., 11. * chain as f32 - 4.);
+                add_blocks(
+                    block_num,
+                    chain,
+                    block
+                        .events
+                        .iter()
+                        .filter(|&e| !content::is_utiliy_extrinsic(e)),
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    BuildDirection::Up,
+                );
 
-                for (event_num, event) in block.events.iter().enumerate() {
-                    let x = event_num % 9;
-                    let z = (event_num / 9) % 9;
-                    let y = event_num / 9 / 9;
-                    match event.pallet.as_str() {
-                        _ => {
-                            let style = style::style_event(event);
-
-                            commands
-                                .spawn_bundle(PbrBundle {
-                                    mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
-                                    ///* event.blocknum as f32
-                                    material: materials.add(style.color.into()),
-                                    transform: Transform::from_translation(Vec3::new(
-                                        base_x + x as f32,
-                                        0.2 + y as f32,
-                                        base_z + z as f32,
-                                    )),
-                                    ..Default::default()
-                                })
-                                .insert_bundle(PickableBundle::default())
-                                .insert(Details {
-                                    hover: format!("{} - {}", event.pallet, event.variant),
-                                });
-                        }
-                    }
-                }
+                add_blocks(
+                    block_num,
+                    chain,
+                    block
+                        .events
+                        .iter()
+                        .filter(|&e| content::is_utiliy_extrinsic(e)),
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    BuildDirection::Down,
+                );
             }
         }
     }
@@ -560,35 +570,50 @@ fn render_new_events(
     // }
 }
 
-// use bevy::tasks::AsyncComputeTaskPool;
+fn add_blocks<'a>(
+    block_num: u32,
+    chain: usize,
+    block_events: impl Iterator<Item = &'a RawEventDetails>,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    build_direction: BuildDirection,
+) {
+    let build_direction = if let BuildDirection::Up = build_direction {
+        1.0
+    } else {
+        -1.0
+    };
+    // Add all the useful blocks
+    let (base_x, base_z) = (0. + (11. * block_num as f32) - 4., 11. * chain as f32 - 4.);
+    for (event_num, event) in block_events.enumerate() {
+        let x = event_num % 9;
+        let z = (event_num / 9) % 9;
+        let y = event_num / 9 / 9;
+        match event.pallet.as_str() {
+            _ => {
+                let style = style::style_event(event);
 
-// fn spawn_tasks(commands: Commands, thread_pool: Res<AsyncComputeTaskPool>) {
-//     #[derive(Debug, Clone, Default, Eq, PartialEq, Component)]
-//     pub struct BlockState {
-//         x: u32,
-//         y: u32,
-//         weight: u64,
-//     }
-
-//     //     thread_pool.spawn(async move {
-//     // //        std::thread::sleep(Duration::from_millis(1000));
-//     // //      delay_for(Duration::from_millis(1000)).await;
-//     //       //Result { time: 1.0 }
-//     //      ()
-//     //     }) .detach();
-//     //commands.spawn().insert(task);
-// }
-
-//   fn handle_tasks(
-//     mut commands: Commands,
-//     mut transform_tasks: Query<(Entity, &mut Task<Result>)>,
-//   ) {
-//     for (entity, mut task) in transform_tasks.iter_mut() {
-//       if let Some(res) = future::block_on(future::poll_once(&mut *task)) {
-//         commands.entity(entity).remove::<Task<Result>>();
-//       }
-//     }
-//   }
+                commands
+                    .spawn_bundle(PbrBundle {
+                        mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
+                        ///* event.blocknum as f32
+                        material: materials.add(style.color.into()),
+                        transform: Transform::from_translation(Vec3::new(
+                            base_x + x as f32,
+                            (0.5 + y as f32) * build_direction,
+                            base_z + z as f32,
+                        )),
+                        ..Default::default()
+                    })
+                    .insert_bundle(PickableBundle::default())
+                    .insert(Details {
+                        hover: format!("{} - {}", event.pallet, event.variant),
+                    });
+            }
+        }
+    }
+}
 
 /// Handles keyboard input and movement
 fn player_move_arrows(
@@ -698,12 +723,14 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    locks: Vec<(ABlocks, String)>,
     // asset_server: Res<AssetServer>,
 ) {
     // add entities to the world
     // plane
+
     commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Plane { size: 500.0 })),
+        mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
         material: materials.add(
             StandardMaterial {
                 base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
@@ -714,6 +741,22 @@ fn setup(
         ),
         ..Default::default()
     });
+
+    for chain in 0..locks.len() {
+        commands.spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box::new(1000., 0.1, 10.))),
+            material: materials.add(
+                StandardMaterial {
+                    base_color: Color::rgba(0., 0., 0., 0.4),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: 0.08,
+                    ..default()
+                }, //    Color::rgb(0.5, 0.5, 0.5).into()
+            ),
+            transform: Transform::from_translation(Vec3::new(495., 0., 11. * chain as f32)),
+            ..Default::default()
+        });
+    }
 
     commands.spawn_bundle(UiCameraBundle::default());
 
