@@ -3,24 +3,24 @@
 use bevy::ecs as bevy_ecs;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy::reflect::erased_serde::private::serde::de::EnumAccess;
 use bevy::render::camera::CameraProjection;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
-use bevy_flycam::PlayerPlugin;
 use bevy_mod_picking::*;
 use bevy_text_mesh::prelude::*;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
 // pub use wasm_bindgen_rayon::init_thread_pool;
 //mod coded;
-use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+// use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
-use bevy::diagnostic::LogDiagnosticsPlugin;
-use subxt::RawEventDetails;
 use std::sync::atomic::{AtomicU32, Ordering};
+use subxt::RawEventDetails;
+
+mod style;
+
 /// the mouse-scroll changes the field-of-view of the camera
 fn scroll(
     mut mouse_wheel_events: EventReader<MouseWheel>,
@@ -44,22 +44,11 @@ fn scroll(
     }
 }
 
-// use rayon::iter::ParallelIterator;
-// use rayon::iter::IntoParallelRefIterator;
-// //use wasm_bindgen;
+mod content;
 
-// //#[wasm_bindgen]
-// pub fn sum(numbers: &[i32]) -> i32 {
-//     numbers.par_iter().sum()
-// }
 use futures::StreamExt;
-//use sp_keyring::AccountKeyring;
-use subxt::{
-    ClientBuilder,
-    DefaultConfig,
-    DefaultExtra, //PairSigner
-};
-//use smoldot::*;
+
+use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
 
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
@@ -139,62 +128,48 @@ async fn block_chain(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-struct ExStyle {
-    color: Color,
-}
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
-fn get_color(event: &RawEventDetails) -> ExStyle {
-    let mut hash = calculate_hash(&event.pallet) as u32;
-    let r = (hash % 255) as u8;
-    hash = hash / 255;
-    let b = (hash % 255) as u8;
-    hash = hash / 255;
-    let g = (hash % 255) as u8;
-
-    ExStyle {
-                 color: Color::rgb_u8(r, g, b)
-    }
-    // match event.pallet.as_str() {
-    //     "Staking" => ExStyle {
-    //         color: Color::hex("00ffff").unwrap(),
-    //     },
-    //     "Deposit" => ExStyle {
-    //         color: Color::hex("e6007a").unwrap(),
-    //     },
-    //     "Withdraw" => ExStyle {
-    //         color: Color::hex("e6007a").unwrap(),
-    //     },
-    //     _ => ExStyle {
-    //         color: Color::hex("000000").unwrap(),
-    //     },
-    // }
-}
-
-static relayblocks : AtomicU32 = AtomicU32::new(0);
+static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 
 type ABlocks = Arc<Mutex<Vec<PolkaBlock>>>;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-
     // let lock = ABlocks::default();
     // let lock_statemint = ABlocks::default();
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
     let chains = vec![
+        //     "rococo-rpc.polkadot.io",
+        //     "rococo-canvas-rpc.polkadot.io",
+        // "rococo.api.encointer.org",
+        // "rpc-01.basilisk-rococo.hydradx.io",
+        // "fullnode.catalyst.cntrfg.com",
+        // "anjie.rococo.dolphin.engineering",
+        // "rpc.rococo.efinity.io",
+        // "rococo.api.integritee.network",
+        // "rpc.rococo-parachain-sg.litentry.io",
+        // "moonsama-testnet-rpc.moonsama.com",
+        // "node-6913072722034561024.lh.onfinality.io/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
+        // "pangolin-parachain-rpc.darwinia.network",
+        // "rococo.kilt.io",
+        // "rco-para.subsocial.network",
+
+        // "westend-rpc.dwellir.com",
+        // "westmint-rpc.polkadot.io",
+        // "fullnode-collator.charcoal.centrifuge.io",
+        // "teerw1.integritee.network",
+        // "westend.kylin-node.co.uk",
+        // "rpc.westend.standard.tech",
+        // "westend.kilt.io:9977"
+
+        // "ws://127.0.0.1:9944",
+        // "ws://127.0.0.1:9966",
+        // "ws://127.0.0.1:9920",
         "kusama-rpc.polkadot.io",
         "statemine-rpc.dwellir.com",
         "wss.api.moonriver.moonbeam.network",
         "karura-rpc.dwellir.com",
-        // "bifrost-rpc.dwellir.com",
+        "bifrost-rpc.dwellir.com",
         // "khala-rpc.dwellir.com",
         // "shiden-rpc.dwellir.com",
         // "rpc-shadow.crust.network",
@@ -221,13 +196,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
-        .add_plugin(HelloPlugin)
         .insert_resource(MovementSettings {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
         })
         .add_plugin(NoCameraPlayerPlugin)
-        .add_plugin(TextMeshPlugin)
+        //.add_plugin(TextMeshPlugin)
         .add_plugins(DefaultPickingPlugins)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         // .add_plugin(DebugEventsPickingPlugin)
@@ -235,10 +209,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_plugin(LogDiagnosticsPlugin::default())
         .add_system(scroll)
         .add_startup_system(setup)
-        .add_startup_system(spawn_tasks)
+        // .add_startup_system(spawn_tasks)
         .add_system(player_move_arrows)
         .add_system(
-            move |mut commands: Commands,
+            move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
                   materials: ResMut<Assets<StandardMaterial>>,
                   asset_server: Res<AssetServer>| {
@@ -246,15 +220,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 render_new_events(commands, meshes, materials, asset_server, clone_chains)
             },
         )
-        .add_system_to_stage(CoreStage::PostUpdate, print_events)
-        ;
+        .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
-    for (arc, chain_name) in chains {
+    for (arc, mut chain_name) in chains {
         let lock_clone = arc.clone();
         std::thread::spawn(move || {
             //wss://kusama-rpc.polkadot.io:443
             //ws://127.0.0.1:9966
-            async_std::task::block_on(block_chain(lock_clone, format!("wss://{chain_name}:443")));
+            if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
+                chain_name = format!("wss://{}", chain_name);
+            }
+
+            let url = if chain_name[5..].contains(':') {
+                format!("{chain_name}")
+            } else {
+                format!("{chain_name}:443")
+            };
+            println!("url attaching to {}", url);
+            async_std::task::block_on(block_chain(lock_clone, url)).unwrap();
         });
     }
 
@@ -316,11 +299,12 @@ fn render_new_events(
     for (chain, (lock, chain_name)) in locks.iter().enumerate() {
         if let Ok(ref mut block_events) = lock.try_lock() {
             if let Some(block) = block_events.pop() {
-                if chain == 0 { //relay
-                    relayblocks.store(relayblocks.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+                if chain == 0 {
+                    //relay
+                    RELAY_BLOCKS.store(RELAY_BLOCKS.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
                 }
 
-                let block_num = relayblocks.load(Ordering::Relaxed);//block.blocknum;
+                let block_num = RELAY_BLOCKS.load(Ordering::Relaxed); //block.blocknum;
                 let font: Handle<TextMeshFont> =
                     asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
                 let mut t = Transform::from_xyz(0., 0., 0.);
@@ -356,10 +340,52 @@ fn render_new_events(
                         parent.spawn_bundle(text(format!("{}", chain_name), t2, font));
                     });
 
+                use bevy::text::Text2dBounds;
+                //let font = asset_server.load("fonts/FiraSans-Bold.ttf");
+                let font = asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
+                let text_style = TextStyle {
+                    font,
+                    font_size: 100.0,
+                    color: Color::RED,
+                };
+                let text_alignment = TextAlignment {
+                    vertical: bevy::prelude::VerticalAlign::Center,
+                    horizontal: bevy::prelude::HorizontalAlign::Center,
+                };
+                // let box_size = Size::new(300.0, 200.0);
+                // let box_position = Vec2::new(0.0, -250.0);
+                // let text_alignment_topleft = TextAlignment {
+                //     vertical: bevy::prelude::VerticalAlign::Top,
+                //     horizontal: bevy::prelude::HorizontalAlign::Left,
+                // };
+                let mut cam = OrthographicCameraBundle::new_2d();
+                cam.transform.rotate(Quat::from_xyzw(0.0, 0.2, 0.2, 0.0));
+
+                commands.spawn_bundle(cam);
+                commands.spawn_bundle(Text2dBundle {
+                    text: Text::with_section(
+                        "this text wraps in the box",
+                        text_style,
+                        text_alignment,
+                    ),
+                    // text_2d_bounds: Text2dBounds {
+                    //     // Wrap text in the rectangle
+                    //     size: box_size,
+                    // },
+                    // We align text to the top-left, so this transform is the top-left corner of our text. The
+                    // box is centered at box_position, so it is necessary to move by half of the box size to
+                    // keep the text in the box.
+                    // transform: Transform::from_xyz(
+                    //     box_position.x - box_size.width / 2.0,
+                    //     box_position.y + box_size.height / 2.0,
+                    //     1.0,
+                    // ),
+                    // visibility:Visibility::Visible,
+                    ..default()
+                });
+
                 //How to do UI text:
 
-                  
-                
                 // .insert(ColorText);
                 // commands
                 // .spawn(TextBundle{
@@ -373,12 +399,9 @@ fn render_new_events(
                 //     ..Default::default()
                 // })
                 // .with(TextTag);
-               
 
-                let (base_x, base_z) = (
-                    0. + (11. * block_num as f32) - 4.,
-                    11. * chain as f32 - 4.,
-                );
+                let (base_x, base_z) =
+                    (0. + (11. * block_num as f32) - 4., 11. * chain as f32 - 4.);
 
                 for (event_num, event) in block.events.iter().enumerate() {
                     let x = event_num % 9;
@@ -386,7 +409,7 @@ fn render_new_events(
                     let y = event_num / 9 / 9;
                     match event.pallet.as_str() {
                         _ => {
-                            let style = get_color(event);
+                            let style = style::style_event(event);
 
                             commands
                                 .spawn_bundle(PbrBundle {
@@ -401,9 +424,9 @@ fn render_new_events(
                                     ..Default::default()
                                 })
                                 .insert_bundle(PickableBundle::default())
-                                .insert(Details{ hover: format!("{} {}",event.pallet, event.variant) });
-
-                                ;
+                                .insert(Details {
+                                    hover: format!("{} - {}", event.pallet, event.variant),
+                                });
                         }
                     }
                 }
@@ -537,32 +560,24 @@ fn render_new_events(
     // }
 }
 
-fn scale(value: usize) -> f32 {
-    value as f32 / 1000_000.
-}
+// use bevy::tasks::AsyncComputeTaskPool;
 
-use bevy::tasks::AsyncComputeTaskPool;
+// fn spawn_tasks(commands: Commands, thread_pool: Res<AsyncComputeTaskPool>) {
+//     #[derive(Debug, Clone, Default, Eq, PartialEq, Component)]
+//     pub struct BlockState {
+//         x: u32,
+//         y: u32,
+//         weight: u64,
+//     }
 
-fn spawn_tasks(mut commands: Commands, thread_pool: Res<AsyncComputeTaskPool>) {
-    //    std::thread::spawn(|| {
-    //  std::thread::sleep(Duration::from_millis(1000));
-    //  });
-
-    #[derive(Debug, Clone, Default, Eq, PartialEq, Component)]
-    pub struct BlockState {
-        x: u32,
-        y: u32,
-        weight: u64,
-    };
-
-    //     thread_pool.spawn(async move {
-    // //        std::thread::sleep(Duration::from_millis(1000));
-    // //      delay_for(Duration::from_millis(1000)).await;
-    //       //Result { time: 1.0 }
-    //      ()
-    //     }) .detach();
-    //commands.spawn().insert(task);
-}
+//     //     thread_pool.spawn(async move {
+//     // //        std::thread::sleep(Duration::from_millis(1000));
+//     // //      delay_for(Duration::from_millis(1000)).await;
+//     //       //Result { time: 1.0 }
+//     //      ()
+//     //     }) .detach();
+//     //commands.spawn().insert(task);
+// }
 
 //   fn handle_tasks(
 //     mut commands: Commands,
@@ -608,53 +623,82 @@ fn player_move_arrows(
     }
 }
 
-pub struct HelloPlugin;
-
-impl Plugin for HelloPlugin {
-    fn build(&self, app: &mut App) {
-        // add things to your app here
-    }
-}
-
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
 
 // A unit struct to help identify the color-changing Text component
 #[derive(Component)]
-struct ColorText;
-
+pub struct ColorText;
 
 #[derive(Component)]
-pub struct Details{
-    hover: String
+pub struct Details {
+    hover: String,
 }
 
-pub fn print_events(mut events: EventReader<PickingEvent>,   mut query: Query<&mut Selection>,   mut query2: Query<&mut Details>) {
+pub fn print_events(
+    mut commands: Commands,
+    mut events: EventReader<PickingEvent>,
+    // query: Query<&mut Selection>,
+    mut query2: Query<&mut Details>,
+    mut query3: Query<(Entity, With<ColorText>)>,
+    asset_server: Res<AssetServer>,
+) {
+    let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {
         match event {
-            PickingEvent::Selection(selection) =>{ 
-                info!("A selection event happened: {:?}", &selection);
+            PickingEvent::Selection(selection) => {
                 if let SelectionEvent::JustSelected(entity) = selection {
-                    let mut selection = query.get_mut(*entity).unwrap();
-                    let mut details = query2.get_mut(*entity).unwrap();
-                    println!("found {:?} {}!", entity, details.hover);
-                    // selection.set_selected(false);
+                    // let selection = query.get_mut(*entity).unwrap();
+                    let details = query2.get_mut(*entity).unwrap();
+                    println!("{}", details.hover);
+
+                    query3.for_each_mut(|(entity, _)| {
+                        //   entity.remove();
+                        //  commands.entity(entity).despawn();
+                        // entity.despawn();
+                        commands.entity(entity).despawn();
+                    });
+
+                    commands
+                        .spawn_bundle(TextBundle {
+                            style: Style {
+                                // align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
+                                ..Default::default()
+                            },
+                            text: Text::with_section(
+                                details.hover.to_string(),
+                                TextStyle {
+                                    font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
+                                    font_size: 60.0,
+                                    color: Color::WHITE,
+                                },
+                                TextAlignment {
+                                    vertical: bevy::prelude::VerticalAlign::Center,
+                                    horizontal: bevy::prelude::HorizontalAlign::Center,
+                                },
+                            ),
+                            transform: t,
+                            ..Default::default()
+                        })
+                        .insert(ColorText);
                 }
-        },
-            PickingEvent::Hover(e) => {info!("Egads! A hover event!? {:?}", e)},
-            PickingEvent::Clicked(e) => {info!("Gee Willikers, it's a click! {:?}", e)},
+            }
+            PickingEvent::Hover(_e) => {
+                // info!("Egads! A hover event!? {:?}", e)
+            }
+            PickingEvent::Clicked(_e) => {
+                // info!("Gee Willikers, it's a click! {:?}", e)
+            }
         }
     }
 }
-
-
 
 /// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    // asset_server: Res<AssetServer>,
 ) {
     // add entities to the world
     // plane
@@ -671,54 +715,42 @@ fn setup(
         ..Default::default()
     });
 
-
-//somehow this can change the color
-//    mesh_highlighting(None, None, None);
-
-
-
     commands.spawn_bundle(UiCameraBundle::default());
+
+    // let mut t = Transform::from_xyz(0., 0., 0.);
+    // t.rotate(Quat::from_rotation_x(-90.));
+
+    // commands.spawn_bundle(TextBundle {
+    //     style: Style {
+    //         align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
+    //         ..Default::default()
+    //     },
+    //     text: Text::with_section(
+    //         "hello world!".to_string(),
+    //         TextStyle {
+    //             font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
+    //             font_size: 60.0,
+    //             color: Color::WHITE,
+    //         },
+    //         TextAlignment {
+    //             vertical: bevy::prelude::VerticalAlign::Center,
+    //             horizontal: bevy::prelude::HorizontalAlign::Center,
+    //         },
+    //     ),
+    //     // transform: t,
+    //     ..Default::default()
+    // });
+
+    //somehow this can change the color
+    //    mesh_highlighting(None, None, None);
+    // camera
     commands
-        .spawn_bundle(TextBundle {
-            // style: Style {
-            //     align_self: AlignSelf::FlexEnd,
-            //     position_type: PositionType::Absolute,
-            //     position: Rect {
-            //         bottom: Val::Px(5.0),
-            //         right: Val::Px(15.0),
-            //         ..default()
-            //     },
-            //     ..default()
-            // },
-                                                style: Style {
-                                        size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                                        // align_self: AlignSelf::FlexEnd,
-                                        // position_type: PositionType::Relative,
-                                        // position: Rect {
-                                        // //    bottom: Val::Px(5.0),
-                                        //   //  right: Val::Px(15.0),
-                                        //     ..default()
-                                        // },
-                                        ..default()
-                                    },
-            // Use the `Text::with_section` constructor
-            text: Text::with_section(
-                // Accepts a `String` or any type that converts into a `String`, such as `&str`
-                "hello\nbevy!",
-                TextStyle {
-                    font:  asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
-                    font_size: 100.0,
-                    color: Color::RED,
-                },
-                // Note: You can use `Default::default()` in place of the `TextAlignment`
-                TextAlignment {
-                    horizontal: bevy::prelude::HorizontalAlign::Center,
-                    ..default()
-                },
-            ),
+        .spawn_bundle(PerspectiveCameraBundle {
+            transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         })
-        .insert(ColorText);
+        .insert_bundle(PickingCameraBundle::default())
+        .insert(FlyCam);
 
     // commands.spawn_bundle(TextBundle {
     //     style: Style {
@@ -748,13 +780,6 @@ fn setup(
     //     ),
     //     ..default()
     // });
-
-
-
-
-
-
-
 
     // cube
     // commands.spawn_bundle(PbrBundle {
@@ -809,67 +834,68 @@ fn setup(
     // });
 
     // light
+
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 0.1,
+    });
+
     commands.spawn_bundle(PointLightBundle {
         transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
         ..Default::default()
     });
-
-    // camera
-    commands
-        .spawn_bundle(PerspectiveCameraBundle {
-            transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        })
-        .insert_bundle(PickingCameraBundle::default())
-        .insert(FlyCam);
+    commands.spawn_bundle(PointLightBundle {
+        transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
+        ..Default::default()
+    });
 }
 
-pub struct UiPlugin;
+// pub struct UiPlugin;
 
-impl Plugin for UiPlugin {
-    fn build(&self, app: &mut App) {
-        app
-            //.init_resource::<TrackInputState>()
-            .add_system(capture_mouse_on_click);
-    }
-}
-
-// #[derive(Default)]
-// struct TrackInputState<'a> {
-//     mousebtn: EventReader<'a, 'a, MouseButtonInput>,
+// impl Plugin for UiPlugin {
+//     fn build(&self, app: &mut App) {
+//         app
+//             //.init_resource::<TrackInputState>()
+//             .add_system(capture_mouse_on_click);
+//     }
 // }
 
-fn capture_mouse_on_click(
-    mouse: Res<Input<MouseButton>>,
-    //    mut state: ResMut<'a, TrackInputState>,
-    //  ev_mousebtn: Res<Events<MouseButtonInput>>,
-    //key: Res<Input<KeyCode>>,
-) {
-    if mouse.just_pressed(MouseButton::Left) {
-        #[cfg(target_arch = "wasm32")]
-        html_body::get().request_pointer_lock();
-        // window.set_cursor_visibility(false);
-        // window.set_cursor_lock_mode(true);
-    }
-    // if key.just_pressed(KeyCode::Escape) {
-    //     //window.set_cursor_visibility(true);
-    //     //window.set_cursor_lock_mode(false);
-    // }
-    // for _ev in state.mousebtn.iter(&ev_mousebtn) {
-    //     html_body::get().request_pointer_lock();
-    //     break;
-    // }
-}
+// // #[derive(Default)]
+// // struct TrackInputState<'a> {
+// //     mousebtn: EventReader<'a, 'a, MouseButtonInput>,
+// // }
 
-#[cfg(target_arch = "wasm32")]
-pub mod html_body {
-    use web_sys::HtmlElement;
+// fn capture_mouse_on_click(
+//     mouse: Res<Input<MouseButton>>,
+//     //    mut state: ResMut<'a, TrackInputState>,
+//     //  ev_mousebtn: Res<Events<MouseButtonInput>>,
+//     //key: Res<Input<KeyCode>>,
+// ) {
+//     if mouse.just_pressed(MouseButton::Left) {
+//         #[cfg(target_arch = "wasm32")]
+//         html_body::get().request_pointer_lock();
+//         // window.set_cursor_visibility(false);
+//         // window.set_cursor_lock_mode(true);
+//     }
+//     // if key.just_pressed(KeyCode::Escape) {
+//     //     //window.set_cursor_visibility(true);
+//     //     //window.set_cursor_lock_mode(false);
+//     // }
+//     // for _ev in state.mousebtn.iter(&ev_mousebtn) {
+//     //     html_body::get().request_pointer_lock();
+//     //     break;
+//     // }
+// }
 
-    pub fn get() -> HtmlElement {
-        // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-        let window = web_sys::window().expect("no global `window` exists");
-        let document = window.document().expect("should have a document on window");
-        let body = document.body().expect("document should have a body");
-        body
-    }
-}
+// #[cfg(target_arch = "wasm32")]
+// pub mod html_body {
+//     use web_sys::HtmlElement;
+
+//     pub fn get() -> HtmlElement {
+//         // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+//         let window = web_sys::window().expect("no global `window` exists");
+//         let document = window.document().expect("should have a document on window");
+//         let body = document.body().expect("document should have a body");
+//         body
+//     }
+// }
