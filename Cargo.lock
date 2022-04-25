@@ -431,6 +431,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "bevy 0.7.0",
+ "bevy_atmosphere",
  "bevy_flycam",
  "bevy_mod_picking",
  "bevy_text_mesh",
@@ -526,6 +527,15 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "bevy_atmosphere"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e0317265a46bc7623565041605e6ca807ce0ed7f2f7cec63628f2d970ac0bcb"
+dependencies = [
+ "bevy 0.7.0",
 ]
 
 [[package]]

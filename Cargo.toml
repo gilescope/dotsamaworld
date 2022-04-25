@@ -24,7 +24,7 @@ bevy_mod_picking = "0.6"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
-
+bevy_atmosphere = "0.3"
 palette = "0.6" # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
 #rayon = "*"

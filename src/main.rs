@@ -3,6 +3,7 @@
 
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
+use bevy_atmosphere::*;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
@@ -234,6 +235,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_startup_system(spawn_tasks)
         .add_system(movement::player_move_arrows)
         .add_system(rain)
+        .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
+        .add_plugin(bevy_atmosphere::AtmospherePlugin {
+            dynamic: false, // Set to false since we aren't changing the sky's appearance
+            sky_radius: 10.0,
+        })
         .add_system(
             move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
@@ -647,7 +653,7 @@ fn add_blocks<'a>(
         5.5 + 11. * chain as f32 - 4.,
     );
 
-    let mut random_spacing: [f32; 81] = [0.; 81];
+    let mut rain_height: [f32; 81] = [100.; 81];
     for (event_num, event) in block_events.enumerate() {
         let x = event_num % 9;
         let z = (event_num / 9) % 9;
@@ -669,7 +675,7 @@ fn add_blocks<'a>(
                     mesh.clone()
                 };
 
-                random_spacing[event_num % 81] += fastrand::f32() % 10000.;
+                rain_height[event_num % 81] += fastrand::f32() * 100.;
 
                 commands
                     .spawn_bundle(PbrBundle {
@@ -678,8 +684,7 @@ fn add_blocks<'a>(
                         material: material.clone(),
                         transform: Transform::from_translation(Vec3::new(
                             base_x + x as f32,
-                            ((0.5 + y as f32) + 100. + random_spacing[event_num % 81])
-                                * build_direction,
+                            ((0.5 + y as f32) + rain_height[event_num % 81]) * build_direction,
                             (base_z + z as f32) * rflip,
                         )),
                         ..Default::default()
@@ -1030,7 +1035,7 @@ fn setup(
         .spawn_bundle(PerspectiveCameraBundle {
             transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             perspective_projection: PerspectiveProjection {
-                far: 100., // 1000 will be 100 blocks that you can s
+                // far: 100., // 1000 will be 100 blocks that you can s
                 ..PerspectiveProjection::default()
             },
             ..default()
@@ -1128,7 +1133,7 @@ fn setup(
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.2,
+        brightness: 0.5,
     });
 
     // commands.spawn_bundle(PointLightBundle {
