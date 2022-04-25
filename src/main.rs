@@ -3,6 +3,7 @@
 
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
+use bevy::window::WindowFocused;
 use bevy_atmosphere::*;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
@@ -126,85 +127,119 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let lock_statemint = ABlocks::default();
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
+
     let relays = vec![
         vec![
-            "rpc.polkadot.io",
-            "statemint-rpc.polkadot.io",
-            "acala.polkawallet.io",
-            "wss.odyssey.aresprotocol.io",
-            "astar-rpc.dwellir.com",
-            "fullnode.parachain.centrifuge.io",
-            "clover.api.onfinality.io/public-ws",
-            "rpc.efinity.io",
-            "rpc-01.hydradx.io",
-            "interlay.api.onfinality.io/public-ws",
-            "k-ui.kapex.network",
-            "wss.api.moonbeam.network",
-            "eden-rpc.dwellir.com",
-            "rpc.parallel.fi",
-            "api.phala.network/ws",
-            "polkadex.api.onfinality.io/public-ws",
-            "ws.unique.network",
+            "westend-rpc.dwellir.com",
+            "westmint-rpc.polkadot.io",
+            "fullnode-collator.charcoal.centrifuge.io",
+            "teerw1.integritee.network",
+            "westend.kylin-node.co.uk",
+            "rpc.westend.standard.tech",
+            "westend.kilt.io:9977",
         ],
         vec![
-            //    "rococo-rpc.polkadot.io",
-            //     "rococo-canvas-rpc.polkadot.io",
-            // "rococo.api.encointer.org",
-            // "rpc-01.basilisk-rococo.hydradx.io",
-            // "fullnode.catalyst.cntrfg.com",
-            // "anjie.rococo.dolphin.engineering",
-            // "rpc.rococo.efinity.io",
-            // "rococo.api.integritee.network",
-            // "rpc.rococo-parachain-sg.litentry.io",
-            // "moonsama-testnet-rpc.moonsama.com",
-            // "node-6913072722034561024.lh.onfinality.io/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
-            // "pangolin-parachain-rpc.darwinia.network",
-            // "rococo.kilt.io",
-            // "rco-para.subsocial.network",
-
-            // "westend-rpc.dwellir.com",
-            // "westmint-rpc.polkadot.io",
-            // "fullnode-collator.charcoal.centrifuge.io",
-            // "teerw1.integritee.network",
-            // "westend.kylin-node.co.uk",
-            // "rpc.westend.standard.tech",
-            // "westend.kilt.io:9977"
+            "rococo-rpc.polkadot.io",
+            "rococo-canvas-rpc.polkadot.io",
+            "rococo.api.encointer.org",
+            "rpc-01.basilisk-rococo.hydradx.io",
+            "fullnode.catalyst.cntrfg.com",
+            "anjie.rococo.dolphin.engineering",
+            "rpc.rococo.efinity.io",
+            "rococo.api.integritee.network",
+            "rpc.rococo-parachain-sg.litentry.io",
+            "moonsama-testnet-rpc.moonsama.com",
+            "node-6913072722034561024.lh.onfinality.io/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
+            "pangolin-parachain-rpc.darwinia.network",
+            "rococo.kilt.io",
+            "rco-para.subsocial.network",
 
             // "ws://127.0.0.1:9944",
             // "ws://127.0.0.1:9966",
-            // "ws://127.0.0.1:9920",
-            "kusama-rpc.polkadot.io",
-            "statemine-rpc.dwellir.com",
-            "wss.api.moonriver.moonbeam.network",
-            "karura-rpc.dwellir.com",
-            "bifrost-rpc.dwellir.com",
-            "khala-rpc.dwellir.com",
-            "shiden-rpc.dwellir.com",
-            "rpc-shadow.crust.network",
-            "kusama.api.integritee.network",
-            "kusama.rpc.robonomics.network",
-            "calamari-rpc.dwellir.com",
-            "heiko-rpc.parallel.fi",
-            "kilt-rpc.dwellir.com",
-            "picasso-rpc.composable.finance",
-            "basilisk-rpc.dwellir.com",
-            "kintsugi-rpc.dwellir.com",
-            "us-ws-quartz.unique.network",
-            "para.subsocial.network",
-            "zeitgeist-rpc.dwellir.com",
-            "crab-parachain-rpc.darwinia.network",
-            "rpc.litmus-parachain.litentry.io",
-            "rpc.api.kico.dico.io",
-        ], //wss://altair.api.onfinality.io/public-ws wss://pioneer.api.onfinality.io/public-ws wss://turing.api.onfinality.io/public-ws
-    ]
-    .into_iter()
-    .map(|relay| {
-        relay
-            .iter()
-            .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
-            .collect::<Vec<_>>()
-    })
-    .collect::<Vec<_>>();
+            // "ws://127.0.0.1:9920",       
+        ],
+    ];
+
+    // let relays = vec![
+    //     vec![
+    //         "rpc.polkadot.io",
+    //         "statemint-rpc.polkadot.io",
+    //         // "acala.polkawallet.io",
+    //         // "wss.odyssey.aresprotocol.io",
+    //         // "astar-rpc.dwellir.com",
+    //         // "fullnode.parachain.centrifuge.io",
+    //         // "clover.api.onfinality.io/public-ws",
+    //         // "rpc.efinity.io",
+    //         // "rpc-01.hydradx.io",
+    //         // "interlay.api.onfinality.io/public-ws",
+    //         // "k-ui.kapex.network",
+    //         // "wss.api.moonbeam.network",
+    //         // "eden-rpc.dwellir.com",
+    //         // "rpc.parallel.fi",
+    //         // "api.phala.network/ws",
+    //         // "polkadex.api.onfinality.io/public-ws",
+    //         // "ws.unique.network",
+    //     ],
+    //     vec![
+    //         //    "rococo-rpc.polkadot.io",
+    //         //     "rococo-canvas-rpc.polkadot.io",
+    //         // "rococo.api.encointer.org",
+    //         // "rpc-01.basilisk-rococo.hydradx.io",
+    //         // "fullnode.catalyst.cntrfg.com",
+    //         // "anjie.rococo.dolphin.engineering",
+    //         // "rpc.rococo.efinity.io",
+    //         // "rococo.api.integritee.network",
+    //         // "rpc.rococo-parachain-sg.litentry.io",
+    //         // "moonsama-testnet-rpc.moonsama.com",
+    //         // "node-6913072722034561024.lh.onfinality.io/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
+    //         // "pangolin-parachain-rpc.darwinia.network",
+    //         // "rococo.kilt.io",
+    //         // "rco-para.subsocial.network",
+
+    //         // "westend-rpc.dwellir.com",
+    //         // "westmint-rpc.polkadot.io",
+    //         // "fullnode-collator.charcoal.centrifuge.io",
+    //         // "teerw1.integritee.network",
+    //         // "westend.kylin-node.co.uk",
+    //         // "rpc.westend.standard.tech",
+    //         // "westend.kilt.io:9977"
+
+    //         // "ws://127.0.0.1:9944",
+    //         // "ws://127.0.0.1:9966",
+    //         // "ws://127.0.0.1:9920",
+    //         "kusama-rpc.polkadot.io",
+    //         "statemine-rpc.dwellir.com",
+    //         // "wss.api.moonriver.moonbeam.network",
+    //         // "karura-rpc.dwellir.com",
+    //         // "bifrost-rpc.dwellir.com",
+    //         // "khala-rpc.dwellir.com",
+    //         // "shiden-rpc.dwellir.com",
+    //         // "rpc-shadow.crust.network",
+    //         // "kusama.api.integritee.network",
+    //         // "kusama.rpc.robonomics.network",
+    //         // "calamari-rpc.dwellir.com",
+    //         // "heiko-rpc.parallel.fi",
+    //         // "kilt-rpc.dwellir.com",
+    //         // "picasso-rpc.composable.finance",
+    //         // "basilisk-rpc.dwellir.com",
+    //         // "kintsugi-rpc.dwellir.com",
+    //         // "us-ws-quartz.unique.network",
+    //         // "para.subsocial.network",
+    //         // "zeitgeist-rpc.dwellir.com",
+    //         // "crab-parachain-rpc.darwinia.network",
+    //         // "rpc.litmus-parachain.litentry.io",
+    //         // "rpc.api.kico.dico.io",
+    //     ], //wss://altair.api.onfinality.io/public-ws wss://pioneer.api.onfinality.io/public-ws wss://turing.api.onfinality.io/public-ws
+    // ];
+    let relays = relays
+        .into_iter()
+        .map(|relay| {
+            relay
+                .iter()
+                .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
     let clone_chains = relays.clone();
     let clone_chains_for_lanes = relays.clone();
@@ -215,6 +250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
         })
+        .insert_resource(movement::MouseCapture::default())
         .add_plugin(NoCameraPlayerPlugin)
         // .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         //.add_plugin(TextMeshPlugin)
@@ -235,6 +271,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_startup_system(spawn_tasks)
         .add_system(movement::player_move_arrows)
         .add_system(rain)
+        .add_system(focus_manager)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
             dynamic: false, // Set to false since we aren't changing the sky's appearance
@@ -329,6 +366,15 @@ enum BuildDirection {
     Down,
 }
 
+fn focus_manager(mut windows: ResMut<Windows>, toggle_mouse_capture: Res<movement::MouseCapture>) {
+    let window = windows.get_primary_mut().unwrap();
+    // if window.is_focused() {
+    //     window.set_cursor_lock_mode(toggle_mouse_capture.0);
+    // } else {
+    //     window.set_cursor_lock_mode(false);
+    // }
+}
+
 fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -340,6 +386,7 @@ fn render_new_events(
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = block_events.pop() {
+                    // let block_num = block.blocknum as u32;
                     let block_num = if rcount == 0 {
                         if chain == 0 {
                             //relay
@@ -668,7 +715,7 @@ fn add_blocks<'a>(
 
                 let mesh = if matches!(
                     event.pallet.as_str().to_ascii_lowercase().as_str(),
-                    "xcm" | "dmp" | "ump"
+                    "ump" | "dmpqueue" | "polkadotxcm"
                 ) {
                     mesh_xcm.clone()
                 } else {
@@ -720,22 +767,20 @@ pub struct Details {
     raw: RawEventDetails,
 }
 
-// macro_rules! decode_ex {
-//     ($pallet_name:ident, $variant_name:ident, $value:ident, $details:ident ) => {
-//         if pallet.to_ascii_lowercase() == stringify!($pallet_name) {
-//             if variant == stringify!($variant_name) {
-//                 // The macro will expand into the contents of this block.
-//                 if let Ok(decoded) = crate::polkadot::$pallet_name::events::$variant_name::decode(
-//                     &mut details.raw.data.to_vec().as_slice(),
-//                 ) {
-//                     $value.push_str(&format!("{:#?}", decoded));
-//                 } else {
-//                     $value.push_str("(missing metadata to decode)");
-//                 }
-//             }
-//         }
-//     };
-// }
+macro_rules! decode_ex {
+    ($value:ident, $details:ident, $event:ty) => {
+        if $details.raw.pallet == <$event>::PALLET {
+            if $details.raw.variant == <$event>::EVENT {
+                // The macro will expand into the contents of this block.
+                if let Ok(decoded) = <$event>::decode(&mut $details.raw.data.to_vec().as_slice()) {
+                    $value.push_str(&format!("{:#?}", decoded));
+                } else {
+                    $value.push_str("(missing metadata to decode)");
+                }
+            }
+        }
+    };
+}
 
 // https://stackoverflow.com/questions/53706611/rust-max-of-multiple-floats
 macro_rules! max {
@@ -804,6 +849,9 @@ pub fn print_events(
     mut query3: Query<(Entity, With<ColorText>)>,
     asset_server: Res<AssetServer>,
 ) {
+    use polkadot::*;
+    use subxt::Event;
+
     let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {
         match event {
@@ -823,101 +871,128 @@ pub fn print_events(
                     let pallet: &str = &details.raw.pallet;
                     let variant: &str = &details.raw.variant;
                     let mut value = details.hover.to_string();
-                    match (pallet, variant) {
-                        ("Balances", "Deposit") => {
-                            if let Ok(decoded) = crate::polkadot::balances::events::Deposit::decode(
-                                &mut details.raw.data.to_vec().as_slice(),
-                            ) {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("Balances", "Transfer") => {
-                            if let Ok(decoded) = crate::polkadot::balances::events::Transfer::decode(
-                                &mut details.raw.data.to_vec().as_slice(),
-                            ) {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("Balances", "Withdraw") => {
-                            if let Ok(decoded) = crate::polkadot::balances::events::Withdraw::decode(
-                                &mut details.raw.data.to_vec().as_slice(),
-                            ) {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("ParaInclusion", "CandidateIncluded") => {
-                            if let Ok(decoded) =
-                                crate::polkadot::para_inclusion::events::CandidateIncluded::decode(
-                                    &mut details.raw.data.to_vec().as_slice(),
-                                )
-                            {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("ParaInclusion", "CandidateBacked") => {
-                            if let Ok(decoded) =
-                                crate::polkadot::para_inclusion::events::CandidateBacked::decode(
-                                    &mut details.raw.data.to_vec().as_slice(),
-                                )
-                            {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("Treasury", "Deposit") => {
-                            if let Ok(decoded) = crate::polkadot::treasury::events::Deposit::decode(
-                                &mut details.raw.data.to_vec().as_slice(),
-                            ) {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        ("System", "ExtrinsicSuccess") => {
-                            if let Ok(decoded) =
-                                crate::polkadot::system::events::ExtrinsicSuccess::decode(
-                                    &mut details.raw.data.to_vec().as_slice(),
-                                )
-                            {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        // ("Ump", "ExecutingUpward") => {
-                        //     if let Ok(decoded) =
-                        //         crate::polkadot::ump::events::ExecutingUpward::decode(
-                        //             &mut details.raw.data.to_vec().as_slice(),
-                        //         )
-                        //     {
-                        //         value.push_str(&format!("{:#?}", decoded));
-                        //     } else {
-                        //         value.push_str("(missing metadata to decode)");
-                        //     }
-                        // }
-                        ("Ump", "UpwardMessagesReceived") => {
-                            if let Ok(decoded) =
-                                crate::polkadot::ump::events::UpwardMessagesReceived::decode(
-                                    &mut details.raw.data.to_vec().as_slice(),
-                                )
-                            {
-                                value.push_str(&format!("{:#?}", decoded));
-                            } else {
-                                value.push_str("(missing metadata to decode)");
-                            }
-                        }
-                        _ => {}
-                    }
 
+                    decode_ex!(value, details, balances::events::Deposit);
+                    decode_ex!(value, details, balances::events::Transfer);
+                    decode_ex!(value, details, balances::events::Withdraw);
+                    decode_ex!(value, details, para_inclusion::events::CandidateIncluded);
+                    decode_ex!(value, details, para_inclusion::events::CandidateBacked);
+                    decode_ex!(value, details, treasury::events::Deposit);
+                    decode_ex!(value, details, system::events::ExtrinsicSuccess);
+                    decode_ex!(value, details, system::events::ExtrinsicFailed);
+                    decode_ex!(value, details, ump::events::ExecutedUpward);
+                    decode_ex!(value, details, ump::events::UpwardMessagesReceived);
+                    decode_ex!(value, details, paras::events::CurrentCodeUpdated);
+                    // decode_ex!(value, details, polkadotxcm::events::Attempt);
+                    // decode_ex!(
+                    //     value,
+                    //     details,
+                    //     parachain_system::events::DownwardMessagesReceived
+                    // );
+                    // decode_ex!(value, details, dmpqueue::events::ExecutedDownward);
+
+                    // decode_ex!(value, details, );
+                    //  decode_ex!(value, details, );
+                    //   decode_ex!(value, details, );
+                    // match (pallet, variant) {
+                    //     ("Balances", "Deposit") => {
+                    //         if let Ok(decoded) = crate::polkadot::balances::events::Deposit::decode(
+                    //             &mut details.raw.data.to_vec().as_slice(),
+                    //         ) {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("Balances", "Transfer") => {
+                    //         if let Ok(decoded) = crate::polkadot::balances::events::Transfer::decode(
+                    //             &mut details.raw.data.to_vec().as_slice(),
+                    //         ) {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("Balances", "Withdraw") => {
+                    //         if let Ok(decoded) = crate::polkadot::balances::events::Withdraw::decode(
+                    //             &mut details.raw.data.to_vec().as_slice(),
+                    //         ) {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("ParaInclusion", "CandidateIncluded") => {
+                    //         if let Ok(decoded) =
+                    //             crate::polkadot::para_inclusion::events::CandidateIncluded::decode(
+                    //                 &mut details.raw.data.to_vec().as_slice(),
+                    //             )
+                    //         {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("ParaInclusion", "CandidateBacked") => {
+                    //         if let Ok(decoded) =
+                    //             crate::polkadot::para_inclusion::events::CandidateBacked::decode(
+                    //                 &mut details.raw.data.to_vec().as_slice(),
+                    //             )
+                    //         {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("Treasury", "Deposit") => {
+                    //         if let Ok(decoded) = crate::polkadot::treasury::events::Deposit::decode(
+                    //             &mut details.raw.data.to_vec().as_slice(),
+                    //         ) {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("System", "ExtrinsicSuccess") => {
+                    //         if let Ok(decoded) =
+                    //             crate::polkadot::system::events::ExtrinsicSuccess::decode(
+                    //                 &mut details.raw.data.to_vec().as_slice(),
+                    //             )
+                    //         {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     (
+                    //         crate::polkadot::ump::events::ExecutedUpward::PALLET,
+                    //         crate::polkadot::ump::events::ExecutedUpward::EVENT,
+                    //     ) => {
+                    //         if let Ok(decoded) =
+                    //             crate::polkadot::ump::events::ExecutedUpward::decode(
+                    //                 &mut details.raw.data.to_vec().as_slice(),
+                    //             )
+                    //         {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     ("Ump", "UpwardMessagesReceived") => {
+                    //         if let Ok(decoded) =
+                    //             crate::polkadot::ump::events::UpwardMessagesReceived::decode(
+                    //                 &mut details.raw.data.to_vec().as_slice(),
+                    //             )
+                    //         {
+                    //             value.push_str(&format!("{:#?}", decoded));
+                    //         } else {
+                    //             value.push_str("(missing metadata to decode)");
+                    //         }
+                    //     }
+                    //     _ => {}
+                    // }
+
+                    info!("{value}");
                     // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
 
                     commands

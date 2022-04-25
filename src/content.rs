@@ -1,3 +1,5 @@
+use codec::Decode;
+use subxt::Event;
 use subxt::{Phase, RawEventDetails};
 
 /// Is this extrinsic part of the overheads of running this blockchain?
@@ -15,8 +17,27 @@ pub fn is_utility_extrinsic(event: &RawEventDetails) -> bool {
         | ("Staking", _)
         | ("DappsStaking", _)
         | ("PhalaMining", _)
+        | ("RelayChainInfo", "CurrentBlockNumbers")
+        | ("ParaInclusion", "CandidateIncluded")
+        | ("ParaInclusion", "CandidateBacked")
         | ("ParachainStaking", _) => true,
 
+        (
+            crate::polkadot::system::events::ExtrinsicSuccess::PALLET,
+            crate::polkadot::system::events::ExtrinsicSuccess::EVENT,
+        ) => {
+            if let Ok(decoded) = crate::polkadot::system::events::ExtrinsicSuccess::decode(
+                &mut event.data.to_vec().as_slice(),
+            ) {
+                if matches!(
+                    decoded.dispatch_info.class,
+                    super::polkadot::runtime_types::frame_support::weights::DispatchClass::Mandatory // String //runtime_types::frame_support::weights::DispatchInfo
+                ) {
+                    return true;
+                }
+            }
+            false
+        }
         _ => false,
     }
 }

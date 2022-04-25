@@ -10,6 +10,15 @@ use bevy::transform::components::Transform;
 use bevy::window::Windows;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
+
+pub struct MouseCapture(pub bool);
+
+impl Default for MouseCapture {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
 /// Handles keyboard input and movement
 pub fn player_move_arrows(
     keys: Res<Input<KeyCode>>,
@@ -17,6 +26,7 @@ pub fn player_move_arrows(
     windows: Res<Windows>,
     mut settings: ResMut<MovementSettings>,
     mut query: Query<&mut Transform, With<FlyCam>>,
+    mut toggle_mouse_capture: ResMut<MouseCapture>,
 ) {
     let window = windows.get_primary().unwrap();
     for mut transform in query.iter_mut() {
@@ -43,6 +53,9 @@ pub fn player_move_arrows(
                                 settings.speed -= 0.5;
                             }
                         }
+                    }
+                    KeyCode::Escape => {
+                        toggle_mouse_capture.0 = !toggle_mouse_capture.0;
                     }
                     _ => (),
                 }

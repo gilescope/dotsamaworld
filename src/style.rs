@@ -32,6 +32,12 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 use palette::FromColor;
 
 pub fn style_event(event: &RawEventDetails) -> ExStyle {
+    if event.pallet.as_str() == "System" && event.variant.as_str() == "ExtrinsicFailed" {
+        return ExStyle {
+            color: Color::rgb(1., 0., 0.),
+        };
+    }
+
     let color = palette::Lchuv::new(
         80.,
         80. + (calculate_hash(&event.variant) as f32 % 100.),
