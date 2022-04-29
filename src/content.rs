@@ -1,6 +1,8 @@
-use codec::Decode;
+use parity_scale_codec::Decode;
 use subxt::Event;
 use subxt::{Phase, RawEventDetails};
+
+use crate::DataEntity;
 
 /// Is this extrinsic part of the overheads of running this blockchain?
 /// For the relay chain including parachain blocks is useful work.
@@ -39,5 +41,19 @@ pub fn is_utility_extrinsic(event: &RawEventDetails) -> bool {
             false
         }
         _ => false,
+    }
+}
+
+pub fn is_message(entry: &DataEntity) -> bool {
+    match entry {
+        DataEntity::Event { raw, .. } => {
+            matches!(
+                raw.pallet.as_str().to_ascii_lowercase().as_str(),
+                "ump" | "dmpqueue" | "polkadotxcm"
+            )
+        },
+        _ => {
+false
+        } 
     }
 }

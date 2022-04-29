@@ -22,12 +22,20 @@ bevy_flycam = "0.7"
 bevy_text_mesh = "0.2"
 bevy_mod_picking = "0.6"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
+parity-scale-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
 bevy_atmosphere = "0.3"
 palette = "0.6" # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
+bevy-inspector-egui = "0.10"
+serde_bytes = "0.11"
 #rayon = "*"
+serde = "*"
+bevy_hanabi = "0.2"
+frame-metadata = "*"
+scale-info = {version = "*", features=["serde"] }
+desub = { git="https://github.com/paritytech/desub/" }
+desub-current = { git="https://github.com/paritytech/desub/" } 
 # Dependencies for native only.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "dynamic"] }
