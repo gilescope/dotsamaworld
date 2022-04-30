@@ -185,12 +185,35 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                 {
                     let pallet = ext.call_data.pallet_name.to_string();
                     let variant = ext.call_data.ty.name().to_owned();
-                    let args = ext
+
+                    let mut args: Vec<_> = ext
                         .call_data
                         .arguments
                         .iter()
                         .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
                         .collect();
+
+                    if pallet == "System" && variant == "remark" {
+                        match &ext.call_data.arguments[0].value {
+                            desub_current::ValueDef::Composite(
+                                desub_current::value::Composite::Unnamed(chars_vals),
+                            ) => {
+                                let bytes = chars_vals
+                                    .iter()
+                                    .map(|arg| match arg.value {
+                                        desub_current::ValueDef::Primitive(
+                                            desub_current::value::Primitive::U8(ch),
+                                        ) => ch,
+                                        _ => b'!',
+                                    })
+                                    .collect::<Vec<u8>>();
+                                let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
+                                args.insert(0, rmrk);
+                            }
+
+                            _ => {}
+                        }
+                    }
 
                     exts.push(DataEntity::Extrinsic {
                         id: (block_header.number, i as u32),
@@ -199,7 +222,6 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                         args,
                     });
                 }
-                // print!("hohoohoohhohohohooh: {:#?}", ext);
 
                 // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
             }
@@ -214,29 +236,12 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                     extrinsics: exts,
                     events: vec![],
                 });
-            // let mut remove = false;
             if !current.events.is_empty() {
-                // println!("already one there for hash!!!! {}", block_hash.to_string());
                 let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
-                // let val = Entry::Vacant(());
-                // std::mem::swap(entry, val);
-                // if let Entry::Occupied(
                 current.extrinsics = ext_clone;
                 handle.1.push(current);
-                //  println!("pushed finished on!!!! {}", block_hash.to_string());
-
-                // remove = true;
             }
-
-            // if remove {
-
-            // }
-
-            // match entry {
-            //     Entry::Vacant(())
-            // push();
             //TODO: assert_eq!(block_header.hash(), block.hash());
-            // println!("{block_body:?}");
         }
     }
     Ok(())

@@ -370,6 +370,21 @@ pub enum DataEntity {
     },
 }
 
+impl DataEntity {
+    pub fn pallet(&self) -> &str {
+        match self {
+            Self::Event { raw } => raw.pallet.as_ref(),
+            Self::Extrinsic { pallet, .. } => pallet,
+        }
+    }
+    pub fn variant(&self) -> &str {
+        match self {
+            Self::Event { raw } => raw.variant.as_ref(),
+            Self::Extrinsic { variant, .. } => variant,
+        }
+    }
+}
+
 fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -754,7 +769,7 @@ fn add_blocks<'a>(
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(Details {
-                    hover: format!("{:?}", block),
+                    hover: format!("{} {}\n{:?}", block.pallet(), block.variant(), block),
                     data: (*block).clone(),
                 })
                 .insert(Rainable {
@@ -800,7 +815,8 @@ fn add_blocks<'a>(
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(Details {
-                    hover: format!("{:?}", event),
+                    hover: format!("{} {}\n{:?}", event.pallet, event.variant, event),
+
                     data: DataEntity::Event {
                         raw: (*event).clone(),
                     },
