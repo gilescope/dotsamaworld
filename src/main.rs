@@ -714,8 +714,8 @@ fn add_blocks<'a>(
 
     for (event_num, (block, events)) in block_events.iter().enumerate() {
         // println!("{} has {}", block.is_some(), events.len());
-        let x = event_num % 9;
-        let z = (event_num / 9) % 9;
+        let z = event_num % 9;
+        let x = (event_num / 9) % 9;
         // let y = event_num / 9 / 9;// Upwards!
 
         rain_height[event_num % 81] += fastrand::f32() * HIGH;
