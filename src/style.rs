@@ -33,6 +33,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 use palette::FromColor;
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {
+    let msg = crate::content::is_message(entry);
     match entry {
         DataEntity::Event { raw, .. } => {
             if raw.pallet.as_str() == "System" && raw.variant.as_str() == "ExtrinsicFailed" {
@@ -68,10 +69,19 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
         //         color: Color::hex("000000").unwrap(),
         //     },
         // }
-        _ => {
-            return ExStyle {
-                color: Color::rgb(0., 0., 1.),
-            };
+        DataEntity::Extrinsic {
+            pallet, variant, ..
+        } => {
+            let color = palette::Lchuv::new(
+                80.,
+                80. + (calculate_hash(&variant) as f32 % 100.),
+                (calculate_hash(&pallet) as f32) % 360.,
+            );
+            let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
+
+            ExStyle {
+                color: Color::rgba(rgb.red, rgb.green, rgb.blue, if msg { 0.5 } else { 1. }),
+            }
         }
     }
 }

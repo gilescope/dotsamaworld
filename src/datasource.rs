@@ -1,18 +1,24 @@
-use subxt::DefaultConfig;
-use subxt::ClientBuilder;
-use desub_current::{decoder, Metadata};
-use subxt::sp_runtime::Deserialize;
-use crate::ABlocks;
-use subxt::DefaultExtra;use subxt::{RawEventDetails};
 use super::polkadot;
+use crate::ABlocks;
+use crate::DataEntity;
 use async_std::stream::StreamExt;
+use desub_current::{decoder, Metadata};
+use frame_metadata::RuntimeMetadataPrefixed;
+use parity_scale_codec::Decode;
+use parity_scale_codec::Encode;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::hash_map::Entry;
+use std::hash::Hash;
 use subxt::rpc::Subscription;
 use subxt::sp_runtime::generic::Header;
 use subxt::sp_runtime::traits::BlakeTwo256;
-use parity_scale_codec::Decode;
-use frame_metadata::RuntimeMetadataPrefixed;
-use parity_scale_codec::Encode;
+use subxt::sp_runtime::Deserialize;
+use subxt::ClientBuilder;
 use subxt::Config;
+use subxt::DefaultConfig;
+use subxt::DefaultExtra;
+use subxt::RawEventDetails;
+
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
 // impl Config for MyConfig {
@@ -38,76 +44,200 @@ use subxt::Config;
 // impl subxt::sp_runtime::traits::Extrinsic for ExtrinsicVec {
 
 // }
-
+use std::path::Path;
+use std::time::Duration;
+use subxt::rpc::ClientT;
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
-
-pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> { 
-    let metadata_bytes = std::fs::read(
-        "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale",
-    )
-    .unwrap();
+pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
     use core::slice::SlicePattern;
     use scale_info::form::PortableForm;
-    let meta: RuntimeMetadataPrefixed =
-        Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
+    use std::hash::Hasher;
+    let mut hasher = DefaultHasher::default();
+    url.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Save metadata to a file:
+    // let out_dir = std::env::var_os("OUT_DIR").unwrap();
+
+    let metadata_path = format!("{hash}.metadata.scale");
+
+    // let meta: RuntimeMetadataPrefixed =
+    // Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
     //  match meta
+
+    // Download metadata from binary; retry until successful, or a limit is hit.
+
+    // let client = reqwest::Client::new();
+
+    // // See https://www.jsonrpc.org/specification for more information on
+    // // the JSON RPC 2.0 format that we use here to talk to nodes.
+    // let res = client.post("http://localhost:9933")
+    //     .json(&json!{{
+    //         "id": 1,
+    //         "jsonrpc": "2.0",
+    //         "method": "rpc_methods"
+    //     }})
+    //     .send()
+    //     .await
+    //     .unwrap();
+
+    let metadata_bytes = if let Ok(result) = std::fs::read(
+        &metadata_path, //    "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale"
+    ) {
+        result
+    } else {
+        let metadata_bytes: sp_core::Bytes = {
+            const MAX_RETRIES: usize = 6;
+            let mut retries = 0;
+
+            loop {
+                if retries >= MAX_RETRIES {
+                    panic!("Cannot connect to substrate node after {} retries", retries);
+                }
+
+                println!("trying to get metadata ttnr {url}");
+                // It might take a while for substrate node that spin up the RPC server.
+                // Thus, the connection might get rejected a few times.
+                let res = match subxt::rpc::ws_client(&url).await {
+                    Ok(c) => c.request("state_getMetadata", None).await,
+                    Err(e) => Err(e),
+                };
+                println!("finished trying {url} res {res:?}");
+                match res {
+                    Ok(res) => {
+                        // let _ = cmd.kill();
+                        break res;
+                    }
+                    _ => {
+                        std::thread::sleep(std::time::Duration::from_secs(1 << retries));
+                        retries += 1;
+                    }
+                };
+            }
+        };
+
+        println!("writing to {:?}", metadata_path);
+        std::fs::write(&metadata_path, &metadata_bytes.0).expect("Couldn't write metadata output");
+        std::fs::read(
+            metadata_path, //    "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale"
+        )
+        .unwrap()
+    };
 
     let metad = Metadata::from_bytes(&metadata_bytes).unwrap();
 
+    // give back the "result"s to save some lines of code..).
+    // let res = rpc_to_localhost("state_getMetadata", ()).await.unwrap();
 
-
-
+    // Decode the hex value into bytes (which are the SCALE encoded metadata details):
+    // let metadata_hex = res.as_str().unwrap();
+    // let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
 
     let api = ClientBuilder::new()
-    .set_url(url)
-    .build()
-    .await?
-    .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();//  .to_runtime_api::<polkadot::RuntimeApi<MyConfig, DefaultExtra<MyConfig>>>();
+        .set_url(url)
+        .build()
+        .await?
+        .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(); //  .to_runtime_api::<polkadot::RuntimeApi<MyConfig, DefaultExtra<MyConfig>>>();
+
+    // let metad: subxt::Metadata = api.client.rpc().metadata().await.unwrap();
+    // // let metabytes = metad.encode();
+
+    // std::process::exit(-1);
+    // let bytes: Bytes = api.client.rpc()
+    //         //.client
+    //         .request("state_getMetadata", rpc_params![])
+    //         .await?;
 
     // For non-finalised blocks use `.subscribe_finalized_blocks()`
     let mut block_headers: Subscription<Header<u32, BlakeTwo256>> =
-    api.client.rpc().subscribe_finalized_blocks().await.unwrap();
+        api.client.rpc().subscribe_finalized_blocks().await.unwrap();
 
     while let Some(Ok(block_header)) = block_headers.next().await {
         let block_hash = block_header.hash();
-    println!(
-        "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
-        block_header.number, block_hash, block_header.parent_hash, block_header.state_root, block_header.extrinsics_root
-    );
-    if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
-        let mut exts = vec![];
-        for ext_bytes in block_body.block.extrinsics.iter()
-        {
-// let s : String = ext_bytes;
-// ext_bytes.using_encoded(|ref slice| {
-//     assert_eq!(slice, &b"\x0f");
+        // println!(
+        //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+        //     block_header.number,
+        //     block_hash,
+        //     block_header.parent_hash,
+        //     block_header.state_root,
+        //     block_header.extrinsics_root
+        // );
+        if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
+            let mut exts = vec![];
+            // println!("block hash! {}", block_hash.to_string());
+            for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
+                // let s : String = ext_bytes;
+                // ext_bytes.using_encoded(|ref slice| {
+                //     assert_eq!(slice, &b"\x0f");
 
-            let ex_slice = <ExtrinsicVec as Decode>::decode(&mut ext_bytes.encode().as_slice()).unwrap().0;
-            // This works too but unsafe:
-            //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) }; 
-             
-            // use parity_scale_codec::Encode;
-            // ext_bytes.encode();
-            let ext = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice()).expect("can decode extrinsic");
-            
-            exts.push(format!("{:#?}", ext));
+                let ex_slice = <ExtrinsicVec as Decode>::decode(&mut ext_bytes.encode().as_slice())
+                    .unwrap()
+                    .0;
+                // This works too but unsafe:
+                //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
 
-          
-            // print!("hohoohoohhohohohooh: {:#?}", ext);
+                // use parity_scale_codec::Encode;
+                // ext_bytes.encode();
+                if let Ok(ext) =
+                    decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+                {
+                    let pallet = ext.call_data.pallet_name.to_string();
+                    let variant = ext.call_data.ty.name().to_owned();
+                    let args = ext
+                        .call_data
+                        .arguments
+                        .iter()
+                        .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
+                        .collect();
 
-            // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
-        }      
-        tx.lock().unwrap().push(PolkaBlock {
-            blocknum: block_header.number as usize,
-            blockhash: block_hash.to_string(),
-            extrinsics: exts,
-            events: vec![],
-        });
-        //TODO: assert_eq!(block_header.hash(), block.hash());
-        println!("{block_body:?}");
-    }
+                    exts.push(DataEntity::Extrinsic {
+                        id: (block_header.number, i as u32),
+                        pallet,
+                        variant,
+                        args,
+                    });
+                }
+                // print!("hohoohoohhohohohooh: {:#?}", ext);
+
+                // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
+            }
+            let ext_clone = exts.clone();
+            let mut handle = tx.lock().unwrap();
+            let current = handle
+                .0
+                .entry(block_hash.to_string())
+                .or_insert(PolkaBlock {
+                    blocknum: block_header.number as usize,
+                    blockhash: block_hash.to_string(),
+                    extrinsics: exts,
+                    events: vec![],
+                });
+            // let mut remove = false;
+            if !current.events.is_empty() {
+                // println!("already one there for hash!!!! {}", block_hash.to_string());
+                let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
+                // let val = Entry::Vacant(());
+                // std::mem::swap(entry, val);
+                // if let Entry::Occupied(
+                current.extrinsics = ext_clone;
+                handle.1.push(current);
+                //  println!("pushed finished on!!!! {}", block_hash.to_string());
+
+                // remove = true;
+            }
+
+            // if remove {
+
+            // }
+
+            // match entry {
+            //     Entry::Vacant(())
+            // push();
+            //TODO: assert_eq!(block_header.hash(), block.hash());
+            // println!("{block_body:?}");
+        }
     }
     Ok(())
 }
@@ -115,79 +245,70 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
 pub struct PolkaBlock {
     pub blocknum: usize,
     pub blockhash: String,
-    pub extrinsics: Vec<String>,
+    pub extrinsics: Vec<DataEntity>,
     pub events: Vec<RawEventDetails>,
 }
 
-pub async fn block_chain(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn watch_events(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
     let api = ClientBuilder::new()
         .set_url(&url)
-        //    .set_url("ws://127.0.0.1:9944")
-        //        .set_url("wss://kusama-rpc.polkadot.io:443")
-        //wss://kusama-rpc.polkadot.io:443
         .build()
         .await?
         .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
 
     let mut event_sub = api.events().subscribe_finalized().await?;
 
-    // let mut ex_sub = api.tx().subscribe().await?;
-
     let mut blocknum = 1;
     while let Some(events) = event_sub.next().await {
         let events = events?;
-        let block_hash = events.block_hash();
+        let blockhash = events.block_hash().to_string();
         blocknum += 1;
 
-        tx.lock().unwrap().push(PolkaBlock {
-            blocknum,
-            blockhash: events.block_hash().to_string(),
-            extrinsics: vec![],
-            events: events.iter_raw().map(|c| c.unwrap()).collect::<Vec<_>>(),
-        });
-
-        // for event in events.iter_raw() {
-        //     let event: RawEventDetails = event?;
-        //     // match event.pallet.as_str() {
-        //     //     "ImOnline" | "ParaInclusion" | "PhragmenElection" => {
-        //     //         continue;
-        //     //     }
-        //     //     _ => {}
-        //     // }
-
-        //     // if event.pallet == "System" {
-        //     //     if event.variant == "ExtrinsicSuccess" {
-        //     //         continue;
-        //     //     }
-        //     // }
-
-        //     let is_balance_transfer = event
-        //         .as_event::<polkadot::balances::events::Transfer>()?
-        //         .is_some();
-
-        //     let is_online = event
-        //         .as_event::<polkadot::im_online::events::AllGood>()?
-        //         .is_some();
-
-        //     let is_new_session = event
-        //         .as_event::<polkadot::session::events::NewSession>()?
-        //         .is_some();
-
-        //     if !is_online && !is_new_session {
-        //         tx.lock().unwrap().push(BlockEvent {
-        //             blocknum,
-        //             raw_event: event.clone(),
-        //         });
-        //         println!("    {:?}\n", event.pallet);
-        //         println!("    {:#?}\n", event);
-
-        //         // stdout()
-        //         // .execute(SetForegroundColor(Color::Green)).unwrap()
-        //         // .execute(SetBackgroundColor(Color::Black)).unwrap()
-        //         // .execute(Print(format!("    {:?}\r\n", event))).unwrap()
-        //         // .execute(ResetColor).unwrap();
-        //     }
-        // }
+        tx.lock().unwrap().0.insert(
+            events.block_hash().to_string(),
+            PolkaBlock {
+                blocknum,
+                blockhash,
+                extrinsics: vec![],
+                events: events.iter_raw().map(|c| c.unwrap()).collect::<Vec<_>>(),
+            },
+        );
     }
     Ok(())
+}
+
+pub fn associate_events(
+    ext: Vec<DataEntity>,
+    mut events: Vec<RawEventDetails>,
+) -> Vec<(Option<DataEntity>, Vec<RawEventDetails>)> {
+    let mut ext: Vec<(Option<DataEntity>, Vec<RawEventDetails>)> = ext
+        .into_iter()
+        .map(|extrinsic| {
+            let eid = if let DataEntity::Extrinsic {
+                id: (_bid, eid), ..
+            } = extrinsic
+            {
+                eid
+            } else {
+                panic!("bad stuff happened");
+            };
+            // println!("{} count ", events.len());
+            (
+                Some(extrinsic),
+                events
+                    .drain_filter(|raw| match &raw.phase {
+                        subxt::Phase::ApplyExtrinsic(extrinsic_id) => *extrinsic_id == eid,
+                        _ => false,
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    for unrelated_to_extrinsics in events {
+        ext.push((None, vec![unrelated_to_extrinsics]));
+    }
+
+    ext
+    //leftovers in events should be utils..
 }

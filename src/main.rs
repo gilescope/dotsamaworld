@@ -11,8 +11,8 @@ use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
 use bevy_text_mesh::TextMesh;
 // use bevy_text_mesh::prelude::*;
-use bevy_hanabi::ParticleEffectBundle;
-use bevy_hanabi::ShapeDimension;
+// use bevy_hanabi::ParticleEffectBundle;
+// use bevy_hanabi::ShapeDimension;
 use std::sync::Arc;
 use std::sync::Mutex;
 // pub use wasm_bindgen_rayon::init_thread_pool;
@@ -25,12 +25,12 @@ use bevy_flycam::NoCameraPlayerPlugin;
 // use bevy_rapier3d::prelude::*;
 use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
-use parity_scale_codec::Decode;
+// use parity_scale_codec::Decode;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use subxt::RawEventDetails;
 mod content;
-use bevy_hanabi::HanabiPlugin;
+// use bevy_hanabi::HanabiPlugin;
 mod datasource;
 mod movement;
 mod style;
@@ -50,7 +50,13 @@ pub mod polkadot {}
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
-type ABlocks = Arc<Mutex<Vec<datasource::PolkaBlock>>>;
+// Wait in hashmap till both events and extrinsics together, then released into queue:
+type ABlocks = Arc<
+    Mutex<(
+        HashMap<String, datasource::PolkaBlock>,
+        Vec<datasource::PolkaBlock>,
+    )>,
+>;
 
 enum Env {
     Local,
@@ -88,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "rococo.api.integritee.network",
                 "rpc.rococo-parachain-sg.litentry.io",
                 "moonsama-testnet-rpc.moonsama.com",
-                "node-6913072722034561024.lh.onfinality.io/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
+                "node-6913072722034561024.lh.onfinality.io:443/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
                 "pangolin-parachain-rpc.darwinia.network",
                 "rococo.kilt.io",
                 "rco-para.subsocial.network",
@@ -107,16 +113,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "wss.odyssey.aresprotocol.io",
                 "astar-rpc.dwellir.com",
                 "fullnode.parachain.centrifuge.io",
-                "clover.api.onfinality.io/public-ws",
+                "clover.api.onfinality.io:443/public-ws",
                 "rpc.efinity.io",
                 "rpc-01.hydradx.io",
-                "interlay.api.onfinality.io/public-ws",
+                "interlay.api.onfinality.io:443/public-ws",
                 "k-ui.kapex.network",
                 "wss.api.moonbeam.network",
                 "eden-rpc.dwellir.com",
                 "rpc.parallel.fi",
-                "api.phala.network/ws",
-                "polkadex.api.onfinality.io/public-ws",
+                "api.phala.network:443/ws",
+                "polkadex.api.onfinality.io:443/public-ws",
                 "ws.unique.network",
             ],
             vec![
@@ -236,7 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let chain_name_clone = chain_name.clone();
             let url_clone = url.clone();
             std::thread::spawn(move || {
-                async_std::task::block_on(datasource::block_chain(lock_clone, url)).unwrap();
+                async_std::task::block_on(datasource::watch_events(lock_clone, url)).unwrap();
             });
 
             let mut chain_name = chain_name_clone;
@@ -353,8 +359,15 @@ fn focus_manager(mut windows: ResMut<Windows>, toggle_mouse_capture: Res<movemen
 
 #[derive(Debug, Clone)]
 pub enum DataEntity {
-    Event { raw: RawEventDetails },
-    Extrinsic { id: String, code: String },
+    Event {
+        raw: RawEventDetails,
+    },
+    Extrinsic {
+        id: (u32, u32),
+        pallet: String,
+        variant: String,
+        args: Vec<String>,
+    },
 }
 
 fn render_new_events(
@@ -368,7 +381,7 @@ fn render_new_events(
     for (rcount, relay) in relays.iter().enumerate() {
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
-                if let Some(block) = block_events.pop() {
+                if let Some(block) = (*block_events).1.pop() {
                     // let block_num = block.blocknum as u32;
                     let block_num = if rcount == 0 {
                         if chain == 0 {
@@ -400,6 +413,7 @@ fn render_new_events(
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
 
+                    // Add the new block as a large rectangle on the ground:
                     commands
                         .spawn_bundle(PbrBundle {
                             mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
@@ -486,16 +500,17 @@ fn render_new_events(
                     // })
                     // .with(TextTag);
 
-                    let mut payload_blocks = block
-                        .events
-                        .iter()
-                        .filter(|&e| !content::is_utility_extrinsic(e))
-                        .map(|raw| DataEntity::Event { raw: raw.clone() })
-                        .chain(block.extrinsics.iter().map(|ex| DataEntity::Extrinsic {
-                            id: "todo".into(),
-                            code: ex.to_string(),
-                        }))
-                        .collect::<Vec<_>>();
+                    let ext_with_events =
+                        datasource::associate_events(block.extrinsics, block.events);
+
+                    let (boring, fun): (Vec<_>, Vec<_>) =
+                        ext_with_events.into_iter().partition(|(e, _)| {
+                            if let Some(ext) = e {
+                                content::is_utility_extrinsic(ext)
+                            } else {
+                                true
+                            }
+                        });
 
                     //TODO:
                     // // Stick xcm blocks on top:
@@ -507,7 +522,7 @@ fn render_new_events(
                     add_blocks(
                         block_num,
                         chain,
-                        payload_blocks.iter(), //.map(|raw| DataEntity::Event{raw:*raw}),
+                        fun,
                         &mut commands,
                         &mut meshes,
                         &mut materials,
@@ -516,16 +531,10 @@ fn render_new_events(
                         // effects,
                     );
 
-                    let events : Vec<_> = block
-                            .events
-                            .iter()
-                            .filter(|&e| content::is_utility_extrinsic(e))
-                            .map(|raw| DataEntity::Event { raw: (*raw).clone() }).collect();
-
                     add_blocks(
                         block_num,
                         chain,
-                        events.iter(),
+                        boring,
                         &mut commands,
                         &mut meshes,
                         &mut materials,
@@ -664,10 +673,11 @@ fn render_new_events(
     // }
 }
 
+// TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
 fn add_blocks<'a>(
     block_num: u32,
     chain: usize,
-    block_events: impl Iterator<Item = &'a DataEntity>,
+    block_events: Vec<(Option<DataEntity>, Vec<RawEventDetails>)>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -691,58 +701,115 @@ fn add_blocks<'a>(
     let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
     let mut mat_map = HashMap::new();
 
-    let (base_x, base_z) = (
+    let (base_x, base_y, base_z) = (
         0. + (11. * block_num as f32) - 4.,
+        0.5,
         5.5 + 11. * chain as f32 - 4.,
     );
 
-    let mut rain_height: [f32; 81] = [100.; 81];
-    for (event_num, event) in block_events.enumerate() {
+    const DOT_HEIGHT: f32 = 1.;
+    const HIGH: f32 = 100.;
+    let mut rain_height: [f32; 81] = [HIGH; 81];
+    let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
+
+    for (event_num, (block, events)) in block_events.iter().enumerate() {
+        // println!("{} has {}", block.is_some(), events.len());
         let x = event_num % 9;
         let z = (event_num / 9) % 9;
-        let y = event_num / 9 / 9;
+        // let y = event_num / 9 / 9;// Upwards!
 
-        let style = style::style_event(&event);
+        rain_height[event_num % 81] += fastrand::f32() * HIGH;
+        let target_y = next_y[event_num % 81];
+        next_y[event_num % 81] += DOT_HEIGHT;
 
-        let material = mat_map
-            .entry(style.clone())
-            .or_insert_with(|| materials.add(style.color.clone().into()));
+        let (px, py, pz) = (
+            base_x + x as f32,
+            rain_height[event_num % 81],
+            (base_z + z as f32),
+        );
 
-        let mesh = if content::is_message(&event) {
-            mesh_xcm.clone()
-        } else if matches!(event, DataEntity::Extrinsic { .. }) {
-            mesh_extrinsic.clone()
+        let transform =
+            Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
+
+        if let Some(block) = block {
+            let style = style::style_event(&block);
+            let material = mat_map
+                .entry(style.clone())
+                .or_insert_with(|| materials.add(style.color.clone().into()));
+            let mesh = if content::is_message(&block) {
+                mesh_xcm.clone()
+            } else if matches!(block, DataEntity::Extrinsic { .. }) {
+                mesh_extrinsic.clone()
+            } else {
+                mesh.clone()
+            };
+
+            commands
+                .spawn_bundle(PbrBundle {
+                    mesh,
+                    ///* event.blocknum as f32
+                    material: material.clone(),
+                    transform,
+                    ..Default::default()
+                })
+                .insert_bundle(PickableBundle::default())
+                .insert(Details {
+                    hover: format!("{:?}", block),
+                    data: (*block).clone(),
+                })
+                .insert(Rainable {
+                    dest: target_y * build_direction,
+                })
+                .insert(Name::new("BlockEvent"));
         } else {
-            mesh.clone()
-        };
+            // Remove the spacer as we did not add a block.
+            next_y[event_num % 81] -= DOT_HEIGHT;
+        }
 
-        rain_height[event_num % 81] += fastrand::f32() * 100.;
-        let spawner = Spawner::once(5.0.into(), true);
-        let mut bundle = ParticleEffectBundle::default().with_spawner(spawner);
+        for event in events {
+            let entity = DataEntity::Event {
+                raw: (*event).clone(),
+            };
+            let style = style::style_event(&entity);
+            let material = mat_map
+                .entry(style.clone())
+                .or_insert_with(|| materials.add(style.color.clone().into()));
 
-        commands
-            .spawn_bundle(PbrBundle {
-                mesh,
-                ///* event.blocknum as f32
-                material: material.clone(),
-                transform: Transform::from_translation(Vec3::new(
-                    base_x + x as f32,
-                    ((0.5 + y as f32) + rain_height[event_num % 81]) * build_direction,
-                    (base_z + z as f32) * rflip,
-                )),
-                ..Default::default()
-            })
-            .insert_bundle(PickableBundle::default())
-            .insert(Details {
-                hover: format!("{:?}", event),
-                data: (*event).clone(),
-            })
-            .insert(Rainable {
-                dest: (0.5 + y as f32) * build_direction,
-            })
-            .insert(Name::new("BlockEvent"))
-            // .insert_bundle(bundle)
-            ;
+            let mesh = if content::is_message(&entity) {
+                mesh_xcm.clone()
+            } else {
+                mesh.clone()
+            };
+            rain_height[event_num % 81] += DOT_HEIGHT;
+            let target_y = next_y[event_num % 81];
+            next_y[event_num % 81] += DOT_HEIGHT;
+
+            let t = Transform::from_translation(Vec3::new(
+                px,
+                rain_height[event_num % 81] * build_direction,
+                pz * rflip,
+            ));
+
+            // t.translation.y += ;
+            commands
+                .spawn_bundle(PbrBundle {
+                    mesh,
+                    material: material.clone(),
+                    transform: t,
+                    ..Default::default()
+                })
+                .insert_bundle(PickableBundle::default())
+                .insert(Details {
+                    hover: format!("{:?}", event),
+                    data: DataEntity::Event {
+                        raw: (*event).clone(),
+                    },
+                })
+                .insert(Rainable {
+                    dest: target_y * build_direction,
+                })
+                .insert(Name::new("BlockEvent"));
+        }
     }
 }
 
@@ -888,83 +955,83 @@ pub fn print_events(
                     // decode_ex!(value, details, ump::events::UpwardMessagesReceived);
                     // decode_ex!(value, details, paras::events::CurrentCodeUpdated);
 
-                    use desub_current::{decoder, Metadata};
-                    use frame_metadata::PalletEventMetadata;
-                    use frame_metadata::{RuntimeMetadata, RuntimeMetadataPrefixed};
-                    let metadata_bytes = std::fs::read(
-                        "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale",
-                    )
-                    .unwrap();
-                    use core::slice::SlicePattern;
-                    use scale_info::form::PortableForm;
-                    let meta: RuntimeMetadataPrefixed =
-                        Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
-                    //  match meta
+                    // use desub_current::{decoder, Metadata};
+                    // use frame_metadata::PalletEventMetadata;
+                    // use frame_metadata::{RuntimeMetadata, RuntimeMetadataPrefixed};
+                    // let metadata_bytes = std::fs::read(
+                    //     "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale",
+                    // )
+                    // .unwrap();
+                    // use core::slice::SlicePattern;
+                    // use scale_info::form::PortableForm;
+                    // let meta: RuntimeMetadataPrefixed =
+                    //     Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
+                    // //  match meta
 
-                    let metad = Metadata::from_bytes(&metadata_bytes).unwrap();
-                    println!("hohoho Extrinsic version: {}", metad.extrinsic().version());
-                    if let RuntimeMetadata::V14(m) = meta.1 {
-                        // serde_json::to_value(registry).unwrap()
+                    // let metad = Metadata::from_bytes(&metadata_bytes).unwrap();
+                    // // println!("hohoho Extrinsic version: {}", metad.extrinsic().version());
+                    // if let RuntimeMetadata::V14(m) = meta.1 {
+                    // serde_json::to_value(registry).unwrap()
 
-                        for e_meta in m.pallets {
-                            println!("pallet name {:?}", e_meta.name);
-                            use scale_info::Type;
-                            // println!("{:?}", e_meta.event);
-                            if let Some(events) = e_meta.event {
-                                let type_id = events.ty;
+                    // for e_meta in m.pallets {
+                    // println!("pallet name {:?}", e_meta.name);
+                    // use scale_info::Type;
+                    // println!("{:?}", e_meta.event);
+                    // if let Some(events) = e_meta.event {
+                    // let type_id = events.ty;
 
-                                let registry = &m.types;
-                                let type_info: &Type<PortableForm> =
-                                    registry.resolve(type_id.id()).unwrap();
-                                // type_info.type_info();
-                                use serde::{Deserialize, Serialize};
-                                //let port = type_info.into_portable();
+                    // let registry = &m.types;
+                    // let type_info: &Type<PortableForm> =
+                    //     registry.resolve(type_id.id()).unwrap();
+                    // type_info.type_info();
+                    // use serde::{Deserialize, Serialize};
+                    //let port = type_info.into_portable();
 
-                                //let decoded = <&Type<PortableForm> as Decode>::decode( &mut details.raw.data.as_slice());
-                                // self.variant
-                                // let v = desub_current::Value<()>::deserialize(serde_bytes::ByteBuf::from(details.raw.data.as_slice()));
+                    //let decoded = <&Type<PortableForm> as Decode>::decode( &mut details.raw.data.as_slice());
+                    // self.variant
+                    // let v = desub_current::Value<()>::deserialize(serde_bytes::ByteBuf::from(details.raw.data.as_slice()));
 
-                                // if let Ok(val) = desub_current::decoder::decode_value_by_id(
-                                //     &metad,
-                                //     type_id,
-                                //     &mut details.raw.data.as_slice(),
-                                // ) {
-                                //     println!(
-                                //         "We gooooooooooooooooooooooooooooooooot one!!!! {:?}",
-                                //         val
-                                //     );
-                                // }
+                    // if let Ok(val) = desub_current::decoder::decode_value_by_id(
+                    //     &metad,
+                    //     type_id,
+                    //     &mut details.raw.data.as_slice(),
+                    // ) {
+                    //     println!(
+                    //         "We gooooooooooooooooooooooooooooooooot one!!!! {:?}",
+                    //         val
+                    //     );
+                    // }
 
-                                // type_info::<PortableForm>::decode(&mut details.raw.data.as_slice());
-                                // match type_info.type_def() {
-                                //     scale_info::TypeDef::Variant(v) => {
-                                //         for variant in v.variants() {
-                                //             println!("- {:?}: {}", variant.index(), variant.name());
-                                //             // variant.decode(&mut details.raw.data.as_slice());
+                    // type_info::<PortableForm>::decode(&mut details.raw.data.as_slice());
+                    // match type_info.type_def() {
+                    //     scale_info::TypeDef::Variant(v) => {
+                    //         for variant in v.variants() {
+                    //             println!("- {:?}: {}", variant.index(), variant.name());
+                    //             // variant.decode(&mut details.raw.data.as_slice());
 
-                                //             <&scale_info::Variant<PortableForm> as Decode>::decode(
-                                //                 // &variant,
-                                //                 &mut details.raw.data.as_slice(),
-                                //             );
-                                //         }
-                                //     }
-                                //     o => panic!("Unsupported variant: {:?}", o),
-                                // }
-                                // <PalletEventMetadata<_> as Decode>::decode(
-                                //     &mut details.raw.data.as_slice(),
-                                // );
-                                // for ev in events.iter() {
-                                // events.ty.decode(&mut details.raw.data.as_slice());
-                                // println!("event {events:?}");
-                                // }
-                            }
-                            // println!("{:?}", e_meta.calls);
+                    //             <&scale_info::Variant<PortableForm> as Decode>::decode(
+                    //                 // &variant,
+                    //                 &mut details.raw.data.as_slice(),
+                    //             );
+                    //         }
+                    //     }
+                    //     o => panic!("Unsupported variant: {:?}", o),
+                    // }
+                    // <PalletEventMetadata<_> as Decode>::decode(
+                    //     &mut details.raw.data.as_slice(),
+                    // );
+                    // for ev in events.iter() {
+                    // events.ty.decode(&mut details.raw.data.as_slice());
+                    // println!("event {events:?}");
+                    // }
+                    // }
+                    // println!("{:?}", e_meta.calls);
 
-                            // if let Ok(maybe) = e_meta.decode(details.raw.data) {
-                            //     println!("{maybe:?}");
-                            // };
-                        }
-                    };
+                    // if let Ok(maybe) = e_meta.decode(details.raw.data) {
+                    //     println!("{maybe:?}");
+                    // };
+                    // }
+                    // };
 
                     // let decoded = meta.decode_one_event(details.raw.data);
 
