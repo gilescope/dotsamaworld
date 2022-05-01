@@ -3,13 +3,13 @@
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-use bevy::window::WindowFocused;
-use bevy_atmosphere::*;
+// use bevy::window::WindowFocused;
+// use bevy_atmosphere::*;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
-use bevy_text_mesh::TextMesh;
+// use bevy_text_mesh::TextMesh;
 // use bevy_text_mesh::prelude::*;
 // use bevy_hanabi::ParticleEffectBundle;
 // use bevy_hanabi::ShapeDimension;
@@ -24,7 +24,7 @@ use bevy_flycam::NoCameraPlayerPlugin;
 // use bevy_rapier3d::prelude::RapierPhysicsPlugin;
 // use bevy_rapier3d::prelude::*;
 use bevy_inspector_egui::WorldInspectorPlugin;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+// use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 // use parity_scale_codec::Decode;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -35,9 +35,9 @@ mod datasource;
 mod movement;
 mod style;
 
-use futures::StreamExt;
+// use futures::StreamExt;
 
-use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
+// use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -50,11 +50,18 @@ pub mod polkadot {}
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
+#[derive(Default)]
+pub struct ChainInfo {
+    pub chain_name: String,
+    pub inserted_pic: bool,
+}
+
 // Wait in hashmap till both events and extrinsics together, then released into queue:
 type ABlocks = Arc<
     Mutex<(
         HashMap<String, datasource::PolkaBlock>,
         Vec<datasource::PolkaBlock>,
+        ChainInfo,
     )>,
 >;
 
@@ -110,26 +117,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "rpc.polkadot.io",
                 "statemint-rpc.polkadot.io",
                 "acala.polkawallet.io",
-                "wss.odyssey.aresprotocol.io",
                 "astar-rpc.dwellir.com",
                 "fullnode.parachain.centrifuge.io",
-                "clover.api.onfinality.io:443/public-ws",
+                "rpc-para.clover.finance",
                 "rpc.efinity.io",
                 "rpc-01.hydradx.io",
                 "interlay.api.onfinality.io:443/public-ws",
-                "k-ui.kapex.network",
                 "wss.api.moonbeam.network",
-                "eden-rpc.dwellir.com",
+                "eden-rpc.dwellir.com",//noodle
                 "rpc.parallel.fi",
-                "api.phala.network:443/ws",
-                "polkadex.api.onfinality.io:443/public-ws",
+                "wss://api.phala.network:443/ws",
+                "mainnet.polkadex.trade",
                 "ws.unique.network",
+                "k-ui.kapex.network",
+                "wss.odyssey.aresprotocol.io",
             ],
             vec![
                 "kusama-rpc.polkadot.io",
                 "statemine-rpc.dwellir.com",
                 "wss.api.moonriver.moonbeam.network",
-                "karura-rpc.dwellir.com",
                 "bifrost-rpc.dwellir.com",
                 "khala-rpc.dwellir.com",
                 "shiden-rpc.dwellir.com",
@@ -144,11 +150,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "kintsugi-rpc.dwellir.com",
                 "us-ws-quartz.unique.network",
                 "para.subsocial.network",
+                "rpc.api.kico.dico.io",
                 "zeitgeist-rpc.dwellir.com",
                 "crab-parachain-rpc.darwinia.network",
                 "rpc.litmus-parachain.litentry.io",
-                "rpc.api.kico.dico.io",
-            ], //wss://altair.api.onfinality.io/public-ws wss://pioneer.api.onfinality.io/public-ws wss://turing.api.onfinality.io/public-ws
+                "karura-rpc.dwellir.com",
+                "fullnode.altair.centrifuge.io",
+                "pioneer-1-rpc.bit.country",
+                "rpc.turing.oak.tech"
+            ], 
         ]
     } else {
         vec![vec![
@@ -219,6 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     meshes,
                     materials, //asset_server,
                     clone_chains,
+                    asset_server
                     // effects,
                 )
             },
@@ -245,7 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 async_std::task::block_on(datasource::watch_events(lock_clone, url)).unwrap();
             });
 
-            let mut chain_name = chain_name_clone;
+            let chain_name = chain_name_clone;
             let lock_clone = arc.clone();
             std::thread::spawn(move || {
                 async_std::task::block_on(datasource::watch_blocks(lock_clone, url_clone)).unwrap();
@@ -385,12 +396,16 @@ impl DataEntity {
     }
 }
 
+const BLOCK:f32 = 10.;
+const BLOCK_AND_SPACER : f32 = BLOCK + 1.;
+
 fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     // asset_server: Res<AssetServer>,
     relays: Vec<Vec<(ABlocks, String)>>,
+    asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
 ) {
     for (rcount, relay) in relays.iter().enumerate() {
@@ -428,33 +443,132 @@ fn render_new_events(
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
 
-                    // Add the new block as a large rectangle on the ground:
-                    commands
-                        .spawn_bundle(PbrBundle {
-                            mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
-                            material: materials.add(StandardMaterial {
-                                base_color: Color::rgba(0., 0., 0., 0.7),
-                                alpha_mode: AlphaMode::Blend,
-                                perceptual_roughness: 0.08,
-                                ..default()
-                            }),
-                            transform: Transform::from_translation(Vec3::new(
-                                0. + (11. * block_num as f32),
-                                0.,
-                                (5.5 + 11. * chain as f32) * rflip,
-                            )),
-                            ..Default::default()
-                        })
-                        // .with_children(|parent| {
-                        //     parent.spawn_bundle(text(
-                        //         format!("Block {}", block.blockhash),
-                        //         t,
-                        //         font.clone(),
-                        //     ));
-                        //     parent.spawn_bundle(text(format!("{}", chain_name), t2, font));
-                        // })
-                        ;
+                  
 
+                    // Add the new block as a large rectangle on the ground:
+                    commands.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        material: materials.add(StandardMaterial {
+                            base_color: Color::rgba(0., 0., 0., 0.7),
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: 0.08,
+                            ..default()
+                        }),
+                        transform: Transform::from_translation(Vec3::new(
+                            0. + (BLOCK_AND_SPACER * block_num as f32),
+                            0.,
+                            (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                        )),
+                        ..Default::default()
+                    });
+
+                    if !block_events.2.inserted_pic {
+                        block_events.2.inserted_pic = true;
+                        let name = (*block_events).2.chain_name.replace(" ", "-");
+                        let texture_handle = asset_server.load(&format!("branding/{}.jpeg", name));
+                        let aspect = 1./3.;
+
+                        // create a new quad mesh. this is what we will apply the texture to
+                        let quad_width = BLOCK;
+                        let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
+                            quad_width,
+                            quad_width * aspect,
+                        ))));
+
+                        // this material renders the texture normally
+                        let material_handle = materials.add(StandardMaterial {
+                            base_color_texture: Some(texture_handle.clone()),
+                            // alpha_mode: AlphaMode::Blend,
+                            unlit: true,
+                            double_sided: true,
+                            ..default()
+                        });
+                    
+                        use std::f32::consts::PI;
+                        // textured quad - normal
+                        let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+                                                                                           // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                        let transform = Transform {
+                            translation: Vec3::new(
+                                -7.,
+                                0.1, //1.5
+                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                            ),
+                            rotation: rot,
+                            ..default()
+                        };
+
+                        commands
+                            .spawn_bundle(PbrBundle {
+                                mesh: quad_handle.clone(),
+                                material: material_handle.clone(),
+                                transform,
+                                ..default()
+                            })
+                            .insert(Name::new("Billboard"));
+
+                        //                     commands
+                        // .spawn_bundle(PbrBundle {
+                        //     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        //     material: material_handle,
+                        //     transform: Transform::from_translation(Vec3::new(
+                        //         0. + (11. * block_num as f32),
+                        //         0.,
+                        //         (5.5 + 11. * chain as f32) * rflip,
+                        //     )),
+                        //     ..Default::default()
+                        // });
+                  
+                        // create a new quad mesh. this is what we will apply the texture to
+                        let quad_width = BLOCK;
+                        let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
+                            quad_width,
+                            quad_width * aspect,
+                        ))));
+
+                        // this material renders the texture normally
+                        let material_handle = materials.add(StandardMaterial {
+                            base_color_texture: Some(texture_handle.clone()),
+                            // alpha_mode: AlphaMode::Blend,
+                            unlit: true,
+                            double_sided: true,
+                            ..default()
+                        });
+                    
+                        // textured quad - normal
+                        let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+                                                                                           // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                        let transform = Transform {
+                            translation: Vec3::new(
+                                -7.,
+                                0.1, //1.5
+                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                            ),
+                            rotation: rot,
+                            ..default()
+                        };
+
+                        commands
+                            .spawn_bundle(PbrBundle {
+                                mesh: quad_handle.clone(),
+                                material: material_handle.clone(),
+                                transform,
+                                ..default()
+                            })
+                            .insert(Name::new(format!("BillboardUp {}", block_events.2.chain_name)));
+
+                        //                     commands
+                        // .spawn_bundle(PbrBundle {
+                        //     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        //     material: material_handle,
+                        //     transform: Transform::from_translation(Vec3::new(
+                        //         0. + (11. * block_num as f32),
+                        //         0.,
+                        //         (5.5 + 11. * chain as f32) * rflip,
+                        //     )),
+                        //     ..Default::default()
+                        // });
+                    }
                     // use bevy::text::Text2dBounds;
                     // //let font = asset_server.load("fonts/FiraSans-Bold.ttf");
                     // let font = asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
@@ -717,9 +831,9 @@ fn add_blocks<'a>(
     let mut mat_map = HashMap::new();
 
     let (base_x, base_y, base_z) = (
-        0. + (11. * block_num as f32) - 4.,
+        0. + (BLOCK_AND_SPACER * block_num as f32) - 4.,
         0.5,
-        5.5 + 11. * chain as f32 - 4.,
+        5.5 + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
 
     const DOT_HEIGHT: f32 = 1.;
@@ -936,8 +1050,8 @@ pub fn print_events(
     mut query3: Query<(Entity, With<ColorText>)>,
     asset_server: Res<AssetServer>,
 ) {
-    use polkadot::*;
-    use subxt::Event;
+    // use polkadot::*;
+    // use subxt::Event;
 
     let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {

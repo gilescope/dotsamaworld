@@ -3,18 +3,18 @@ use crate::ABlocks;
 use crate::DataEntity;
 use async_std::stream::StreamExt;
 use desub_current::{decoder, Metadata};
-use frame_metadata::RuntimeMetadataPrefixed;
+// use frame_metadata::RuntimeMetadataPrefixed;
 use parity_scale_codec::Decode;
 use parity_scale_codec::Encode;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::hash_map::Entry;
+// use std::collections::hash_map::Entry;
 use std::hash::Hash;
 use subxt::rpc::Subscription;
 use subxt::sp_runtime::generic::Header;
 use subxt::sp_runtime::traits::BlakeTwo256;
-use subxt::sp_runtime::Deserialize;
+// use subxt::sp_runtime::Deserialize;
 use subxt::ClientBuilder;
-use subxt::Config;
+// use subxt::Config;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
@@ -44,15 +44,15 @@ use subxt::RawEventDetails;
 // impl subxt::sp_runtime::traits::Extrinsic for ExtrinsicVec {
 
 // }
-use std::path::Path;
-use std::time::Duration;
+// use std::path::Path;
+// use std::time::Duration;
 use subxt::rpc::ClientT;
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
 pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
-    use core::slice::SlicePattern;
-    use scale_info::form::PortableForm;
+    // use core::slice::SlicePattern;
+    // use scale_info::form::PortableForm;
     use std::hash::Hasher;
     let mut hasher = DefaultHasher::default();
     url.hash(&mut hasher);
@@ -135,11 +135,31 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     // let metadata_hex = res.as_str().unwrap();
     // let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
 
-    let api = ClientBuilder::new()
-        .set_url(url)
-        .build()
-        .await?
-        .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(); //  .to_runtime_api::<polkadot::RuntimeApi<MyConfig, DefaultExtra<MyConfig>>>();
+    let client = ClientBuilder::new().set_url(url).build().await?;
+
+    let api =
+        client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+
+    let parachain_name = api.client.rpc().system_chain().await?;
+    // println!("system chain: {}", parachain_name);
+
+    tx.lock().unwrap().2.chain_name = parachain_name;
+
+    //     ""), None).await?;
+
+    // Fetch the metadata
+    // let bytes: subxt::Bytes = self
+    //     .client
+    //     .request("parachainInfo_getChainId", rpc_params!["0x0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f"])
+    //     .await?;
+    // let meta: RuntimeMetadataPrefixed = Decode::decode(&mut &bytes[..])?;
+    // let metadata: Metadata = meta.try_into()?;
+
+    // let store_loc = "0x0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f";
+    // let fromto =hex::decode(&store_loc.trim_start_matches("0x")).unwrap();
+    // let fromto = sp_core::H256::from_slice(fromto.as_slice());
+    // let res = api.client.rpc().query_storage(vec![], fromto, None).await?;
+    // println!("{res:?}");
 
     // let metad: subxt::Metadata = api.client.rpc().metadata().await.unwrap();
     // // let metabytes = metad.encode();

@@ -30,3 +30,8 @@ cargo run
 You will need to change Cargo.toml to wayland if your using that - at the moment it's set to X11.
 
 License: MIT/Apache2 just like rust.
+
+## crazy idea holding ground:
+
+https://bevyengine.org/examples/3d/spherical-area-lights/
+https://github.com/therawmeatball/meme-cli

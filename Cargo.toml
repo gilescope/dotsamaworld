@@ -9,6 +9,7 @@ resolver = "2"
 
 [dependencies]
 sp-core = "*"
+
 async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
 tracing-wasm = "*"
 wasm-bindgen = "*"
@@ -39,13 +40,13 @@ desub = { git = "https://github.com/paritytech/desub/" }
 desub-current = { git = "https://github.com/paritytech/desub/" }
 # Dependencies for native only.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "dynamic"] }
+bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "dynamic","jpeg"] }
 subxt = { git = "https://github.com/paritytech/subxt.git", rev = "5c04b09c785c1b009ba6a0e18ab6bb5c516d6a71" }
 
 
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png"] }
+bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
 bevy_webgl2 = "*"
 getrandom = { version = "*", features = ["wasm-bindgen"] }
 

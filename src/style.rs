@@ -1,6 +1,5 @@
 use super::DataEntity;
 use bevy::render::color::Color;
-use subxt::RawEventDetails;
 
 #[derive(Clone)]
 pub struct ExStyle {
