@@ -486,7 +486,6 @@ dependencies = [
  "bevy_flycam",
  "bevy_hanabi",
  "bevy_mod_picking",
- "bevy_text_mesh",
  "bevy_webgl2",
  "desub",
  "desub-current",
@@ -1374,19 +1373,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_text_mesh"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04ddd503fd3b19e19f67babf1a563642633c07b6fa87fdda1fc69cd98f447148"
-dependencies = [
- "anyhow",
- "bevy 0.7.0",
- "bitflags",
- "glyph_brush_layout",
- "ttf2mesh",
-]
-
-[[package]]
 name = "bevy_transform"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1580,7 +1566,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2da379dbebc0b76ef63ca68d8fc6e71c0f13e59432e0987e508c1820e6ab5239"
 dependencies = [
  "bitflags",
- "cexpr 0.4.0",
+ "cexpr",
  "clang-sys",
  "clap",
  "env_logger 0.8.4",
@@ -1592,31 +1578,8 @@ dependencies = [
  "quote",
  "regex",
  "rustc-hash",
- "shlex 0.1.1",
- "which 3.1.1",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.59.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
-dependencies = [
- "bitflags",
- "cexpr 0.6.0",
- "clang-sys",
- "clap",
- "env_logger 0.9.0",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex 1.1.0",
- "which 4.2.5",
+ "shlex",
+ "which",
 ]
 
 [[package]]
@@ -1828,15 +1791,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4aedb84272dbe89af497cf81375129abda4fc0a9e7c5d317498c15cc30c0d27"
 dependencies = [
  "nom 5.1.2",
-]
-
-[[package]]
-name = "cexpr"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
-dependencies = [
- "nom 7.1.1",
 ]
 
 [[package]]
@@ -2583,19 +2537,6 @@ name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
  "humantime",
@@ -4397,7 +4338,7 @@ version = "69.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dd3eee045c84695b53b20255bb7317063df090b68e18bfac0abb6c39cf7f33e"
 dependencies = [
- "bindgen 0.56.0",
+ "bindgen",
  "cc",
  "pkg-config",
 ]
@@ -5399,12 +5340,6 @@ name = "shlex"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
-
-[[package]]
-name = "shlex"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
 
 [[package]]
 name = "signature"
@@ -6627,25 +6562,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c74c96594835e10fa545e2a51e8709f30b173a092bfd6036ef2cec53376244f3"
 
 [[package]]
-name = "ttf2mesh"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b2984ad6402b99e9324f7a0b027675792b7a8b388253663c01b5f1a06cb8efb"
-dependencies = [
- "ttf2mesh-sys",
-]
-
-[[package]]
-name = "ttf2mesh-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af5e0710272c5e800d64b02c846b0bd4ad819d62c32dc23f4e0b06acb0820cd6"
-dependencies = [
- "bindgen 0.59.2",
- "cc",
-]
-
-[[package]]
 name = "twox-hash"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7193,17 +7109,6 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d011071ae14a2f6671d0b74080ae0cd8ebf3a6f8c9589a2cd45f23126fe29724"
 dependencies = [
- "libc",
-]
-
-[[package]]
-name = "which"
-version = "4.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c4fb54e6113b6a8772ee41c3404fb0301ac79604489467e0a9ce1f3e97c24ae"
-dependencies = [
- "either",
- "lazy_static",
  "libc",
 ]
 
