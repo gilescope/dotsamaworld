@@ -26,14 +26,17 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
         ("ImOnline", _)
         | ("EVM", "Log")
         | ("Staking", _)
+        | ("CollatorStaking","set_block_producer")
         | ("DappsStaking", _)
         | ("PhalaMining", _)
         | ("RelayChainInfo", "CurrentBlockNumbers")
         | ("ParaInclusion", "CandidateIncluded")
         | ("ParaInclusion", "CandidateBacked")
-        | ("ParaInherent", "enter")
+        // | ("ParaInherent", "enter") - this is what the relay chains most important job is.
         | ("Timestamp", "set")
         | ("ParachainSystem", "set_validation_data")
+        | ("AuthorInherent","kick_off_authorship_validation")//zeitgeist moonbeam
+        | ("Lighthouse", "set")
         | ("ParachainStaking", _) => true,
         _ => false,
     }

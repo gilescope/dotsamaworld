@@ -397,7 +397,7 @@ impl DataEntity {
 }
 
 const BLOCK:f32 = 10.;
-const BLOCK_AND_SPACER : f32 = BLOCK + 1.;
+const BLOCK_AND_SPACER : f32 = BLOCK + 4.;
 
 fn render_new_events(
     mut commands: Commands,
@@ -462,8 +462,9 @@ fn render_new_events(
                         ..Default::default()
                     });
 
-                    if !block_events.2.inserted_pic {
-                        block_events.2.inserted_pic = true;
+                    // if !block_events.2.inserted_pic 
+                    {
+                       
                         let name = (*block_events).2.chain_name.replace(" ", "-");
                         let texture_handle = asset_server.load(&format!("branding/{}.jpeg", name));
                         let aspect = 1./3.;
@@ -478,9 +479,8 @@ fn render_new_events(
                         // this material renders the texture normally
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
-                            // alpha_mode: AlphaMode::Blend,
-                            unlit: true,
-                            double_sided: true,
+                            alpha_mode: AlphaMode::Blend,
+                            unlit: !block_events.2.inserted_pic,
                             ..default()
                         });
                     
@@ -490,7 +490,7 @@ fn render_new_events(
                                                                                            // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
                         let transform = Transform {
                             translation: Vec3::new(
-                                -7.,
+                                -7.  + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
                                 (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
@@ -505,7 +505,7 @@ fn render_new_events(
                                 transform,
                                 ..default()
                             })
-                            .insert(Name::new("Billboard"));
+                            .insert(Name::new("BillboardDown"));
 
                         //                     commands
                         // .spawn_bundle(PbrBundle {
@@ -529,9 +529,8 @@ fn render_new_events(
                         // this material renders the texture normally
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
-                            // alpha_mode: AlphaMode::Blend,
-                            unlit: true,
-                            double_sided: true,
+                            alpha_mode: AlphaMode::Blend,
+                            unlit: !block_events.2.inserted_pic,
                             ..default()
                         });
                     
@@ -540,7 +539,7 @@ fn render_new_events(
                                                                                            // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
                         let transform = Transform {
                             translation: Vec3::new(
-                                -7.,
+                                -7.  + (BLOCK_AND_SPACER * block_num as f32)  ,
                                 0.1, //1.5
                                 (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
@@ -568,6 +567,7 @@ fn render_new_events(
                         //     )),
                         //     ..Default::default()
                         // });
+                         block_events.2.inserted_pic = true;
                     }
                     // use bevy::text::Text2dBounds;
                     // //let font = asset_server.load("fonts/FiraSans-Bold.ttf");
@@ -1364,7 +1364,7 @@ fn setup(
                 transform: Transform::from_translation(Vec3::new(
                     (10000. / 2.) - 5.,
                     0.,
-                    (5.5 + 11. * chain as f32) * rfip,
+                    (0.5 + (BLOCK/2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
                 )),
                 ..Default::default()
             });
@@ -1502,7 +1502,7 @@ fn setup(
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.5,
+        brightness: 0.7,
     });
 
     // commands.spawn_bundle(PointLightBundle {
