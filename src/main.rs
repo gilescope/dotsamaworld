@@ -124,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "rpc-01.hydradx.io",
                 "interlay.api.onfinality.io:443/public-ws",
                 "wss.api.moonbeam.network",
-                "eden-rpc.dwellir.com",//noodle
+                "eden-rpc.dwellir.com", //noodle
                 "rpc.parallel.fi",
                 "wss://api.phala.network:443/ws",
                 "mainnet.polkadex.trade",
@@ -157,8 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "karura-rpc.dwellir.com",
                 "fullnode.altair.centrifuge.io",
                 "pioneer-1-rpc.bit.country",
-                "rpc.turing.oak.tech"
-            ], 
+                "rpc.turing.oak.tech",
+            ],
         ]
     } else {
         vec![vec![
@@ -368,6 +368,34 @@ fn focus_manager(mut windows: ResMut<Windows>, toggle_mouse_capture: Res<movemen
     // }
 }
 
+fn format_entity(entity: &DataEntity) -> String {
+    let mut res = match entity {
+        DataEntity::Event { raw } => {
+            format!("{:#?}", raw)
+        }
+        DataEntity::Extrinsic {
+            id,
+            pallet,
+            variant,
+            args,
+            contains,
+        } => {
+            let kids = if contains.is_empty() {
+                String::new()
+            } else {
+                format!(" contains {} extrinsics", contains.len())
+            };
+            format!("{} {} {}\n{:#?}", pallet, variant, kids, args)
+        }
+    };
+
+    if let Some(pos) = res.find("data: Bytes(") {
+        res.truncate(pos + "data: Bytes(".len());
+        res.push_str("...");
+    }
+    res
+}
+
 #[derive(Debug, Clone)]
 pub enum DataEntity {
     Event {
@@ -378,8 +406,11 @@ pub enum DataEntity {
         pallet: String,
         variant: String,
         args: Vec<String>,
+        contains: Vec<DataEntity>
     },
 }
+
+static EMPTY_SLICE: Vec<DataEntity> = vec![];
 
 impl DataEntity {
     pub fn pallet(&self) -> &str {
@@ -394,10 +425,17 @@ impl DataEntity {
             Self::Extrinsic { variant, .. } => variant,
         }
     }
+
+    pub fn contains(&self) -> &[DataEntity] {
+        match self {
+            Self::Event { raw } => EMPTY_SLICE.as_slice(),
+            Self::Extrinsic { contains, .. } => contains.as_slice(),
+        }
+    } 
 }
 
-const BLOCK:f32 = 10.;
-const BLOCK_AND_SPACER : f32 = BLOCK + 4.;
+const BLOCK: f32 = 10.;
+const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 
 fn render_new_events(
     mut commands: Commands,
@@ -431,19 +469,7 @@ fn render_new_events(
                         RELAY_BLOCKS2.load(Ordering::Relaxed)
                     };
 
-                    // let font: Handle<TextMeshFont> =
-                    //     asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
-                    // let mut t = Transform::from_xyz(0., 0., 0.);
-                    // t.rotate(Quat::from_rotation_x(-90.));
-                    // t = t.with_translation(Vec3::new(-4., 0., 4.));
-
-                    // let mut t2 = Transform::from_xyz(0., 0., 0.);
-                    // t2.rotate(Quat::from_rotation_x(-90.));
-                    // t2 = t2.with_translation(Vec3::new(-4., 0., 2.));
-
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
-
-                  
 
                     // Add the new block as a large rectangle on the ground:
                     commands.spawn_bundle(PbrBundle {
@@ -462,12 +488,11 @@ fn render_new_events(
                         ..Default::default()
                     });
 
-                    // if !block_events.2.inserted_pic 
+                    // if !block_events.2.inserted_pic
                     {
-                       
                         let name = (*block_events).2.chain_name.replace(" ", "-");
                         let texture_handle = asset_server.load(&format!("branding/{}.jpeg", name));
-                        let aspect = 1./3.;
+                        let aspect = 1. / 3.;
 
                         // create a new quad mesh. this is what we will apply the texture to
                         let quad_width = BLOCK;
@@ -483,14 +508,14 @@ fn render_new_events(
                             unlit: !block_events.2.inserted_pic,
                             ..default()
                         });
-                    
+
                         use std::f32::consts::PI;
                         // textured quad - normal
                         let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
                                                                                            // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
                         let transform = Transform {
                             translation: Vec3::new(
-                                -7.  + (BLOCK_AND_SPACER * block_num as f32),
+                                -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
                                 (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
@@ -507,18 +532,6 @@ fn render_new_events(
                             })
                             .insert(Name::new("BillboardDown"));
 
-                        //                     commands
-                        // .spawn_bundle(PbrBundle {
-                        //     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
-                        //     material: material_handle,
-                        //     transform: Transform::from_translation(Vec3::new(
-                        //         0. + (11. * block_num as f32),
-                        //         0.,
-                        //         (5.5 + 11. * chain as f32) * rflip,
-                        //     )),
-                        //     ..Default::default()
-                        // });
-                  
                         // create a new quad mesh. this is what we will apply the texture to
                         let quad_width = BLOCK;
                         let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
@@ -533,13 +546,13 @@ fn render_new_events(
                             unlit: !block_events.2.inserted_pic,
                             ..default()
                         });
-                    
+
                         // textured quad - normal
                         let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
                                                                                            // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
                         let transform = Transform {
                             translation: Vec3::new(
-                                -7.  + (BLOCK_AND_SPACER * block_num as f32)  ,
+                                -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
                                 (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
@@ -554,80 +567,13 @@ fn render_new_events(
                                 transform,
                                 ..default()
                             })
-                            .insert(Name::new(format!("BillboardUp {}", block_events.2.chain_name)));
+                            .insert(Name::new(format!(
+                                "BillboardUp {}",
+                                block_events.2.chain_name
+                            )));
 
-                        //                     commands
-                        // .spawn_bundle(PbrBundle {
-                        //     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
-                        //     material: material_handle,
-                        //     transform: Transform::from_translation(Vec3::new(
-                        //         0. + (11. * block_num as f32),
-                        //         0.,
-                        //         (5.5 + 11. * chain as f32) * rflip,
-                        //     )),
-                        //     ..Default::default()
-                        // });
-                         block_events.2.inserted_pic = true;
+                        block_events.2.inserted_pic = true;
                     }
-                    // use bevy::text::Text2dBounds;
-                    // //let font = asset_server.load("fonts/FiraSans-Bold.ttf");
-                    // let font = asset_server.load("fonts/Audiowide-Mono-Latest.ttf");
-                    // let text_style = TextStyle {
-                    //     font,
-                    //     font_size: 100.0,
-                    //     color: Color::RED,
-                    // };
-                    // let text_alignment = TextAlignment {
-                    //     vertical: bevy::prelude::VerticalAlign::Center,
-                    //     horizontal: bevy::prelude::HorizontalAlign::Center,
-                    // };
-                    // // let box_size = Size::new(300.0, 200.0);
-                    // // let box_position = Vec2::new(0.0, -250.0);
-                    // // let text_alignment_topleft = TextAlignment {
-                    // //     vertical: bevy::prelude::VerticalAlign::Top,
-                    // //     horizontal: bevy::prelude::HorizontalAlign::Left,
-                    // // };
-                    // let mut cam = OrthographicCameraBundle::new_2d();
-                    // cam.transform.rotate(Quat::from_xyzw(0.0, 0.2, 0.2, 0.0));
-
-                    // commands.spawn_bundle(cam);
-                    // commands.spawn_bundle(Text2dBundle {
-                    //     text: Text::with_section(
-                    //         "this text wraps in the box",
-                    //         text_style,
-                    //         text_alignment,
-                    //     ),
-                    //     // text_2d_bounds: Text2dBounds {
-                    //     //     // Wrap text in the rectangle
-                    //     //     size: box_size,
-                    //     // },
-                    //     // We align text to the top-left, so this transform is the top-left corner of our text. The
-                    //     // box is centered at box_position, so it is necessary to move by half of the box size to
-                    //     // keep the text in the box.
-                    //     // transform: Transform::from_xyz(
-                    //     //     box_position.x - box_size.width / 2.0,
-                    //     //     box_position.y + box_size.height / 2.0,
-                    //     //     1.0,
-                    //     // ),
-                    //     // visibility:Visibility::Visible,
-                    //     ..default()
-                    // });
-
-                    //How to do UI text:
-
-                    // .insert(ColorText);
-                    // commands
-                    // .spawn(TextBundle{
-                    //     text: Text{value: "Score:".to_string(),
-                    //     font: assets.load("FiraSans-Bold.ttf"),
-                    //     style:TextStyle{
-                    //         font_size:30.0,
-                    //         color:Color::WHITE,
-                    //         ..Default::default()},..Default::default()},
-                    //     transform: Transform::from_translation(Vec3::new(-380.0,-380.0,2.0)),
-                    //     ..Default::default()
-                    // })
-                    // .with(TextTag);
 
                     let ext_with_events =
                         datasource::associate_events(block.extrinsics, block.events);
@@ -641,13 +587,6 @@ fn render_new_events(
                             }
                         });
 
-                    //TODO:
-                    // // Stick xcm blocks on top:
-                    // let xcm = payload_blocks
-                    //     .drain_filter(|e| e.pallet == "xcm")
-                    //     .collect::<Vec<_>>();
-                    // payload_blocks.extend(xcm);
-
                     add_blocks(
                         block_num,
                         chain,
@@ -657,7 +596,6 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Up,
                         rflip,
-                        // effects,
                     );
 
                     add_blocks(
@@ -669,53 +607,12 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Down,
                         rflip,
-                        // effects,
                     );
                 }
             }
         }
     }
-    //     if let Ok(ref mut block_events) = lock_clone.try_lock() {
-    //         if let Some(event) = block_events.pop() {
-    //             match event.raw_event.pallet.as_str() {
-    //                 "XcmpQueue" => {
-    //                     commands.spawn_bundle(PbrBundle {
-    //                         mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //                             radius: 0.45,
-    //                             subdivisions: 32,
-    //                         })),
-    //                         ///* event.blocknum as f32
-    //                         material: materials.add(Color::hex("FFFF00").unwrap().into()),
-    //                         transform: Transform::from_translation(Vec3::new(
-    //                             0.2 + (1.1 * scale(event.blocknum)),
-    //                             0.2,
-    //                             0.2,
-    //                         )),
-    //                         ..Default::default()
-    //                     });
-    //                     if event.raw_event.variant == "fail" {
-    //                         // TODO: Xcmp pallet is not on the relay chain.
-    //                         // use crate::polkadot::balances::events::Deposit;
-    //                         // let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
-    //                         // println!("{:?}", deposit);
-    //                     }
-    //                 }
-    //                 "Staking" => {
-    //                     commands.spawn_bundle(PbrBundle {
-    //                         mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //                             radius: 0.45,
-    //                             subdivisions: 32,
-    //                         })),
-    //                         ///* event.blocknum as f32
-    //                         material: materials.add(Color::hex("00ffff").unwrap().into()),
-    //                         transform: Transform::from_translation(Vec3::new(
-    //                             0.2 + (1.1 * scale(event.blocknum)),
-    //                             0.2,
-    //                             0.2,
-    //                         )),
-    //                         ..Default::default()
-    //                     });
-    //                 }
+
     //                 "Balances" => {
     //                     match event.raw_event.variant.as_str() {
     //                         "Deposit" => {
@@ -725,81 +622,6 @@ fn render_new_events(
     //                             let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
     //                             println!("{:?}", deposit);
     //                             //use num_integer::roots::Roots;
-
-    //                             commands.spawn_bundle(PbrBundle {
-    //                                 mesh: meshes.add(Mesh::from(shape::Capsule {
-    //                                     radius: 0.45,
-    //                                     depth: 0.4 * scale(deposit.amount as usize),
-    //                                     // latitudes: 2,
-    //                                     // longitudes: 1,
-    //                                     // rings: 2,
-    //                                     // uv_profile:CapsuleUvProfile::Aspect
-    //                                     ..Default::default()
-    // //                                                subdivisions: 32,
-    //                                 })),
-    //                                 ///* event.blocknum as f32
-    //                                 material: materials
-    //                                     .add(Color::hex("e6007a").unwrap().into()),
-    //                                 transform: Transform::from_translation(Vec3::new(
-    //                                     0.2 + (1.1 * scale(event.blocknum)),
-    //                                     0.2,
-    //                                     0.2,
-    //                                 )),
-    //                                 ..Default::default()
-    //                             });
-    //                         }
-    //                         "Withdraw" => {
-    //                             commands.spawn_bundle(PbrBundle {
-    //                                 mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //                                     radius: 0.45,
-    //                                     subdivisions: 32,
-    //                                 })),
-    //                                 ///* event.blocknum as f32
-    //                                 material: materials
-    //                                     .add(Color::hex("000000").unwrap().into()),
-    //                                 transform: Transform::from_translation(Vec3::new(
-    //                                     0.2 + (1.1 * scale(event.blocknum)),
-    //                                     0.2,
-    //                                     0.2,
-    //                                 )),
-    //                                 ..Default::default()
-    //                             });
-    //                         }
-    //                         _ => {
-    //                             commands.spawn_bundle(PbrBundle {
-    //                                 mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //                                     radius: 0.45,
-    //                                     subdivisions: 32,
-    //                                 })),
-    //                                 ///* event.blocknum as f32
-    //                                 material: materials
-    //                                     .add(Color::hex("ff0000").unwrap().into()),
-    //                                 transform: Transform::from_translation(Vec3::new(
-    //                                     0.2 + (1.1 * scale(event.blocknum)),
-    //                                     0.2,
-    //                                     0.2,
-    //                                 )),
-    //                                 ..Default::default()
-    //                             });
-    //                         }
-    //                     }
-    //                 }
-    //                 _ => {
-    //                     commands.spawn_bundle(PbrBundle {
-    //                         mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-    //                         ///* event.blocknum as f32
-    //                         material: materials.add(Color::hex("e6007a").unwrap().into()),
-    //                         transform: Transform::from_translation(Vec3::new(
-    //                             0.2 + (1.1 * scale(event.blocknum)),
-    //                             0.2,
-    //                             0.2,
-    //                         )),
-    //                         ..Default::default()
-    //                     });
-    //                 }
-    //             }
-    //         }
-    // }
 }
 
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
@@ -812,7 +634,6 @@ fn add_blocks<'a>(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     build_direction: BuildDirection,
     rflip: f32,
-    // effects: Res<Assets<EffectAsset>>,
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -821,7 +642,6 @@ fn add_blocks<'a>(
     };
     // Add all the useful blocks
 
-    // let mesh = meshes.add(Mesh::from(shape::Cube { size: 0.8 }));
     let mesh = meshes.add(Mesh::from(shape::Icosphere {
         radius: 0.40,
         subdivisions: 32,
@@ -842,14 +662,10 @@ fn add_blocks<'a>(
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
 
     for (event_num, (block, events)) in block_events.iter().enumerate() {
-        // println!("{} has {}", block.is_some(), events.len());
         let z = event_num % 9;
         let x = (event_num / 9) % 9;
-        // let y = event_num / 9 / 9;// Upwards!
 
-        rain_height[event_num % 81] += fastrand::f32() * HIGH;
-        let target_y = next_y[event_num % 81];
-        next_y[event_num % 81] += DOT_HEIGHT;
+        rain_height[event_num % 81] += fastrand::f32() * HIGH;  
 
         let (px, py, pz) = (
             base_x + x as f32,
@@ -860,39 +676,43 @@ fn add_blocks<'a>(
         let transform =
             Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
 
-        if let Some(block) = block {
-            let style = style::style_event(&block);
-            let material = mat_map
-                .entry(style.clone())
-                .or_insert_with(|| materials.add(style.color.clone().into()));
-            let mesh = if content::is_message(&block) {
-                mesh_xcm.clone()
-            } else if matches!(block, DataEntity::Extrinsic { .. }) {
-                mesh_extrinsic.clone()
-            } else {
-                mesh.clone()
-            };
+        if let Some(block @ DataEntity::Extrinsic {.. }) = block {
+            for (i, block ) in std::iter::once(block).chain(block.contains().iter()).enumerate() {
+                  let target_y = next_y[event_num % 81];
+                next_y[event_num % 81] += DOT_HEIGHT;
+                let style = style::style_event(&block);
+                let material = mat_map
+                    .entry(style.clone())
+                    .or_insert_with(|| materials.add(style.color.clone().into()));
+                let mesh = if content::is_message(&block) {
+                    mesh_xcm.clone()
+                } else if matches!(block, DataEntity::Extrinsic { .. }) {
+                    mesh_extrinsic.clone()
+                } else {
+                    mesh.clone()
+                };
 
-            commands
-                .spawn_bundle(PbrBundle {
-                    mesh,
-                    ///* event.blocknum as f32
-                    material: material.clone(),
-                    transform,
-                    ..Default::default()
-                })
-                .insert_bundle(PickableBundle::default())
-                .insert(Details {
-                    hover: format!("{} {}\n{:?}", block.pallet(), block.variant(), block),
-                    data: (*block).clone(),
-                })
-                .insert(Rainable {
-                    dest: target_y * build_direction,
-                })
-                .insert(Name::new("BlockEvent"));
+                commands
+                    .spawn_bundle(PbrBundle {
+                        mesh,
+                        ///* event.blocknum as f32
+                        material: material.clone(),
+                        transform,
+                        ..Default::default()
+                    })
+                    .insert_bundle(PickableBundle::default())
+                    .insert(Details {
+                        hover: format_entity(block),
+                        data: (block).clone(),
+                    })
+                    .insert(Rainable {
+                        dest: target_y * build_direction,
+                    })
+                    .insert(Name::new("BlockEvent"));
+            }
         } else {
             // Remove the spacer as we did not add a block.
-            next_y[event_num % 81] -= DOT_HEIGHT;
+            // next_y[event_num % 81] -= DOT_HEIGHT;
         }
 
         for event in events {
@@ -929,8 +749,7 @@ fn add_blocks<'a>(
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(Details {
-                    hover: format!("{} {}\n{:?}", event.pallet, event.variant, event),
-
+                    hover: format_entity(&entity),
                     data: DataEntity::Event {
                         raw: (*event).clone(),
                     },
@@ -1050,9 +869,6 @@ pub fn print_events(
     mut query3: Query<(Entity, With<ColorText>)>,
     asset_server: Res<AssetServer>,
 ) {
-    // use polkadot::*;
-    // use subxt::Event;
-
     let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {
         match event {
@@ -1060,19 +876,16 @@ pub fn print_events(
                 if let SelectionEvent::JustSelected(entity) = selection {
                     // let selection = query.get_mut(*entity).unwrap();
                     let details = query2.get_mut(*entity).unwrap();
-                    println!("{}", details.hover);
 
+                    // Unspawn the previous text:
                     query3.for_each_mut(|(entity, _)| {
-                        //   entity.remove();
-                        //  commands.entity(entity).despawn();
-                        // entity.despawn();
                         commands.entity(entity).despawn();
                     });
 
                     // let pallet: &str = &details.raw.pallet;
                     // let variant: &str = &details.raw.variant;
-                    let mut value = details.hover.to_string();
 
+                    // println!("hover={}", &details.hover);
                     // decode_ex!(value, details, balances::events::Deposit);
                     // decode_ex!(value, details, balances::events::Transfer);
                     // decode_ex!(value, details, balances::events::Withdraw);
@@ -1189,104 +1002,11 @@ pub fn print_events(
                     //  decode_ex!(value, details, );
                     //   decode_ex!(value, details, );
                     // match (pallet, variant) {
-                    //     ("Balances", "Deposit") => {
-                    //         if let Ok(decoded) = crate::polkadot::balances::events::Deposit::decode(
-                    //             &mut details.raw.data.to_vec().as_slice(),
-                    //         ) {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("Balances", "Transfer") => {
-                    //         if let Ok(decoded) = crate::polkadot::balances::events::Transfer::decode(
-                    //             &mut details.raw.data.to_vec().as_slice(),
-                    //         ) {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("Balances", "Withdraw") => {
-                    //         if let Ok(decoded) = crate::polkadot::balances::events::Withdraw::decode(
-                    //             &mut details.raw.data.to_vec().as_slice(),
-                    //         ) {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("ParaInclusion", "CandidateIncluded") => {
-                    //         if let Ok(decoded) =
-                    //             crate::polkadot::para_inclusion::events::CandidateIncluded::decode(
-                    //                 &mut details.raw.data.to_vec().as_slice(),
-                    //             )
-                    //         {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("ParaInclusion", "CandidateBacked") => {
-                    //         if let Ok(decoded) =
-                    //             crate::polkadot::para_inclusion::events::CandidateBacked::decode(
-                    //                 &mut details.raw.data.to_vec().as_slice(),
-                    //             )
-                    //         {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("Treasury", "Deposit") => {
-                    //         if let Ok(decoded) = crate::polkadot::treasury::events::Deposit::decode(
-                    //             &mut details.raw.data.to_vec().as_slice(),
-                    //         ) {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("System", "ExtrinsicSuccess") => {
-                    //         if let Ok(decoded) =
-                    //             crate::polkadot::system::events::ExtrinsicSuccess::decode(
-                    //                 &mut details.raw.data.to_vec().as_slice(),
-                    //             )
-                    //         {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     (
-                    //         crate::polkadot::ump::events::ExecutedUpward::PALLET,
-                    //         crate::polkadot::ump::events::ExecutedUpward::EVENT,
-                    //     ) => {
-                    //         if let Ok(decoded) =
-                    //             crate::polkadot::ump::events::ExecutedUpward::decode(
-                    //                 &mut details.raw.data.to_vec().as_slice(),
-                    //             )
-                    //         {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
-                    //     ("Ump", "UpwardMessagesReceived") => {
-                    //         if let Ok(decoded) =
-                    //             crate::polkadot::ump::events::UpwardMessagesReceived::decode(
-                    //                 &mut details.raw.data.to_vec().as_slice(),
-                    //             )
-                    //         {
-                    //             value.push_str(&format!("{:#?}", decoded));
-                    //         } else {
-                    //             value.push_str("(missing metadata to decode)");
-                    //         }
-                    //     }
+                    //
                     //     _ => {}
                     // }
 
-                    info!("{value}");
+                    info!("{}", details.hover);
                     // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
 
                     commands
@@ -1296,15 +1016,15 @@ pub fn print_events(
                                 ..Default::default()
                             },
                             text: Text::with_section(
-                                value,
+                                &details.hover,
                                 TextStyle {
                                     font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
                                     font_size: 60.0,
                                     color: Color::WHITE,
                                 },
                                 TextAlignment {
-                                    vertical: bevy::prelude::VerticalAlign::Center,
-                                    horizontal: bevy::prelude::HorizontalAlign::Center,
+                                    vertical: bevy::prelude::VerticalAlign::Top,
+                                    horizontal: bevy::prelude::HorizontalAlign::Left,
                                 },
                             ),
                             transform: t,
@@ -1364,7 +1084,7 @@ fn setup(
                 transform: Transform::from_translation(Vec3::new(
                     (10000. / 2.) - 5.,
                     0.,
-                    (0.5 + (BLOCK/2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
+                    (0.5 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
                 )),
                 ..Default::default()
             });

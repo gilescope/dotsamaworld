@@ -18,6 +18,8 @@ use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
+use desub_current::ValueDef;
+use desub_current::value::*;
 
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
@@ -49,6 +51,23 @@ use subxt::RawEventDetails;
 use subxt::rpc::ClientT;
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
+
+fn print_val<T>(dbg: &desub_current::ValueDef<T>) {
+    match dbg {
+        desub_current::ValueDef::BitSequence(..) => {
+            println!("bit sequence");
+        }
+        desub_current::ValueDef::Composite(..) => {
+            println!("composit");
+        }
+        desub_current::ValueDef::Primitive(..) => {
+            println!("primitiv");
+        }
+        desub_current::ValueDef::Variant(..) => {
+            println!("variatt");
+        }
+    }
+}
 
 pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
     // use core::slice::SlicePattern;
@@ -143,7 +162,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     let parachain_name = api.client.rpc().system_chain().await?;
     // println!("system chain: {}", parachain_name);
 
-    tx.lock().unwrap().2.chain_name = parachain_name;
+    tx.lock().unwrap().2.chain_name = parachain_name.clone();
 
     //     ""), None).await?;
 
@@ -234,15 +253,68 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                             _ => {}
                         }
                     }
+                  
+                    let mut children = vec![];
+                        // println!("checking batch");
+                          // Anything that looks batch like we will assume is a batch
+                    if variant.contains("batch")
+                    {
+                        for arg in ext.call_data.arguments {
+                            //just first arg
+                            match arg.value {
+                                ValueDef::Composite(
+                                    Composite::Unnamed(chars_vals),
+                                ) => {
+                                    for v in chars_vals {
+                                        match v.value {
+                                            ValueDef::Variant(
+                                                Variant { ref name, values: Composite::Unnamed(chars_vals) },
+                                            ) => {                                                
+                                                println!("{parachain_name} varient pallet {name}");
+                                                let inner_pallet = name;
+                                                
+                                                for v in chars_vals {
+                                                    match v.value {
+                                                        ValueDef::Variant(Variant{name, 
+                                                            values,
+                                                        }) => {
+                                                            println!("{pallet} {variant} has inside a {inner_pallet} {name}");
+                                                            children.push(DataEntity::Extrinsic {
+                                                                                    id: (block_header.number, i as u32),
+                                                                                    pallet:inner_pallet.to_string(),
+                                                                                    variant:name.clone(),
+                                                                                    args: vec![format!("{:?}",values)],
+                                                                                    contains: vec![]
+                                                                                });
+                                                        },
+                                                        _ => {
+                                                            println!("miss yet close");
+                                                        }
+                                                    }
+                                                }                                    
+                                            }
+                                            _ => {
+                                                // println!("inner miss");
+                                                // print_val(&v.value);
+                                            }
+                                        }
+                                    }
+                                }
 
-                    exts.push(DataEntity::Extrinsic {
-                        id: (block_header.number, i as u32),
-                        pallet,
-                        variant,
-                        args,
-                    });
+                                _ => {
+                                    // println!("miss");
+                                }
+                            }
+                        }                      
+                    }
+                      exts.push(DataEntity::Extrinsic {
+                            id: (block_header.number, i as u32),
+                            pallet,
+                            variant,
+                            args,
+                            contains: children
+                        });
                 }
-
                 // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
             }
             let ext_clone = exts.clone();
