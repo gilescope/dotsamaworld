@@ -26,6 +26,7 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
         ("ImOnline", _)
         | ("EVM", "Log")
         | ("Staking", _)
+        | ("Authorship", "set_uncles")
         | ("CollatorStaking","set_block_producer")
         | ("DappsStaking", _)
         | ("PhalaMining", _)

@@ -65,11 +65,8 @@ type ABlocks = Arc<
     )>,
 >;
 
-enum Env {
-    Local,
-    Test,
-    Prod,
-}
+mod networks;
+use networks::Env;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,95 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
 
-    let test = Env::Prod;
-    let relays = if let Env::Test = test {
-        vec![
-            vec![
-                "westend-rpc.dwellir.com",
-                "westmint-rpc.polkadot.io",
-                "fullnode-collator.charcoal.centrifuge.io",
-                "teerw1.integritee.network",
-                "westend.kylin-node.co.uk",
-                "rpc.westend.standard.tech",
-                "westend.kilt.io:9977",
-            ],
-            vec![
-                "rococo-rpc.polkadot.io",
-                "rococo-canvas-rpc.polkadot.io",
-                "rococo.api.encointer.org",
-                "rpc-01.basilisk-rococo.hydradx.io",
-                "fullnode.catalyst.cntrfg.com",
-                "anjie.rococo.dolphin.engineering",
-                "rpc.rococo.efinity.io",
-                "rococo.api.integritee.network",
-                "rpc.rococo-parachain-sg.litentry.io",
-                "moonsama-testnet-rpc.moonsama.com",
-                "node-6913072722034561024.lh.onfinality.io:443/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
-                "pangolin-parachain-rpc.darwinia.network",
-                "rococo.kilt.io",
-                "rco-para.subsocial.network",
+    let selected_env = Env::SelfSovereignTest; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-                // "ws://127.0.0.1:9944",
-                // "ws://127.0.0.1:9966",
-                // "ws://127.0.0.1:9920",       
-            ],
-        ]
-    } else if let Env::Prod = test {
-        vec![
-            vec![
-                "rpc.polkadot.io",
-                "statemint-rpc.polkadot.io",
-                "acala.polkawallet.io",
-                "astar-rpc.dwellir.com",
-                "fullnode.parachain.centrifuge.io",
-                "rpc-para.clover.finance",
-                "rpc.efinity.io",
-                "rpc-01.hydradx.io",
-                "interlay.api.onfinality.io:443/public-ws",
-                "wss.api.moonbeam.network",
-                "eden-rpc.dwellir.com", //noodle
-                "rpc.parallel.fi",
-                "wss://api.phala.network:443/ws",
-                "mainnet.polkadex.trade",
-                "ws.unique.network",
-                "k-ui.kapex.network",
-                "wss.odyssey.aresprotocol.io",
-            ],
-            vec![
-                "kusama-rpc.polkadot.io",
-                "statemine-rpc.dwellir.com",
-                "wss.api.moonriver.moonbeam.network",
-                "bifrost-rpc.dwellir.com",
-                "khala-rpc.dwellir.com",
-                "shiden-rpc.dwellir.com",
-                "rpc-shadow.crust.network",
-                "kusama.api.integritee.network",
-                "kusama.rpc.robonomics.network",
-                "calamari-rpc.dwellir.com",
-                "heiko-rpc.parallel.fi",
-                "kilt-rpc.dwellir.com",
-                "picasso-rpc.composable.finance",
-                "basilisk-rpc.dwellir.com",
-                "kintsugi-rpc.dwellir.com",
-                "us-ws-quartz.unique.network",
-                "para.subsocial.network",
-                "rpc.api.kico.dico.io",
-                "zeitgeist-rpc.dwellir.com",
-                "crab-parachain-rpc.darwinia.network",
-                "rpc.litmus-parachain.litentry.io",
-                "karura-rpc.dwellir.com",
-                "fullnode.altair.centrifuge.io",
-                "pioneer-1-rpc.bit.country",
-                "rpc.turing.oak.tech",
-            ],
-        ]
-    } else {
-        vec![vec![
-            "ws://127.0.0.1:9944",
-            "ws://127.0.0.1:9966",
-            "ws://127.0.0.1:9920",
-        ]]
-    };
+    let relays = networks::get_network(&selected_env);
+    let is_self_sovereign = selected_env.is_self_sovereign();
     let relays = relays
         .into_iter()
         .map(|relay| {
@@ -229,7 +141,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     meshes,
                     materials, //asset_server,
                     clone_chains,
-                    asset_server
+                    asset_server,
+                    is_self_sovereign
                     // effects,
                 )
             },
@@ -368,7 +281,7 @@ fn focus_manager(mut windows: ResMut<Windows>, toggle_mouse_capture: Res<movemen
     // }
 }
 
-fn format_entity(entity: &DataEntity) -> String {
+fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
     let mut res = match entity {
         DataEntity::Event { raw } => {
             format!("{:#?}", raw)
@@ -385,7 +298,10 @@ fn format_entity(entity: &DataEntity) -> String {
             } else {
                 format!(" contains {} extrinsics", contains.len())
             };
-            format!("{} {} {}\n{:#?}", pallet, variant, kids, args)
+            format!(
+                "{}\n{} {} {}\n{:#?}",
+                chain_name, pallet, variant, kids, args
+            )
         }
     };
 
@@ -406,7 +322,7 @@ pub enum DataEntity {
         pallet: String,
         variant: String,
         args: Vec<String>,
-        contains: Vec<DataEntity>
+        contains: Vec<DataEntity>,
     },
 }
 
@@ -431,7 +347,7 @@ impl DataEntity {
             Self::Event { raw } => EMPTY_SLICE.as_slice(),
             Self::Extrinsic { contains, .. } => contains.as_slice(),
         }
-    } 
+    }
 }
 
 const BLOCK: f32 = 10.;
@@ -445,28 +361,34 @@ fn render_new_events(
     relays: Vec<Vec<(ABlocks, String)>>,
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
+    is_self_sovereign: bool,
 ) {
     for (rcount, relay) in relays.iter().enumerate() {
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
-                    // let block_num = block.blocknum as u32;
-                    let block_num = if rcount == 0 {
-                        if chain == 0 {
-                            //relay
-                            RELAY_BLOCKS
-                                .store(RELAY_BLOCKS.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-                        }
-                        RELAY_BLOCKS.load(Ordering::Relaxed)
+                    let block_num = if is_self_sovereign {
+                        block.blocknum as u32
                     } else {
-                        if chain == 0 {
-                            //relay
-                            RELAY_BLOCKS2.store(
-                                RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-                                Ordering::Relaxed,
-                            );
+                        if rcount == 0 {
+                            if chain == 0 {
+                                //relay
+                                RELAY_BLOCKS.store(
+                                    RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+                                    Ordering::Relaxed,
+                                );
+                            }
+                            RELAY_BLOCKS.load(Ordering::Relaxed)
+                        } else {
+                            if chain == 0 {
+                                //relay
+                                RELAY_BLOCKS2.store(
+                                    RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+                                    Ordering::Relaxed,
+                                );
+                            }
+                            RELAY_BLOCKS2.load(Ordering::Relaxed)
                         }
-                        RELAY_BLOCKS2.load(Ordering::Relaxed)
                     };
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
@@ -490,7 +412,11 @@ fn render_new_events(
 
                     // if !block_events.2.inserted_pic
                     {
-                        let name = (*block_events).2.chain_name.replace(" ", "-");
+                        let name = (*block_events)
+                            .2
+                            .chain_name
+                            .replace(" ", "-")
+                            .replace("-Testnet", "");
                         let texture_handle = asset_server.load(&format!("branding/{}.jpeg", name));
                         let aspect = 1. / 3.;
 
@@ -588,6 +514,7 @@ fn render_new_events(
                         });
 
                     add_blocks(
+                        &block_events.2.chain_name,
                         block_num,
                         chain,
                         fun,
@@ -599,6 +526,7 @@ fn render_new_events(
                     );
 
                     add_blocks(
+                        &block_events.2.chain_name,
                         block_num,
                         chain,
                         boring,
@@ -626,6 +554,7 @@ fn render_new_events(
 
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
 fn add_blocks<'a>(
+    chain_name: &str,
     block_num: u32,
     chain: usize,
     block_events: Vec<(Option<DataEntity>, Vec<RawEventDetails>)>,
@@ -665,7 +594,7 @@ fn add_blocks<'a>(
         let z = event_num % 9;
         let x = (event_num / 9) % 9;
 
-        rain_height[event_num % 81] += fastrand::f32() * HIGH;  
+        rain_height[event_num % 81] += fastrand::f32() * HIGH;
 
         let (px, py, pz) = (
             base_x + x as f32,
@@ -676,9 +605,12 @@ fn add_blocks<'a>(
         let transform =
             Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
 
-        if let Some(block @ DataEntity::Extrinsic {.. }) = block {
-            for (i, block ) in std::iter::once(block).chain(block.contains().iter()).enumerate() {
-                  let target_y = next_y[event_num % 81];
+        if let Some(block @ DataEntity::Extrinsic { .. }) = block {
+            for (i, block) in std::iter::once(block)
+                .chain(block.contains().iter())
+                .enumerate()
+            {
+                let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT;
                 let style = style::style_event(&block);
                 let material = mat_map
@@ -702,7 +634,7 @@ fn add_blocks<'a>(
                     })
                     .insert_bundle(PickableBundle::default())
                     .insert(Details {
-                        hover: format_entity(block),
+                        hover: format_entity(chain_name, block),
                         data: (block).clone(),
                     })
                     .insert(Rainable {
@@ -749,7 +681,7 @@ fn add_blocks<'a>(
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(Details {
-                    hover: format_entity(&entity),
+                    hover: format_entity(chain_name, &entity),
                     data: DataEntity::Event {
                         raw: (*event).clone(),
                     },

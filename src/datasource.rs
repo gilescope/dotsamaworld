@@ -15,11 +15,11 @@ use subxt::sp_runtime::traits::BlakeTwo256;
 // use subxt::sp_runtime::Deserialize;
 use subxt::ClientBuilder;
 // use subxt::Config;
+use desub_current::value::*;
+use desub_current::ValueDef;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
-use desub_current::ValueDef;
-use desub_current::value::*;
 
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
@@ -253,45 +253,44 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                             _ => {}
                         }
                     }
-                  
+
                     let mut children = vec![];
-                        // println!("checking batch");
-                          // Anything that looks batch like we will assume is a batch
-                    if variant.contains("batch")
-                    {
+                    // println!("checking batch");
+                    // Anything that looks batch like we will assume is a batch
+                    if variant.contains("batch") {
                         for arg in ext.call_data.arguments {
                             //just first arg
                             match arg.value {
-                                ValueDef::Composite(
-                                    Composite::Unnamed(chars_vals),
-                                ) => {
+                                ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
                                     for v in chars_vals {
                                         match v.value {
-                                            ValueDef::Variant(
-                                                Variant { ref name, values: Composite::Unnamed(chars_vals) },
-                                            ) => {                                                
+                                            ValueDef::Variant(Variant {
+                                                ref name,
+                                                values: Composite::Unnamed(chars_vals),
+                                            }) => {
                                                 println!("{parachain_name} varient pallet {name}");
                                                 let inner_pallet = name;
-                                                
+
                                                 for v in chars_vals {
                                                     match v.value {
-                                                        ValueDef::Variant(Variant{name, 
+                                                        ValueDef::Variant(Variant {
+                                                            name,
                                                             values,
                                                         }) => {
                                                             println!("{pallet} {variant} has inside a {inner_pallet} {name}");
                                                             children.push(DataEntity::Extrinsic {
-                                                                                    id: (block_header.number, i as u32),
-                                                                                    pallet:inner_pallet.to_string(),
-                                                                                    variant:name.clone(),
-                                                                                    args: vec![format!("{:?}",values)],
-                                                                                    contains: vec![]
-                                                                                });
-                                                        },
+                                                                id: (block_header.number, i as u32),
+                                                                pallet: inner_pallet.to_string(),
+                                                                variant: name.clone(),
+                                                                args: vec![format!("{:?}", values)],
+                                                                contains: vec![],
+                                                            });
+                                                        }
                                                         _ => {
                                                             println!("miss yet close");
                                                         }
                                                     }
-                                                }                                    
+                                                }
                                             }
                                             _ => {
                                                 // println!("inner miss");
@@ -305,15 +304,15 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                                     // println!("miss");
                                 }
                             }
-                        }                      
+                        }
                     }
-                      exts.push(DataEntity::Extrinsic {
-                            id: (block_header.number, i as u32),
-                            pallet,
-                            variant,
-                            args,
-                            contains: children
-                        });
+                    exts.push(DataEntity::Extrinsic {
+                        id: (block_header.number, i as u32),
+                        pallet,
+                        variant,
+                        args,
+                        contains: children,
+                    });
                 }
                 // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
             }
