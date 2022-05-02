@@ -17,7 +17,6 @@ pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
         &DataEntity::Event { ref raw, .. } => {
             !matches!(raw.phase, Phase::ApplyExtrinsic(_)) || is_boring(&raw.pallet, &raw.variant)
         }
-        _ => false,
     }
 }
 

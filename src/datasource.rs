@@ -6,6 +6,7 @@ use desub_current::{decoder, Metadata};
 // use frame_metadata::RuntimeMetadataPrefixed;
 use parity_scale_codec::Decode;
 use parity_scale_codec::Encode;
+use sp_core::H256;
 use std::collections::hash_map::DefaultHasher;
 // use std::collections::hash_map::Entry;
 use std::hash::Hash;
@@ -52,6 +53,7 @@ use subxt::rpc::ClientT;
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
+#[allow(dead_code)]
 fn print_val<T>(dbg: &desub_current::ValueDef<T>) {
     match dbg {
         desub_current::ValueDef::BitSequence(..) => {
@@ -154,7 +156,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     // let metadata_hex = res.as_str().unwrap();
     // let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
 
-    let client = ClientBuilder::new().set_url(url).build().await?;
+    let client = ClientBuilder::new().set_url(&url).build().await?;
 
     let api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
@@ -162,8 +164,11 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     let parachain_name = api.client.rpc().system_chain().await?;
     // println!("system chain: {}", parachain_name);
 
-    tx.lock().unwrap().2.chain_name = parachain_name.clone();
-
+    {
+        let mut parachain_info = tx.lock().unwrap();
+        parachain_info.2.chain_name = parachain_name.clone();
+        parachain_info.2.chain_ws = url.clone();
+    }
     //     ""), None).await?;
 
     // Fetch the metadata
@@ -306,6 +311,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                             }
                         }
                     }
+                    
                     exts.push(DataEntity::Extrinsic {
                         id: (block_header.number, i as u32),
                         pallet,
@@ -323,7 +329,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                 .entry(block_hash.to_string())
                 .or_insert(PolkaBlock {
                     blocknum: block_header.number as usize,
-                    blockhash: block_hash.to_string(),
+                    blockhash: block_hash,
                     extrinsics: exts,
                     events: vec![],
                 });
@@ -340,7 +346,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
 
 pub struct PolkaBlock {
     pub blocknum: usize,
-    pub blockhash: String,
+    pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<RawEventDetails>,
 }
@@ -357,7 +363,7 @@ pub async fn watch_events(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     let mut blocknum = 1;
     while let Some(events) = event_sub.next().await {
         let events = events?;
-        let blockhash = events.block_hash().to_string();
+        let blockhash = events.block_hash();
         blocknum += 1;
 
         tx.lock().unwrap().0.insert(

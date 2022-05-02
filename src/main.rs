@@ -34,7 +34,7 @@ mod content;
 mod datasource;
 mod movement;
 mod style;
-
+use sp_core::H256;
 // use futures::StreamExt;
 
 // use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
@@ -53,6 +53,7 @@ static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 #[derive(Default)]
 pub struct ChainInfo {
     pub chain_name: String,
+    pub chain_ws: String,
     pub inserted_pic: bool,
 }
 
@@ -75,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
 
-    let selected_env = Env::SelfSovereignTest; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+    let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
     let relays = networks::get_network(&selected_env);
     let is_self_sovereign = selected_env.is_self_sovereign();
@@ -121,7 +122,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_startup_system(spawn_tasks)
         .add_system(movement::player_move_arrows)
         .add_system(rain)
-        .add_system(focus_manager)
+        // .add_system(focus_manager)
+        .add_system(right_click_system)
         // .add_startup_system(setup_particles)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
@@ -163,13 +165,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             println!("url attaching to {}", url);
 
-            let chain_name_clone = chain_name.clone();
+            // let chain_name_clone = chain_name.clone();
             let url_clone = url.clone();
             std::thread::spawn(move || {
                 async_std::task::block_on(datasource::watch_events(lock_clone, url)).unwrap();
             });
 
-            let chain_name = chain_name_clone;
+            // let chain_name = chain_name_clone;
             let lock_clone = arc.clone();
             std::thread::spawn(move || {
                 async_std::task::block_on(datasource::watch_blocks(lock_clone, url_clone)).unwrap();
@@ -272,14 +274,15 @@ enum BuildDirection {
     Down,
 }
 
-fn focus_manager(mut windows: ResMut<Windows>, toggle_mouse_capture: Res<movement::MouseCapture>) {
-    let window = windows.get_primary_mut().unwrap();
-    // if window.is_focused() {
-    //     window.set_cursor_lock_mode(toggle_mouse_capture.0);
-    // } else {
-    //     window.set_cursor_lock_mode(false);
-    // }
-}
+// fn focus_manager(mut windows: ResMut<Windows>, //toggle_mouse_capture: Res<movement::MouseCapture>
+// ) {
+//     // let window = windows.get_primary_mut().unwrap();
+//     // if window.is_focused() {
+//     //     window.set_cursor_lock_mode(toggle_mouse_capture.0);
+//     // } else {
+//     //     window.set_cursor_lock_mode(false);
+//     // }
+// }
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
     let mut res = match entity {
@@ -344,7 +347,7 @@ impl DataEntity {
 
     pub fn contains(&self) -> &[DataEntity] {
         match self {
-            Self::Event { raw } => EMPTY_SLICE.as_slice(),
+            Self::Event { .. } => EMPTY_SLICE.as_slice(),
             Self::Extrinsic { contains, .. } => contains.as_slice(),
         }
     }
@@ -514,7 +517,7 @@ fn render_new_events(
                         });
 
                     add_blocks(
-                        &block_events.2.chain_name,
+                        &block_events.2,
                         block_num,
                         chain,
                         fun,
@@ -523,10 +526,11 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Up,
                         rflip,
+                        &block.blockhash
                     );
 
                     add_blocks(
-                        &block_events.2.chain_name,
+                        &block_events.2,
                         block_num,
                         chain,
                         boring,
@@ -535,6 +539,7 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Down,
                         rflip,
+                        &block.blockhash
                     );
                 }
             }
@@ -554,7 +559,7 @@ fn render_new_events(
 
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
 fn add_blocks<'a>(
-    chain_name: &str,
+    chain_info: &ChainInfo,
     block_num: u32,
     chain: usize,
     block_events: Vec<(Option<DataEntity>, Vec<RawEventDetails>)>,
@@ -563,6 +568,7 @@ fn add_blocks<'a>(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     build_direction: BuildDirection,
     rflip: f32,
+    block_hash: &H256
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -575,7 +581,7 @@ fn add_blocks<'a>(
         radius: 0.40,
         subdivisions: 32,
     }));
-    let mesh_xcm = meshes.add(Mesh::from(shape::Box::new(0.8, 1000., 0.8)));
+    let mesh_xcm = meshes.add(Mesh::from(shape::Torus{radius:0.6, ring_radius:0.4, subdivisions_segments:20, subdivisions_sides:10}));
     let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
     let mut mat_map = HashMap::new();
 
@@ -589,6 +595,11 @@ fn add_blocks<'a>(
     const HIGH: f32 = 100.;
     let mut rain_height: [f32; 81] = [HIGH; 81];
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
+
+    let encoded: String = url::form_urlencoded::Serializer::new(String::new()).append_pair("rpc", &chain_info.chain_ws).finish();
+               
+
+    let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
     for (event_num, (block, events)) in block_events.iter().enumerate() {
         let z = event_num % 9;
@@ -606,9 +617,8 @@ fn add_blocks<'a>(
             Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
 
         if let Some(block @ DataEntity::Extrinsic { .. }) = block {
-            for (i, block) in std::iter::once(block)
-                .chain(block.contains().iter())
-                .enumerate()
+            for block in std::iter::once(block)
+                .chain(block.contains().iter())               
             {
                 let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT;
@@ -623,6 +633,7 @@ fn add_blocks<'a>(
                 } else {
                     mesh.clone()
                 };
+ 
 
                 commands
                     .spawn_bundle(PbrBundle {
@@ -634,8 +645,9 @@ fn add_blocks<'a>(
                     })
                     .insert_bundle(PickableBundle::default())
                     .insert(Details {
-                        hover: format_entity(chain_name, block),
-                        data: (block).clone(),
+                        hover: format_entity(&chain_info.chain_name, block),
+                        // data: (block).clone(),
+                        url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, &hex_block_hash)
                     })
                     .insert(Rainable {
                         dest: target_y * build_direction,
@@ -681,10 +693,11 @@ fn add_blocks<'a>(
                 })
                 .insert_bundle(PickableBundle::default())
                 .insert(Details {
-                    hover: format_entity(chain_name, &entity),
-                    data: DataEntity::Event {
-                        raw: (*event).clone(),
-                    },
+                    hover: format_entity(&chain_info.chain_name, &entity),
+                    // data: DataEntity::Event {
+                    //     raw: (*event).clone(),
+                    // },
+                    url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, &hex_block_hash)
                 })
                 .insert(Rainable {
                     dest: target_y * build_direction,
@@ -716,15 +729,15 @@ pub struct ColorText;
 #[derive(Component)] //, Inspectable, Default)]
 pub struct Details {
     hover: String,
-    data: DataEntity,
+    // data: DataEntity,
+    url: String,
 }
-
 // macro_rules! decode_ex {
 //     ($value:ident, $details:ident, $event:ty) => {
 //         if $details.raw.pallet == <$event>::PALLET {
 //             if $details.raw.variant == <$event>::EVENT {
 //                 // The macro will expand into the contents of this block.
-//                 if let Ok(decoded) = <$event>::decode(&mut $details.raw.data.to_vec().as_slice()) {
+//                 if let Ok(decoded) = <$eventt::decode(&mut $details.raw.data.to_vec().as_slice()) {
 //                     $value.push_str(&format!("{:#?}", decoded));
 //                 } else {
 //                     $value.push_str("(missing metadata to decode)");
@@ -760,7 +773,7 @@ macro_rules! min {
 
 pub fn rain(
     time: Res<Time>,
-    mut commands: Commands,
+    // commands: Commands,
     // mut events: EventReader<PickingEvent>,
     // query: Query<&mut Selection>,
     // mut query2: Query<&mut Details>,
@@ -969,7 +982,36 @@ pub fn print_events(
                 // info!("Egads! A hover event!? {:?}", e)
             }
             PickingEvent::Clicked(_e) => {
+
                 // info!("Gee Willikers, it's a click! {:?}", e)
+            }
+        }
+    }
+}
+
+pub fn right_click_system(
+    mouse_button_input: Res<Input<MouseButton>>,
+    touches_input: Res<Touches>,
+    // hover_query: Query<
+    //     (Entity, &Hover, ChangeTrackers<Hover>),
+    //     (Changed<Hover>, With<PickableMesh>),
+    // >,
+    // selection_query: Query<
+    //     (Entity, &Selection, ChangeTrackers<Selection>),
+    //     (Changed<Selection>, With<PickableMesh>),
+    // >,
+    query_details: Query<&Details>,
+    click_query: Query<(Entity, &Hover)>,
+) {
+    if mouse_button_input.just_pressed(MouseButton::Right)
+        || touches_input.iter_just_pressed().next().is_some()
+    {
+        for (entity, hover) in click_query.iter() {
+            if hover.hovered() {
+                // Open browser.
+                let details = query_details.get(entity).unwrap();
+                open::that(&details.url).unwrap();
+                // picking_events.send(PickingEvent::Clicked(entity));
             }
         }
     }
