@@ -289,6 +289,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                                                                 variant: name.clone(),
                                                                 args: vec![format!("{:?}", values)],
                                                                 contains: vec![],
+                                                                raw: vec![] //TODO: should be simples
                                                             });
                                                         }
                                                         _ => {
@@ -318,6 +319,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                         variant,
                         args,
                         contains: children,
+                        raw: ex_slice.to_vec()
                     });
                 }
                 // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
@@ -333,7 +335,8 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                     extrinsics: exts,
                     events: vec![],
                 });
-            if !current.events.is_empty() {
+            // if !current.events.is_empty()  - blocks sometimes have no events in them.
+            {
                 let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
                 current.extrinsics = ext_clone;
                 handle.1.push(current);

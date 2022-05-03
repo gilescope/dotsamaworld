@@ -290,11 +290,12 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
             format!("{:#?}", raw)
         }
         DataEntity::Extrinsic {
-            id,
+            id: _,
             pallet,
             variant,
             args,
             contains,
+            ..
         } => {
             let kids = if contains.is_empty() {
                 String::new()
@@ -326,10 +327,12 @@ pub enum DataEntity {
         variant: String,
         args: Vec<String>,
         contains: Vec<DataEntity>,
+        raw: Vec<u8>
     },
 }
 
 static EMPTY_SLICE: Vec<DataEntity> = vec![];
+static EMPTY_BYTE_SLICE: Vec<u8> = vec![];
 
 impl DataEntity {
     pub fn pallet(&self) -> &str {
@@ -349,6 +352,13 @@ impl DataEntity {
         match self {
             Self::Event { .. } => EMPTY_SLICE.as_slice(),
             Self::Extrinsic { contains, .. } => contains.as_slice(),
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Event { .. } => EMPTY_BYTE_SLICE.as_slice(),
+            Self::Extrinsic { raw, .. } => raw.as_slice(),
         }
     }
 }
@@ -634,6 +644,7 @@ fn add_blocks<'a>(
                     mesh.clone()
                 };
  
+                let call_data = format!("0x{}",hex::encode(block.as_bytes()));
 
                 commands
                     .spawn_bundle(PbrBundle {
@@ -646,8 +657,8 @@ fn add_blocks<'a>(
                     .insert_bundle(PickableBundle::default())
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
-                        // data: (block).clone(),
-                        url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, &hex_block_hash)
+                        // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0 
+                        url: format!("https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}", &encoded, &call_data)
                     })
                     .insert(Rainable {
                         dest: target_y * build_direction,

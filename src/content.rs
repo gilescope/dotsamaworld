@@ -47,7 +47,7 @@ pub fn is_message(entry: &DataEntity) -> bool {
         &DataEntity::Event { ref raw, .. } => {
             matches!(
                 raw.pallet.as_str().to_ascii_lowercase().as_str(),
-                "ump" | "dmpqueue" | "polkadotxcm"
+                "ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
             )
         }
         _ => false,
