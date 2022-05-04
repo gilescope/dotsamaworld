@@ -10,9 +10,9 @@ use sp_core::H256;
 use std::collections::hash_map::DefaultHasher;
 // use std::collections::hash_map::Entry;
 use std::hash::Hash;
-use subxt::rpc::Subscription;
-use subxt::sp_runtime::generic::Header;
-use subxt::sp_runtime::traits::BlakeTwo256;
+// use subxt::rpc::Subscription;
+// use subxt::sp_runtime::generic::Header;
+// use subxt::sp_runtime::traits::BlakeTwo256;
 // use subxt::sp_runtime::Deserialize;
 use subxt::ClientBuilder;
 // use subxt::Config;
@@ -195,154 +195,160 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     //         .await?;
 
     // For non-finalised blocks use `.subscribe_finalized_blocks()`
-    let mut block_headers: Subscription<Header<u32, BlakeTwo256>> =
-        api.client.rpc().subscribe_finalized_blocks().await.unwrap();
+    let mut reconnects = 0;
+    while reconnects < 20 {
+        if let Ok(mut block_headers)//: Subscription<Header<u32, BlakeTwo256>> 
+        =
+            api.client.rpc().subscribe_finalized_blocks().await {
 
-    while let Some(Ok(block_header)) = block_headers.next().await {
-        let block_hash = block_header.hash();
-        // println!(
-        //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
-        //     block_header.number,
-        //     block_hash,
-        //     block_header.parent_hash,
-        //     block_header.state_root,
-        //     block_header.extrinsics_root
-        // );
-        if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
-            let mut exts = vec![];
-            // println!("block hash! {}", block_hash.to_string());
-            for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
-                // let s : String = ext_bytes;
-                // ext_bytes.using_encoded(|ref slice| {
-                //     assert_eq!(slice, &b"\x0f");
+            while let Some(Ok(block_header)) = block_headers.next().await {
+                let block_hash = block_header.hash();
+                // println!(
+                //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+                //     block_header.number,
+                //     block_hash,
+                //     block_header.parent_hash,
+                //     block_header.state_root,
+                //     block_header.extrinsics_root
+                // );
+                if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
+                    let mut exts = vec![];
+                    // println!("block hash! {}", block_hash.to_string());
+                    for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
+                        // let s : String = ext_bytes;
+                        // ext_bytes.using_encoded(|ref slice| {
+                        //     assert_eq!(slice, &b"\x0f");
 
-                let ex_slice = <ExtrinsicVec as Decode>::decode(&mut ext_bytes.encode().as_slice())
-                    .unwrap()
-                    .0;
-                // This works too but unsafe:
-                //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
+                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut ext_bytes.encode().as_slice())
+                            .unwrap()
+                            .0;
+                        // This works too but unsafe:
+                        //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
 
-                // use parity_scale_codec::Encode;
-                // ext_bytes.encode();
-                if let Ok(ext) =
-                    decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                {
-                    let pallet = ext.call_data.pallet_name.to_string();
-                    let variant = ext.call_data.ty.name().to_owned();
+                        // use parity_scale_codec::Encode;
+                        // ext_bytes.encode();
+                        if let Ok(ext) =
+                            decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+                        {
+                            let pallet = ext.call_data.pallet_name.to_string();
+                            let variant = ext.call_data.ty.name().to_owned();
 
-                    let mut args: Vec<_> = ext
-                        .call_data
-                        .arguments
-                        .iter()
-                        .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
-                        .collect();
+                            let mut args: Vec<_> = ext
+                                .call_data
+                                .arguments
+                                .iter()
+                                .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
+                                .collect();
 
-                    if pallet == "System" && variant == "remark" {
-                        match &ext.call_data.arguments[0].value {
-                            desub_current::ValueDef::Composite(
-                                desub_current::value::Composite::Unnamed(chars_vals),
-                            ) => {
-                                let bytes = chars_vals
-                                    .iter()
-                                    .map(|arg| match arg.value {
-                                        desub_current::ValueDef::Primitive(
-                                            desub_current::value::Primitive::U8(ch),
-                                        ) => ch,
-                                        _ => b'!',
-                                    })
-                                    .collect::<Vec<u8>>();
-                                let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
-                                args.insert(0, rmrk);
+                            if pallet == "System" && variant == "remark" {
+                                match &ext.call_data.arguments[0].value {
+                                    desub_current::ValueDef::Composite(
+                                        desub_current::value::Composite::Unnamed(chars_vals),
+                                    ) => {
+                                        let bytes = chars_vals
+                                            .iter()
+                                            .map(|arg| match arg.value {
+                                                desub_current::ValueDef::Primitive(
+                                                    desub_current::value::Primitive::U8(ch),
+                                                ) => ch,
+                                                _ => b'!',
+                                            })
+                                            .collect::<Vec<u8>>();
+                                        let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
+                                        args.insert(0, rmrk);
+                                    }
+
+                                    _ => {}
+                                }
                             }
 
-                            _ => {}
-                        }
-                    }
+                            let mut children = vec![];
+                            // println!("checking batch");
+                            // Anything that looks batch like we will assume is a batch
+                            if variant.contains("batch") {
+                                for arg in ext.call_data.arguments {
+                                    //just first arg
+                                    match arg.value {
+                                        ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
+                                            for v in chars_vals {
+                                                match v.value {
+                                                    ValueDef::Variant(Variant {
+                                                        ref name,
+                                                        values: Composite::Unnamed(chars_vals),
+                                                    }) => {
+                                                        println!("{parachain_name} varient pallet {name}");
+                                                        let inner_pallet = name;
 
-                    let mut children = vec![];
-                    // println!("checking batch");
-                    // Anything that looks batch like we will assume is a batch
-                    if variant.contains("batch") {
-                        for arg in ext.call_data.arguments {
-                            //just first arg
-                            match arg.value {
-                                ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
-                                    for v in chars_vals {
-                                        match v.value {
-                                            ValueDef::Variant(Variant {
-                                                ref name,
-                                                values: Composite::Unnamed(chars_vals),
-                                            }) => {
-                                                println!("{parachain_name} varient pallet {name}");
-                                                let inner_pallet = name;
-
-                                                for v in chars_vals {
-                                                    match v.value {
-                                                        ValueDef::Variant(Variant {
-                                                            name,
-                                                            values,
-                                                        }) => {
-                                                            println!("{pallet} {variant} has inside a {inner_pallet} {name}");
-                                                            children.push(DataEntity::Extrinsic {
-                                                                id: (block_header.number, i as u32),
-                                                                pallet: inner_pallet.to_string(),
-                                                                variant: name.clone(),
-                                                                args: vec![format!("{:?}", values)],
-                                                                contains: vec![],
-                                                                raw: vec![] //TODO: should be simples
-                                                            });
+                                                        for v in chars_vals {
+                                                            match v.value {
+                                                                ValueDef::Variant(Variant {
+                                                                    name,
+                                                                    values,
+                                                                }) => {
+                                                                    println!("{pallet} {variant} has inside a {inner_pallet} {name}");
+                                                                    children.push(DataEntity::Extrinsic {
+                                                                        id: (block_header.number, i as u32),
+                                                                        pallet: inner_pallet.to_string(),
+                                                                        variant: name.clone(),
+                                                                        args: vec![format!("{:?}", values)],
+                                                                        contains: vec![],
+                                                                        raw: vec![] //TODO: should be simples
+                                                                    });
+                                                                }
+                                                                _ => {
+                                                                    println!("miss yet close");
+                                                                }
+                                                            }
                                                         }
-                                                        _ => {
-                                                            println!("miss yet close");
-                                                        }
+                                                    }
+                                                    _ => {
+                                                        // println!("inner miss");
+                                                        // print_val(&v.value);
                                                     }
                                                 }
                                             }
-                                            _ => {
-                                                // println!("inner miss");
-                                                // print_val(&v.value);
-                                            }
+                                        }
+
+                                        _ => {
+                                            // println!("miss");
                                         }
                                     }
                                 }
-
-                                _ => {
-                                    // println!("miss");
-                                }
-                            }
+                            }                           
+                            exts.push(DataEntity::Extrinsic {
+                                id: (block_header.number, i as u32),
+                                pallet,
+                                variant,
+                                args,
+                                contains: children,
+                                raw: ex_slice.to_vec()
+                            });
                         }
+                        // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
                     }
-                    
-                    exts.push(DataEntity::Extrinsic {
-                        id: (block_header.number, i as u32),
-                        pallet,
-                        variant,
-                        args,
-                        contains: children,
-                        raw: ex_slice.to_vec()
-                    });
+                    let ext_clone = exts.clone();
+                    let mut handle = tx.lock().unwrap();
+                    let current = handle
+                        .0
+                        .entry(block_hash.to_string())
+                        .or_insert(PolkaBlock {
+                            blocknum: block_header.number as usize,
+                            blockhash: block_hash,
+                            extrinsics: exts,
+                            events: vec![],
+                        });
+                    if !current.events.is_empty()  //- blocks sometimes have no events in them.
+                    {
+                        let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
+                        current.extrinsics = ext_clone;
+                        handle.1.push(current);
+                    }
+                    //TODO: assert_eq!(block_header.hash(), block.hash());
                 }
-                // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
             }
-            let ext_clone = exts.clone();
-            let mut handle = tx.lock().unwrap();
-            let current = handle
-                .0
-                .entry(block_hash.to_string())
-                .or_insert(PolkaBlock {
-                    blocknum: block_header.number as usize,
-                    blockhash: block_hash,
-                    extrinsics: exts,
-                    events: vec![],
-                });
-            // if !current.events.is_empty()  - blocks sometimes have no events in them.
-            {
-                let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
-                current.extrinsics = ext_clone;
-                handle.1.push(current);
-            }
-            //TODO: assert_eq!(block_header.hash(), block.hash());
         }
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        reconnects += 1;
     }
     Ok(())
 }
@@ -361,23 +367,28 @@ pub async fn watch_events(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
         .await?
         .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
 
-    let mut event_sub = api.events().subscribe_finalized().await?;
+    let mut reconnects = 0;
+    while reconnects < 20 {
+        if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
+            let mut blocknum = 1;
+            while let Some(events) = event_sub.next().await {
+                let events = events?;
+                let blockhash = events.block_hash();
+                blocknum += 1;
 
-    let mut blocknum = 1;
-    while let Some(events) = event_sub.next().await {
-        let events = events?;
-        let blockhash = events.block_hash();
-        blocknum += 1;
-
-        tx.lock().unwrap().0.insert(
-            events.block_hash().to_string(),
-            PolkaBlock {
-                blocknum,
-                blockhash,
-                extrinsics: vec![],
-                events: events.iter_raw().map(|c| c.unwrap()).collect::<Vec<_>>(),
-            },
-        );
+                tx.lock().unwrap().0.insert(
+                    events.block_hash().to_string(),
+                    PolkaBlock {
+                        blocknum,
+                        blockhash,
+                        extrinsics: vec![],
+                        events: events.iter_raw().map(|c| c.unwrap()).collect::<Vec<_>>(),
+                    },
+                );
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        reconnects += 1;
     }
     Ok(())
 }

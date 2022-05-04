@@ -327,7 +327,7 @@ pub enum DataEntity {
         variant: String,
         args: Vec<String>,
         contains: Vec<DataEntity>,
-        raw: Vec<u8>
+        raw: Vec<u8>,
     },
 }
 
@@ -536,7 +536,7 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Up,
                         rflip,
-                        &block.blockhash
+                        &block.blockhash,
                     );
 
                     add_blocks(
@@ -549,7 +549,7 @@ fn render_new_events(
                         &mut materials,
                         BuildDirection::Down,
                         rflip,
-                        &block.blockhash
+                        &block.blockhash,
                     );
                 }
             }
@@ -578,7 +578,7 @@ fn add_blocks<'a>(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     build_direction: BuildDirection,
     rflip: f32,
-    block_hash: &H256
+    block_hash: &H256,
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -591,7 +591,12 @@ fn add_blocks<'a>(
         radius: 0.40,
         subdivisions: 32,
     }));
-    let mesh_xcm = meshes.add(Mesh::from(shape::Torus{radius:0.6, ring_radius:0.4, subdivisions_segments:20, subdivisions_sides:10}));
+    let mesh_xcm = meshes.add(Mesh::from(shape::Torus {
+        radius: 0.6,
+        ring_radius: 0.4,
+        subdivisions_segments: 20,
+        subdivisions_sides: 10,
+    }));
     let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
     let mut mat_map = HashMap::new();
 
@@ -606,8 +611,9 @@ fn add_blocks<'a>(
     let mut rain_height: [f32; 81] = [HIGH; 81];
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
 
-    let encoded: String = url::form_urlencoded::Serializer::new(String::new()).append_pair("rpc", &chain_info.chain_ws).finish();
-               
+    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("rpc", &chain_info.chain_ws)
+        .finish();
 
     let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
@@ -627,9 +633,7 @@ fn add_blocks<'a>(
             Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
 
         if let Some(block @ DataEntity::Extrinsic { .. }) = block {
-            for block in std::iter::once(block)
-                .chain(block.contains().iter())               
-            {
+            for block in std::iter::once(block).chain(block.contains().iter()) {
                 let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT;
                 let style = style::style_event(&block);
@@ -643,8 +647,8 @@ fn add_blocks<'a>(
                 } else {
                     mesh.clone()
                 };
- 
-                let call_data = format!("0x{}",hex::encode(block.as_bytes()));
+
+                let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
                 commands
                     .spawn_bundle(PbrBundle {
@@ -657,8 +661,11 @@ fn add_blocks<'a>(
                     .insert_bundle(PickableBundle::default())
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
-                        // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0 
-                        url: format!("https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}", &encoded, &call_data)
+                        // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+                        url: format!(
+                            "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
+                            &encoded, &call_data
+                        ),
                     })
                     .insert(Rainable {
                         dest: target_y * build_direction,
@@ -708,7 +715,10 @@ fn add_blocks<'a>(
                     // data: DataEntity::Event {
                     //     raw: (*event).clone(),
                     // },
-                    url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, &hex_block_hash)
+                    url: format!(
+                        "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+                        &encoded, &hex_block_hash
+                    ),
                 })
                 .insert(Rainable {
                     dest: target_y * build_direction,
