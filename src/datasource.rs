@@ -219,8 +219,9 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                         // ext_bytes.using_encoded(|ref slice| {
                         //     assert_eq!(slice, &b"\x0f");
 
-                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut ext_bytes.encode().as_slice())
-                            .unwrap()
+                        let encoded_extrinsic = ext_bytes.encode();
+                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                            .unwrap() 
                             .0;
                         // This works too but unsafe:
                         //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
@@ -321,7 +322,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                                 variant,
                                 args,
                                 contains: children,
-                                raw: ex_slice.to_vec()
+                                raw: encoded_extrinsic
                             });
                         }
                         // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");

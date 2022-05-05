@@ -10,6 +10,18 @@ Thank you Bevy and all your plugin ecosystem for making this project a real joy 
 
 ! This is very experimental and under active dev. I'll clean up the code once I know what it is I'm creating. !
 
+## What am I looking at?
+
+There are long roads streatching into the distance - these are the parachains with the two relay chains side by side in the middle.
+
+There are cubes which represent extrinsics (transactions) and there are spheres which represent events from those transactions.
+
+Currently new extrinsics and events fall from the sky and land once they are finalised by grandpa.
+## What can I do?
+
+As well as look around you can left click on any event or extrinsic to get some limited info on it.
+If you right click on an event it will open polkadot-js at that block (and pointing to the right chain).
+If you right click on an extrinsic it will open the polkadot-js decode screen for the right chain so you can see the full details.
 ## Prerequisites
 
 There's probably some prerequites but if you have nix or run nixos then you can just 
