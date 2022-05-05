@@ -5,6 +5,7 @@ pub enum Env {
     Prod,
     SelfSovereign,
     SelfSovereignTest,
+    NFTs
 }
 
 impl Env {
@@ -234,6 +235,23 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                 "ws://127.0.0.1:9966",
                 "ws://127.0.0.1:9920",
             ]]
+        },
+        Env::NFTs => {
+            // These are parachains known to be rocking the uniques pallet:
+            vec![
+                vec![
+                    "rpc.polkadot.io",
+                    "statemint-rpc.polkadot.io",
+                    "ws.unique.network",
+                    "rpc-01.hydradx.io",
+                ],
+                vec![
+                    "kusama-rpc.polkadot.io",
+                    "statemine-rpc.dwellir.com",
+                    "us-ws-quartz.unique.network",
+                    "basilisk-rpc.dwellir.com",
+                ]
+            ]
         }
     }
 }

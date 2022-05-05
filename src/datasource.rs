@@ -2,6 +2,7 @@ use super::polkadot;
 use crate::ABlocks;
 use crate::DataEntity;
 use async_std::stream::StreamExt;
+use bevy::prelude::warn;
 use desub_current::{decoder, Metadata};
 // use frame_metadata::RuntimeMetadataPrefixed;
 use parity_scale_codec::Decode;
@@ -21,6 +22,8 @@ use desub_current::ValueDef;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
+use std::num::NonZeroU32;
+use std::convert::TryFrom;
 
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
@@ -50,6 +53,7 @@ use subxt::RawEventDetails;
 // use std::path::Path;
 // use std::time::Duration;
 use subxt::rpc::ClientT;
+
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
@@ -149,25 +153,31 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
 
     let metad = Metadata::from_bytes(&metadata_bytes).unwrap();
 
-    // give back the "result"s to save some lines of code..).
-    // let res = rpc_to_localhost("state_getMetadata", ()).await.unwrap();
-
-    // Decode the hex value into bytes (which are the SCALE encoded metadata details):
-    // let metadata_hex = res.as_str().unwrap();
-    // let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
 
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
+    // parachainInfo / parachainId returns u32 paraId
+    let storage_key = hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
+    let call = client.storage().fetch_raw(sp_core::storage::StorageKey(storage_key), None).await?;
+    
+    let para_id = if let Some(sp_core::storage::StorageData(val)) = call {
+        let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
+        println!("{} is para id {}", &url, para_id);
+
+        Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
+    } else {
+        warn!("could not find para id for {}", &url);
+        None };
+
     let mut api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-
     let parachain_name = api.client.rpc().system_chain().await?;
-    // println!("system chain: {}", parachain_name);
 
     {
         let mut parachain_info = tx.lock().unwrap();
         parachain_info.2.chain_name = parachain_name.clone();
         parachain_info.2.chain_ws = url.clone();
+        parachain_info.2.chain_id = para_id
     }
     //     ""), None).await?;
 

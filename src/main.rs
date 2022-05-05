@@ -9,6 +9,7 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
+use std::num::NonZeroU32;
 // use bevy_text_mesh::TextMesh;
 // use bevy_text_mesh::prelude::*;
 // use bevy_hanabi::ParticleEffectBundle;
@@ -54,6 +55,7 @@ static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 pub struct ChainInfo {
     pub chain_name: String,
     pub chain_ws: String,
+    pub chain_id: Option<NonZeroU32>,
     pub inserted_pic: bool,
 }
 
@@ -76,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
 
-    let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+    let selected_env = Env::NFTs; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
     let relays = networks::get_network(&selected_env);
     let is_self_sovereign = selected_env.is_self_sovereign();
