@@ -156,9 +156,9 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
     // let metadata_hex = res.as_str().unwrap();
     // let metadata_bytes = hex::decode(&metadata_hex.trim_start_matches("0x")).unwrap();
 
-    let client = ClientBuilder::new().set_url(&url).build().await?;
+    let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
-    let api =
+    let mut api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
 
     let parachain_name = api.client.rpc().system_chain().await?;
@@ -221,7 +221,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
 
                         let encoded_extrinsic = ext_bytes.encode();
                         let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                            .unwrap() 
+                            .unwrap()
                             .0;
                         // This works too but unsafe:
                         //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
@@ -315,7 +315,7 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
                                         }
                                     }
                                 }
-                            }                           
+                            }
                             exts.push(DataEntity::Extrinsic {
                                 id: (block_header.number, i as u32),
                                 pallet,
@@ -350,6 +350,9 @@ pub async fn watch_blocks(tx: ABlocks, url: String) -> Result<(), Box<dyn std::e
         }
         std::thread::sleep(std::time::Duration::from_secs(20));
         reconnects += 1;
+        client = ClientBuilder::new().set_url(&url).build().await?;
+        api = client
+            .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
     }
     Ok(())
 }
@@ -362,14 +365,14 @@ pub struct PolkaBlock {
 }
 
 pub async fn watch_events(tx: ABlocks, url: String) -> Result<(), Box<dyn std::error::Error>> {
-    let api = ClientBuilder::new()
-        .set_url(&url)
-        .build()
-        .await?
-        .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-
     let mut reconnects = 0;
     while reconnects < 20 {
+        let api = ClientBuilder::new()
+            .set_url(&url)
+            .build()
+            .await?
+            .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+
         if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
             let mut blocknum = 1;
             while let Some(events) = event_sub.next().await {

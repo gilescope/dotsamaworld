@@ -17,11 +17,16 @@ There are long roads streatching into the distance - these are the parachains wi
 There are cubes which represent extrinsics (transactions) and there are spheres which represent events from those transactions.
 
 Currently new extrinsics and events fall from the sky and land once they are finalised by grandpa.
+
+! There may be bugs, what you see may not be correct - please double check any info you read here with external sources before doing any transactions based on this info. !
+
 ## What can I do?
 
 As well as look around you can left click on any event or extrinsic to get some limited info on it.
 If you right click on an event it will open polkadot-js at that block (and pointing to the right chain).
 If you right click on an extrinsic it will open the polkadot-js decode screen for the right chain so you can see the full details.
+
+
 ## Prerequisites
 
 There's probably some prerequites but if you have nix or run nixos then you can just 
