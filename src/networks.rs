@@ -5,7 +5,7 @@ pub enum Env {
     Prod,
     SelfSovereign,
     SelfSovereignTest,
-    NFTs
+    NFTs,
 }
 
 impl Env {
@@ -225,6 +225,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "test1.zcloak.network",
                     "bsr.zeitgeist.pm",
                     "alphaville.zero.io",
+                    "testnet.imbue.network",
                 ],
                 vec![],
             ]
@@ -235,7 +236,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                 "ws://127.0.0.1:9966",
                 "ws://127.0.0.1:9920",
             ]]
-        },
+        }
         Env::NFTs => {
             // These are parachains known to be rocking the uniques pallet:
             vec![
@@ -250,7 +251,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "statemine-rpc.dwellir.com",
                     "us-ws-quartz.unique.network",
                     "basilisk-rpc.dwellir.com",
-                ]
+                ],
             ]
         }
     }

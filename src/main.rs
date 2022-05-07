@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let lock_clone = lock.clone();
     // let lock_statemint_clone = lock_statemint.clone();
 
-    let selected_env = Env::NFTs; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+    let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
     let relays = networks::get_network(&selected_env);
     let is_self_sovereign = selected_env.is_self_sovereign();
@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
-    for relay in relays {
+    for (relay_id, relay) in relays.into_iter().enumerate() {
         for (arc, mut chain_name) in relay {
             let lock_clone = arc.clone();
             if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
@@ -170,13 +170,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // let chain_name_clone = chain_name.clone();
             let url_clone = url.clone();
             std::thread::spawn(move || {
-                async_std::task::block_on(datasource::watch_events(lock_clone, url)).unwrap();
+                let mut reconnects = 0;
+
+                while reconnects < 20 {
+                    async_std::task::block_on(datasource::watch_events(lock_clone.clone(), &url));
+                    std::thread::sleep(std::time::Duration::from_secs(20));
+                    reconnects += 1;
+                }
+                println!("giving up on {} events", url);
             });
 
             // let chain_name = chain_name_clone;
             let lock_clone = arc.clone();
             std::thread::spawn(move || {
-                async_std::task::block_on(datasource::watch_blocks(lock_clone, url_clone)).unwrap();
+                let mut reconnects = 0;
+
+                while reconnects < 20 {
+                    async_std::task::block_on(datasource::watch_blocks(
+                        lock_clone.clone(),
+                        url_clone.clone(),
+                        relay_id.to_string(),
+                    ));
+                    std::thread::sleep(std::time::Duration::from_secs(20));
+                    reconnects += 1;
+                }
+                println!("giving up on {} blocks", url_clone);
             });
         }
     }

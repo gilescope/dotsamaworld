@@ -494,6 +494,7 @@ dependencies = [
  "futures",
  "getrandom 0.2.6",
  "hex",
+ "lazy_static",
  "open",
  "palette",
  "parity-scale-codec",

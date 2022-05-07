@@ -35,6 +35,7 @@ serde_bytes = "0.11"
 serde = "*"
 open = "1"
 url = "*"
+lazy_static = "*"
 bevy_hanabi = "0.2"
 frame-metadata = "*"
 scale-info = { version = "*", features = ["serde"] }
