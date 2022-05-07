@@ -421,6 +421,7 @@ pub async fn watch_blocks(
             api.client.rpc().subscribe_finalized_blocks().await {
 
             while let Some(Ok(block_header)) = block_headers.next().await {
+                let block_num = block_header.number;
                 let block_hash = block_header.hash();
                 // println!(
                 //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
@@ -514,27 +515,51 @@ pub async fn watch_blocks(
                                                         println!("FLATTERN {:#?}", results);
                                                         // also .sent_at
                                                         if let Some(msg) = results.get(".msg") {
-                                                            let bytes = hex::decode(msg).unwrap();
-                                                            let hash = please_hash(&bytes);
-                                                            println!("msg hash is {}", hash);
+                                                            if let Some(sent_at) = results.get(".sent_at") {
+                                                                let bytes = hex::decode(msg).unwrap();
+                                                                //let hash = please_hash(&bytes);
+                                                                //println!("msg hash is {}", hash);
 
-                                                            // let event = polkadot::xcm_pallet::calls::ReserveTransferAssets::decode(&mut bytes.as_slice()).unwrap();
+                                                                // let event = polkadot::xcm_pallet::calls::ReserveTransferAssets::decode(&mut bytes.as_slice()).unwrap();
+                                                                
+                                                                if let Ok(verMsg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
+                                                                    match verMsg {
+                                                                        VersionedXcm::V2(msg) => {
+                                                                            for instruction in &msg.0 {
+                                                                                println!("instruction {:?}", instruction);
+                                                                            }
+                                                                            for inst in msg.0 {
+                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
+                                                                            //   use crate::polkadot::runtime_types::xcm::v2::Junctions;
+                                                                                use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
+                                                                                if let DepositAsset{beneficiary, ..} = inst {
+                                                                                    
+                                                                                    //println!("HASH RECIEVE {}", please_hash(beneficiary.encode()));
 
-
-                                                            
-                                                            if let Ok(verMsg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
-                                                                match verMsg {
-                                                                    VersionedXcm::V2(msg) => {
-                                                                        for instruction in msg.0 {
-                                                                            println!("instruction {:?}", instruction);
+                                                                                    if let MultiLocation{ interior, .. } = &beneficiary {
+                                                                                        //todo assert parent
+                                                                                        if let Junctions::X1(x1) = interior {
+                                                                                            if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                                //println!("{}",hex::encode(id));
+                                                                                                let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                                println!("RECIEWV HASH {}", msg_id);
+                                                                                            };
+                                                                                        } else { panic!("unknonwn") }
+                                                                                    }
+                                                                                    // let ben_hash = please_hash(beneficiary.encode());
+                                                                                    // println!("{:?}", beneficiary);
+                                                                                    // println!("{}", ben_hash);
+                                                                                }
+                                                                            }
                                                                         }
+                                                                        _  => { println!("unknown message version"); }
                                                                     }
-                                                                    _  => { println!("unknown message version"); }
+                                                                } else {
+                                                                    println!("could not decode msg: {}", msg);
                                                                 }
-                                                            } else {
-                                                                println!("could not decode msg: {}", msg);
                                                             }
-
                                                             // println!("{:#?}", event);
                                                         }
                                                     }
@@ -556,7 +581,23 @@ pub async fn watch_blocks(
                                     //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
                                     let dest: NonZeroU32 = dest.parse().unwrap();
                                     let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
-                                    println!("reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+                                     let mut results = HashMap::new();
+                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
+
+                                    if let Some(to) = to {
+                                        println!("SEND MSG hash {}-{}", block_num, please_hash(to));
+                                    }
+                                    println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                    // if ext.call_data.arguments.len() > 1 {
+                                    //     let mut results = HashMap::new();
+                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    //     println!("FLATTERN DEST2 {:#?}", results);
+                                    //     println!("ARGS {:?}", ext.call_data.arguments);
+                                    // } else { 
+                                    //     warn!("expected more params...");
+                                    // }
                                 }
 
 //                                 print_val(&ext.call_data.arguments[0].value);
@@ -793,11 +834,18 @@ mod tests {
     use subxt::BlockNumber;
     #[test]
     fn test() {
+        use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
         let msg = "02100104000100000700c817a8040a13000100000700c817a804010300286bee0d01000400010100353ea2050ff562d3f6e7683e8b53073f4f91ae684072f6c2f044b815fced30a4";
         let result = <VersionedXcm as Decode>::decode(&mut hex::decode(msg).unwrap().as_slice()).unwrap();
 
-
-
-        // println!("{:?}", result);
+        if let VersionedXcm::V2(v2) = result {
+            for inst in v2.0 {
+                if let DepositAsset{beneficiary, ..} = inst {
+                    let ben_hash = please_hash(beneficiary.encode());
+                    println!("{:?}", beneficiary);
+                    println!("{}", ben_hash);
+                }
+            }
+        }
     }
 }

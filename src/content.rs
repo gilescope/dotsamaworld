@@ -34,7 +34,7 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
         | ("ParaInclusion", "CandidateBacked")
         // | ("ParaInherent", "enter") - this is what the relay chains most important job is.
         | ("Timestamp", "set")
-        | ("ParachainSystem", "set_validation_data")
+        // | ("ParachainSystem", "set_validation_data") - not boring as executes other user's messages
         | ("AuthorInherent","kick_off_authorship_validation")//zeitgeist moonbeam
         | ("Lighthouse", "set")
         | ("ParachainStaking", _) => true,
