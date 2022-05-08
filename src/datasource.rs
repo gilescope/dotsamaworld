@@ -18,6 +18,7 @@ use std::hash::Hash;
 // use subxt::sp_runtime::Deserialize;
 use subxt::ClientBuilder;
 // use subxt::Config;
+use crate::polkadot::runtime_types::xcm::VersionedXcm;
 use desub_current::value::*;
 use desub_current::ValueDef;
 use lazy_static::lazy_static;
@@ -26,7 +27,6 @@ use std::num::NonZeroU32;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
-use crate::polkadot::runtime_types::xcm::VersionedXcm;
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
 // impl Config for MyConfig {
@@ -177,7 +177,7 @@ fn flattern<T>(
             Composite::Named(fields) => {
                 if fields
                     .iter()
-                    .all(|(name, f)| matches!(f.value, ValueDef::Primitive(Primitive::U8(_))))
+                    .all(|(_name, f)| matches!(f.value, ValueDef::Primitive(Primitive::U8(_))))
                     && fields.len() > 1
                 {
                     results.insert(
@@ -261,7 +261,7 @@ lazy_static! {
         RwLock::new(HashMap::new());
 }
 
-fn please_hash<T: Hash>(val: T)  -> u64 {
+fn please_hash<T: Hash>(val: T) -> u64 {
     use std::hash::Hasher;
     let mut hasher = DefaultHasher::default();
     val.hash(&mut hasher);
@@ -453,6 +453,7 @@ pub async fn watch_blocks(
                         {
                             let pallet = ext.call_data.pallet_name.to_string();
                             let variant = ext.call_data.ty.name().to_owned();
+                            let mut link = None;
 
                             let mut args: Vec<_> = ext
                                 .call_data
@@ -517,41 +518,28 @@ pub async fn watch_blocks(
                                                         if let Some(msg) = results.get(".msg") {
                                                             if let Some(sent_at) = results.get(".sent_at") {
                                                                 let bytes = hex::decode(msg).unwrap();
-                                                                //let hash = please_hash(&bytes);
-                                                                //println!("msg hash is {}", hash);
-
-                                                                // let event = polkadot::xcm_pallet::calls::ReserveTransferAssets::decode(&mut bytes.as_slice()).unwrap();
-                                                                
-                                                                if let Ok(verMsg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
-                                                                    match verMsg {
+                                                                if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
+                                                                    match ver_msg {
                                                                         VersionedXcm::V2(msg) => {
                                                                             for instruction in &msg.0 {
                                                                                 println!("instruction {:?}", instruction);
                                                                             }
                                                                             for inst in msg.0 {
-                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
-                                                                            //   use crate::polkadot::runtime_types::xcm::v2::Junctions;
+                                                                                //TODO: should only be importing from one version probably.
                                                                                 use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
                                                                                 use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
                                                                                 use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
                                                                                 if let DepositAsset{beneficiary, ..} = inst {
-                                                                                    
-                                                                                    //println!("HASH RECIEVE {}", please_hash(beneficiary.encode()));
-
-                                                                                    if let MultiLocation{ interior, .. } = &beneficiary {
-                                                                                        //todo assert parent
-                                                                                        if let Junctions::X1(x1) = interior {
-                                                                                            if let Junction::AccountId32 {id, ..} = x1 {
-                                                                                                //println!("{}",hex::encode(id));
-                                                                                                let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
-                                                                                                println!("RECIEWV HASH {}", msg_id);
-                                                                                            };
-                                                                                        } else { panic!("unknonwn") }
-                                                                                    }
-                                                                                    // let ben_hash = please_hash(beneficiary.encode());
-                                                                                    // println!("{:?}", beneficiary);
-                                                                                    // println!("{}", ben_hash);
-                                                                                }
+                                                                                    let MultiLocation{ interior, .. } = &beneficiary;
+                                                                                    //todo assert parent
+                                                                                    if let Junctions::X1(x1) = interior {
+                                                                                        if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                            let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                            println!("RECIEVE HASH {}", msg_id);
+                                                                                            link = Some(msg_id);
+                                                                                        };
+                                                                                    } else { panic!("unknonwn") }                                                                                }
                                                                             }
                                                                         }
                                                                         _  => { println!("unknown message version"); }
@@ -586,7 +574,9 @@ pub async fn watch_blocks(
                                     let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
 
                                     if let Some(to) = to {
-                                        println!("SEND MSG hash {}-{}", block_num, please_hash(to));
+                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                        println!("SEND MSG hash {}", msg_id);
+                                        link = Some(msg_id);
                                     }
                                     println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
 
@@ -675,7 +665,6 @@ pub async fn watch_blocks(
                                                         ref name,
                                                         values: Composite::Unnamed(chars_vals),
                                                     }) => {
-                                                        println!("{parachain_name} varient pallet {name}");
                                                         let inner_pallet = name;
 
                                                         for v in chars_vals {
@@ -684,14 +673,15 @@ pub async fn watch_blocks(
                                                                     name,
                                                                     values,
                                                                 }) => {
-                                                                    println!("{pallet} {variant} has inside a {inner_pallet} {name}");
+                                                                    // println!("{pallet} {variant} has inside a {inner_pallet} {name}");
                                                                     children.push(DataEntity::Extrinsic {
                                                                         id: (block_header.number, i as u32),
                                                                         pallet: inner_pallet.to_string(),
                                                                         variant: name.clone(),
                                                                         args: vec![format!("{:?}", values)],
                                                                         contains: vec![],
-                                                                        raw: vec![] //TODO: should be simples
+                                                                        raw: vec![], //TODO: should be simples
+                                                                        link: None
                                                                     });
                                                                 }
                                                                 _ => {
@@ -720,7 +710,8 @@ pub async fn watch_blocks(
                                 variant,
                                 args,
                                 contains: children,
-                                raw: encoded_extrinsic
+                                raw: encoded_extrinsic,
+                                link
                             });
                         }
                         // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
@@ -836,11 +827,12 @@ mod tests {
     fn test() {
         use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
         let msg = "02100104000100000700c817a8040a13000100000700c817a804010300286bee0d01000400010100353ea2050ff562d3f6e7683e8b53073f4f91ae684072f6c2f044b815fced30a4";
-        let result = <VersionedXcm as Decode>::decode(&mut hex::decode(msg).unwrap().as_slice()).unwrap();
+        let result =
+            <VersionedXcm as Decode>::decode(&mut hex::decode(msg).unwrap().as_slice()).unwrap();
 
         if let VersionedXcm::V2(v2) = result {
             for inst in v2.0 {
-                if let DepositAsset{beneficiary, ..} = inst {
+                if let DepositAsset { beneficiary, .. } = inst {
                     let ben_hash = please_hash(beneficiary.encode());
                     println!("{:?}", beneficiary);
                     println!("{}", ben_hash);

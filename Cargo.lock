@@ -486,6 +486,7 @@ dependencies = [
  "bevy_flycam",
  "bevy_hanabi",
  "bevy_mod_picking",
+ "bevy_polyline",
  "bevy_webgl2",
  "desub",
  "desub-current",
@@ -1083,6 +1084,17 @@ dependencies = [
  "bevy_window 0.7.0",
  "bitflags",
  "bytemuck",
+]
+
+[[package]]
+name = "bevy_polyline"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aff83a9ef2b8dee22c2c214e41c6b441ffebf9c6226b35f6e07cdeb4ab158eb5"
+dependencies = [
+ "bevy 0.7.0",
+ "bitflags",
+ "naga",
 ]
 
 [[package]]

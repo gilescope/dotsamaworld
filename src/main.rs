@@ -9,9 +9,8 @@ use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
+use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::num::NonZeroU32;
-// use bevy_text_mesh::TextMesh;
-// use bevy_text_mesh::prelude::*;
 // use bevy_hanabi::ParticleEffectBundle;
 // use bevy_hanabi::ShapeDimension;
 use std::sync::Arc;
@@ -24,7 +23,7 @@ use bevy_flycam::NoCameraPlayerPlugin;
 // use bevy_rapier3d::prelude::NoUserData;
 // use bevy_rapier3d::prelude::RapierPhysicsPlugin;
 // use bevy_rapier3d::prelude::*;
-use bevy_inspector_egui::WorldInspectorPlugin;
+// use bevy_inspector_egui::WorldInspectorPlugin;
 // use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 // use parity_scale_codec::Decode;
 use std::collections::HashMap;
@@ -104,14 +103,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .insert_resource(movement::MouseCapture::default())
         .add_plugin(NoCameraPlayerPlugin)
         // .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
-        //.add_plugin(TextMeshPlugin)
         .add_plugins(DefaultPickingPlugins)
         // .add_plugin(HanabiPlugin)
         .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         // .add_plugin(DebugEventsPickingPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .add_plugin(PolylinePlugin)
         // .add_plugin(LogDiagnosticsPlugin::default())
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
         .add_system(movement::scroll)
         .add_startup_system(
             move |commands: Commands,
@@ -137,17 +136,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                   meshes: ResMut<Assets<Mesh>>,
                   materials: ResMut<Assets<StandardMaterial>>,
                   asset_server: Res<AssetServer>,
-                //   effects: Res<Assets<EffectAsset>>
-                  | {
+                  links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+                  polyline_materials: ResMut<Assets<PolylineMaterial>>,
+                  polylines: ResMut<Assets<Polyline>>| {
                 let clone_chains = clone_chains.clone();
                 render_new_events(
                     commands,
                     meshes,
-                    materials, //asset_server,
+                    materials,
                     clone_chains,
                     asset_server,
-                    is_self_sovereign
-                    // effects,
+                    is_self_sovereign,
+                    links,
+                    polyline_materials,
+                    polylines,
                 )
             },
         )
@@ -173,7 +175,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut reconnects = 0;
 
                 while reconnects < 20 {
-                    async_std::task::block_on(datasource::watch_events(lock_clone.clone(), &url));
+                    println!("Connecting to {}", &url);
+                    let _ = async_std::task::block_on(datasource::watch_events(
+                        lock_clone.clone(),
+                        &url,
+                    ));
+                    println!("Problem with {} events (retrys left {})", &url, reconnects);
                     std::thread::sleep(std::time::Duration::from_secs(20));
                     reconnects += 1;
                 }
@@ -186,11 +193,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut reconnects = 0;
 
                 while reconnects < 20 {
-                    async_std::task::block_on(datasource::watch_blocks(
+                    println!("Connecting to {}", &url_clone);
+                    let _ = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
                         url_clone.clone(),
                         relay_id.to_string(),
                     ));
+                    println!(
+                        "Problem with {} blocks (retries left {})",
+                        &url_clone, reconnects
+                    );
                     std::thread::sleep(std::time::Duration::from_secs(20));
                     reconnects += 1;
                 }
@@ -348,7 +360,16 @@ pub enum DataEntity {
         args: Vec<String>,
         contains: Vec<DataEntity>,
         raw: Vec<u8>,
+        /// psudo-unique id to link to some other node.
+        link: Option<String>,
     },
+}
+
+/// A tag to identify an entity as being the source of a message.
+#[derive(Component)]
+pub struct MessageSource {
+    /// Currently sending block id + hash of beneficiary address.
+    pub id: String,
 }
 
 static EMPTY_SLICE: Vec<DataEntity> = vec![];
@@ -381,6 +402,13 @@ impl DataEntity {
             Self::Extrinsic { raw, .. } => raw.as_slice(),
         }
     }
+
+    pub fn link(&self) -> Option<&String> {
+        match self {
+            Self::Extrinsic { link, .. } => link.as_ref(),
+            Self::Event { .. } => None,
+        }
+    }
 }
 
 const BLOCK: f32 = 10.;
@@ -395,6 +423,9 @@ fn render_new_events(
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
     is_self_sovereign: bool,
+    links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+    mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
+    mut polylines: ResMut<Assets<Polyline>>,
 ) {
     for (rcount, relay) in relays.iter().enumerate() {
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
@@ -557,6 +588,9 @@ fn render_new_events(
                         BuildDirection::Up,
                         rflip,
                         &block.blockhash,
+                        &links,
+                        &mut polyline_materials,
+                        &mut polylines,
                     );
 
                     add_blocks(
@@ -570,6 +604,9 @@ fn render_new_events(
                         BuildDirection::Down,
                         rflip,
                         &block.blockhash,
+                        &links,
+                        &mut polyline_materials,
+                        &mut polylines,
                     );
                 }
             }
@@ -599,6 +636,9 @@ fn add_blocks<'a>(
     build_direction: BuildDirection,
     rflip: f32,
     block_hash: &H256,
+    links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
+    polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
+    polylines: &mut ResMut<Assets<Polyline>>,
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -670,15 +710,77 @@ fn add_blocks<'a>(
 
                 let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
-                commands
-                    .spawn_bundle(PbrBundle {
-                        mesh,
-                        ///* event.blocknum as f32
-                        material: material.clone(),
-                        transform,
-                        ..Default::default()
-                    })
-                    .insert_bundle(PickableBundle::default())
+                let mut found = false;
+
+                let create_source = if let Some(link) = block.link() {
+                    //if this id already exists then this is the destination, not the source...
+                    for (entity, id, source_global) in links.iter() {
+                        if id.id == *link {
+                            found = true;
+                            println!("creating rainbow!");
+
+                            let mut vertices = vec![
+                                Vec3::new(
+                                    source_global.translation.x,
+                                    source_global.translation.y,
+                                    source_global.translation.z,
+                                ),
+                                Vec3::new(px, target_y * build_direction, pz),
+                            ];
+                            rainbow(&mut vertices, 50);
+
+                            let colors = vec![
+                                Color::PURPLE,
+                                Color::BLUE,
+                                Color::CYAN,
+                                Color::YELLOW,
+                                Color::RED,
+                            ];
+                            for color in colors.into_iter() {
+                                // Create rainbow from entity to current extrinsic location.
+                                commands.spawn_bundle(PolylineBundle {
+                                    polyline: polylines.add(Polyline {
+                                        vertices: vertices.clone(),
+                                        ..Default::default()
+                                    }),
+                                    material: polyline_materials.add(PolylineMaterial {
+                                        width: 10.0,
+                                        color,
+                                        perspective: true,
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                });
+
+                                for v in vertices.iter_mut() {
+                                    v.y += 0.5;
+                                }
+                            }
+
+                            commands.entity(entity).remove::<MessageSource>();
+                        }
+                    }
+                    if found {
+                        None
+                    } else {
+                        println!("inserting source of rainbow!");
+                        Some(MessageSource {
+                            id: link.to_string(),
+                        })
+                    }
+                } else {
+                    None
+                };
+
+                let mut bun = commands.spawn_bundle(PbrBundle {
+                    mesh,
+                    ///* event.blocknum as f32
+                    material: material.clone(),
+                    transform,
+                    ..Default::default()
+                });
+
+                bun.insert_bundle(PickableBundle::default())
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
@@ -691,6 +793,10 @@ fn add_blocks<'a>(
                         dest: target_y * build_direction,
                     })
                     .insert(Name::new("BlockEvent"));
+
+                if let Some(source) = create_source {
+                    bun.insert(source);
+                }
             }
         } else {
             // Remove the spacer as we did not add a block.
@@ -745,6 +851,32 @@ fn add_blocks<'a>(
                 })
                 .insert(Name::new("BlockEvent"));
         }
+    }
+}
+
+/// Yes this is now a verb. Who knew?
+fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
+    use std::f32::consts::PI;
+    let start = vertices[0];
+    let end = vertices[1];
+    let diff = end - start;
+    // x, z are linear interpolations, it is only y that goes up!
+
+    let center = (start + end) / 2.;
+
+    let r = end - center;
+    let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be aproximate
+    println!("vertst {},{},{}", start.x, start.y, start.z);
+    println!("verten {},{},{}", end.x, end.y, end.z);
+    vertices.truncate(0);
+    let fpoints = points as f32;
+    for point in 0..=points {
+        let proportion = point as f32 / fpoints;
+        let x = start.x + proportion * diff.x;
+        let y = (proportion * PI).sin() * radius;
+        let z = start.z + proportion * diff.z;
+        println!("vertex {},{},{}", x, y, z);
+        vertices.push(Vec3::new(x, y, z));
     }
 }
 
@@ -814,29 +946,38 @@ macro_rules! min {
 
 pub fn rain(
     time: Res<Time>,
-    // commands: Commands,
+    // world: &mut World,
+    mut commands: Commands,
     // mut events: EventReader<PickingEvent>,
     // query: Query<&mut Selection>,
     // mut query2: Query<&mut Details>,
-    mut drops: Query<(&mut Transform, &Rainable)>,
+    mut drops: Query<(Entity, &mut Transform, &Rainable)>,
     // asset_server: Res<AssetServer>,
     mut timer: ResMut<UpdateTimer>,
 ) {
     //TODO: remove the Rainable component once it has landed for performance!
     let delta = 1.;
     if timer.timer.tick(time.delta()).just_finished() {
-        for (mut transform, rainable) in drops.iter_mut() {
+        for (entity, mut transform, rainable) in drops.iter_mut() {
             if rainable.dest > 0. {
                 if transform.translation.y > rainable.dest {
                     let todo = transform.translation.y - rainable.dest;
                     let delta = min!(1., delta * (todo / rainable.dest));
 
                     transform.translation.y = max!(rainable.dest, transform.translation.y - delta);
+                    // Stop raining...
+                    if delta < f32::EPSILON {
+                        commands.entity(entity).remove::<Rainable>();
+                    }
                 }
             } else {
                 // Austrialian down under world. Balls coming up from the depths...
                 if transform.translation.y < rainable.dest {
                     transform.translation.y = min!(rainable.dest, transform.translation.y + delta);
+                    // Stop raining...
+                    if delta < f32::EPSILON {
+                        commands.entity(entity).remove::<Rainable>();
+                    }
                 }
             }
         }
