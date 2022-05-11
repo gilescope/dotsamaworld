@@ -23,6 +23,7 @@ bevy_flycam = "0.7"
 #bevy_text_mesh = "0.2"
 bevy_mod_picking = "0.6"
 hex = "*"
+# bevy-inspector-egui-derive = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
@@ -33,11 +34,13 @@ bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 #rayon = "*"
 serde = "*"
+bevy_egui = "*"
+egui = "*"
 open = "1"
 url = "*"
 bevy_polyline = "0.2"
 lazy_static = "*"
-bevy_hanabi = "0.2"
+# bevy_hanabi = "0.2"
 frame-metadata = "*"
 scale-info = { version = "*", features = ["serde"] }
 desub = { git = "https://github.com/paritytech/desub/" }

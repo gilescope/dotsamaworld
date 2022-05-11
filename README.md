@@ -52,3 +52,5 @@ License: MIT/Apache2 just like rust.
 
 https://bevyengine.org/examples/3d/spherical-area-lights/
 https://github.com/therawmeatball/meme-cli
+
+When we go back to being able to run on web would be great to be able to start from any block and show forward and backward in time and be able to jump directly there using a dedicated url.

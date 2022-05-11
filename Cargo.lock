@@ -483,13 +483,14 @@ dependencies = [
  "bevy 0.7.0",
  "bevy-inspector-egui",
  "bevy_atmosphere",
+ "bevy_egui",
  "bevy_flycam",
- "bevy_hanabi",
  "bevy_mod_picking",
  "bevy_polyline",
  "bevy_webgl2",
  "desub",
  "desub-current",
+ "egui",
  "fastrand",
  "frame-metadata",
  "futures",
@@ -849,22 +850,6 @@ dependencies = [
  "gltf 1.0.0",
  "percent-encoding",
  "thiserror",
-]
-
-[[package]]
-name = "bevy_hanabi"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98dff35996adf6990e1abf884e951ea5c2c86d2525be7124578e89350e2ae97e"
-dependencies = [
- "anyhow",
- "bevy 0.7.0",
- "bitflags",
- "bytemuck",
- "rand 0.8.5",
- "rand_pcg 0.3.1",
- "ron 0.7.0",
- "serde",
 ]
 
 [[package]]
@@ -4823,7 +4808,7 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc",
- "rand_pcg 0.2.1",
+ "rand_pcg",
 ]
 
 [[package]]
@@ -4891,15 +4876,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
 dependencies = [
  "rand_core 0.5.1",
-]
-
-[[package]]
-name = "rand_pcg"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
-dependencies = [
- "rand_core 0.6.3",
 ]
 
 [[package]]

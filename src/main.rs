@@ -1,4 +1,5 @@
 #![feature(drain_filter)]
+#![feature(hash_drain_filter)]
 // use std::time::Duration;
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
@@ -6,6 +7,7 @@ use bevy::prelude::*;
 // use bevy::window::WindowFocused;
 // use bevy_atmosphere::*;
 use bevy_ecs::prelude::Component;
+
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
@@ -24,8 +26,9 @@ use bevy_flycam::NoCameraPlayerPlugin;
 // use bevy_rapier3d::prelude::RapierPhysicsPlugin;
 // use bevy_rapier3d::prelude::*;
 // use bevy_inspector_egui::WorldInspectorPlugin;
-// use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 // use parity_scale_codec::Decode;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use subxt::RawEventDetails;
@@ -34,9 +37,10 @@ mod content;
 mod datasource;
 mod movement;
 mod style;
-use sp_core::H256;
-// use futures::StreamExt;
-
+use sp_core::H256; 
+use bevy_inspector_egui::RegisterInspectable;
+use std::convert::AsRef;
+use crate::details::Details;
 // use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
@@ -69,6 +73,9 @@ type ABlocks = Arc<
 
 mod networks;
 use networks::Env;
+
+mod details;
+use crate::details::WideString;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -104,8 +111,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_plugin(NoCameraPlayerPlugin)
         // .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(DefaultPickingPlugins)
+        // .add_plugin(InteractablePickingPlugin)
         // .add_plugin(HanabiPlugin)
         .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+        .add_plugin(InspectorPlugin::<Inspector>::new())
+        .register_inspectable::<Details>()
         // .add_plugin(DebugEventsPickingPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(PolylinePlugin)
@@ -125,6 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_system(rain)
         // .add_system(focus_manager)
         .add_system(right_click_system)
+        .add_startup_system(details::configure_visuals)
         // .add_startup_system(setup_particles)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
@@ -153,7 +164,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             },
         )
-        .add_system_to_stage(CoreStage::PostUpdate, print_events);
+        .add_system_to_stage(CoreStage::PostUpdate, print_events)
+        
+        // .add_system_to_stage(
+        //     CoreStage::PostUpdate,
+        //     maintain_inspected_entities
+                
+        //         .after(bevy_mod_picking::PickingSystem::Focus),
+        // )
+        ;
 
     for (relay_id, relay) in relays.into_iter().enumerate() {
         for (arc, mut chain_name) in relay {
@@ -317,8 +336,8 @@ enum BuildDirection {
 // }
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
-    let mut res = match entity {
-        DataEntity::Event { raw } => {
+    let res = match entity {
+        DataEntity::Event { raw, .. } => {
             format!("{:#?}", raw)
         }
         DataEntity::Extrinsic {
@@ -341,17 +360,18 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
         }
     };
 
-    if let Some(pos) = res.find("data: Bytes(") {
-        res.truncate(pos + "data: Bytes(".len());
-        res.push_str("...");
-    }
+    // if let Some(pos) = res.find("data: Bytes(") {
+    //     res.truncate(pos + "data: Bytes(".len());
+    //     res.push_str("...");
+    // }
     res
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum DataEntity {
     Event {
         raw: RawEventDetails,
+        details: Details
     },
     Extrinsic {
         id: (u32, u32),
@@ -362,6 +382,7 @@ pub enum DataEntity {
         raw: Vec<u8>,
         /// psudo-unique id to link to some other node.
         link: Option<String>,
+        details: Details,
     },
 }
 
@@ -376,15 +397,21 @@ static EMPTY_SLICE: Vec<DataEntity> = vec![];
 static EMPTY_BYTE_SLICE: Vec<u8> = vec![];
 
 impl DataEntity {
+    pub fn details(&self) -> &Details {
+        match self {
+            Self::Event { details,..  } => details,
+            Self::Extrinsic { details, .. } => details,
+        }
+    }
     pub fn pallet(&self) -> &str {
         match self {
-            Self::Event { raw } => raw.pallet.as_ref(),
+            Self::Event { raw,..  } => raw.pallet.as_ref(),
             Self::Extrinsic { pallet, .. } => pallet,
         }
     }
     pub fn variant(&self) -> &str {
         match self {
-            Self::Event { raw } => raw.variant.as_ref(),
+            Self::Event { raw,.. } => raw.variant.as_ref(),
             Self::Extrinsic { variant, .. } => variant,
         }
     }
@@ -782,8 +809,9 @@ fn add_blocks<'a>(
 
                 bun.insert_bundle(PickableBundle::default())
                     .insert(Details {
-                        hover: format_entity(&chain_info.chain_name, block),
+                        hover: WideString(format_entity(&chain_info.chain_name, block)),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+                        flattern: block.details().flattern.clone(),
                         url: format!(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
                             &encoded, &call_data
@@ -804,8 +832,17 @@ fn add_blocks<'a>(
         }
 
         for event in events {
+            let details = Details {
+                hover: WideString(format!("{:#?}", event)),
+                flattern: String::new(),
+                url: format!(
+                    "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+                    &encoded, &hex_block_hash
+                ),
+            };
             let entity = DataEntity::Event {
                 raw: (*event).clone(),
+                details
             };
             let style = style::style_event(&entity);
             let material = mat_map
@@ -836,16 +873,7 @@ fn add_blocks<'a>(
                     ..Default::default()
                 })
                 .insert_bundle(PickableBundle::default())
-                .insert(Details {
-                    hover: format_entity(&chain_info.chain_name, &entity),
-                    // data: DataEntity::Event {
-                    //     raw: (*event).clone(),
-                    // },
-                    url: format!(
-                        "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-                        &encoded, &hex_block_hash
-                    ),
-                })
+                .insert(entity.details().clone())
                 .insert(Rainable {
                     dest: target_y * build_direction,
                 })
@@ -866,8 +894,8 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
 
     let r = end - center;
     let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be aproximate
-    println!("vertst {},{},{}", start.x, start.y, start.z);
-    println!("verten {},{},{}", end.x, end.y, end.z);
+    // println!("vertst {},{},{}", start.x, start.y, start.z);
+    // println!("verten {},{},{}", end.x, end.y, end.z);
     vertices.truncate(0);
     let fpoints = points as f32;
     for point in 0..=points {
@@ -875,7 +903,7 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
         let x = start.x + proportion * diff.x;
         let y = (proportion * PI).sin() * radius;
         let z = start.z + proportion * diff.z;
-        println!("vertex {},{},{}", x, y, z);
+        // println!("vertex {},{},{}", x, y, z);
         vertices.push(Vec3::new(x, y, z));
     }
 }
@@ -899,12 +927,6 @@ pub struct ColorText;
 //     #[inspectable(min = 42.0, max = 100.0)]
 //     size: f32,
 // }
-#[derive(Component)] //, Inspectable, Default)]
-pub struct Details {
-    hover: String,
-    // data: DataEntity,
-    url: String,
-}
 // macro_rules! decode_ex {
 //     ($value:ident, $details:ident, $event:ty) => {
 //         if $details.raw.pallet == <$event>::PALLET {
@@ -992,9 +1014,10 @@ pub fn print_events(
     mut commands: Commands,
     mut events: EventReader<PickingEvent>,
     // query: Query<&mut Selection>,
-    mut query2: Query<&mut Details>,
+    mut query2: Query<(Entity, &mut Details)>,
     mut query3: Query<(Entity, With<ColorText>)>,
     asset_server: Res<AssetServer>,
+    mut inspector: ResMut<Inspector>,
 ) {
     let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {
@@ -1002,12 +1025,53 @@ pub fn print_events(
             PickingEvent::Selection(selection) => {
                 if let SelectionEvent::JustSelected(entity) = selection {
                     // let selection = query.get_mut(*entity).unwrap();
-                    let details = query2.get_mut(*entity).unwrap();
+                  
 
                     // Unspawn the previous text:
                     query3.for_each_mut(|(entity, _)| {
                         commands.entity(entity).despawn();
                     });
+
+                    let (entity, details) = query2.get_mut(*entity).unwrap();
+            
+                    if inspector.active == Some(entity) {
+                        print!("deselected current selection");
+                        inspector.active = None;
+
+                    } else {
+                        inspector.active = Some(entity);
+                        print!("selected current entity");
+                        commands
+                        .spawn_bundle(TextBundle {
+                            style: Style {
+                                // align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
+                                ..Default::default()
+                            },
+                            text: Text::with_section(
+                                details.hover.as_str(),
+                                TextStyle {
+                                    font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
+                                    font_size: 60.0,
+                                    color: Color::WHITE,
+                                },
+                                TextAlignment {
+                                    vertical: bevy::prelude::VerticalAlign::Top,
+                                    horizontal: bevy::prelude::HorizontalAlign::Left,
+                                },
+                            ),
+                            transform: t,
+                            ..Default::default()
+                        })
+                        .insert(ColorText);
+                    }
+
+
+
+
+
+
+
+
 
                     // let pallet: &str = &details.raw.pallet;
                     // let variant: &str = &details.raw.variant;
@@ -1133,31 +1197,10 @@ pub fn print_events(
                     //     _ => {}
                     // }
 
-                    info!("{}", details.hover);
+                    info!("{}", details.hover.as_str());
                     // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
 
-                    commands
-                        .spawn_bundle(TextBundle {
-                            style: Style {
-                                // align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
-                                ..Default::default()
-                            },
-                            text: Text::with_section(
-                                &details.hover,
-                                TextStyle {
-                                    font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
-                                    font_size: 60.0,
-                                    color: Color::WHITE,
-                                },
-                                TextAlignment {
-                                    vertical: bevy::prelude::VerticalAlign::Top,
-                                    horizontal: bevy::prelude::HorizontalAlign::Left,
-                                },
-                            ),
-                            transform: t,
-                            ..Default::default()
-                        })
-                        .insert(ColorText);
+                   
                 }
             }
             PickingEvent::Hover(_e) => {
@@ -1280,12 +1323,22 @@ fn setup(
         .spawn_bundle(PerspectiveCameraBundle {
             transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             perspective_projection: PerspectiveProjection {
-                // far: 100., // 1000 will be 100 blocks that you can s
-                ..PerspectiveProjection::default()
+                // far: 1., // 1000 will be 100 blocks that you can s
+                far: 0.0001,
+                near: 0.000001,
+                ..default()
+            },
+            camera: Camera{
+                far: 0.0001,
+                near: 0.000001,
+              
+                ..default()
             },
             ..default()
         })
-        .insert_bundle(PickingCameraBundle::default())
+        .insert_bundle(PickingCameraBundle{
+            .. default()
+        })
         .insert(FlyCam);
 
     // commands.spawn_bundle(TextBundle {
@@ -1390,6 +1443,31 @@ fn setup(
         ..Default::default()
     });
 }
+
+#[derive(Inspectable, Default)]
+pub struct Inspector {
+    #[inspectable(deletable = false)]
+    active: Option<Entity>,
+}
+
+// fn maintain_inspected_entities(
+//     mut inspector: ResMut<Inspector>,
+//     query: Query<(Entity, &Interaction), Changed<Interaction>>,
+// ) {
+//     let entity = query
+//         .iter()
+//         .filter(|(_, interaction)| matches!(interaction, Interaction::Clicked))
+//         .map(|(entity, _)| entity)
+//         .next();
+
+//     if let Some(entity) = entity {
+//         if inspector.active == Some(entity) {
+//             inspector.active = None;
+//         } else {
+//             inspector.active = Some(entity);
+//         }
+//     }
+// }
 
 // pub struct UiPlugin;
 

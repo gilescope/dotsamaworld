@@ -23,10 +23,12 @@ use desub_current::value::*;
 use desub_current::ValueDef;
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
+use crate::WideString;
 use std::num::NonZeroU32;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
+use crate::Details;
 // #[derive(Clone, Debug, Default, Eq, PartialEq)]
 // pub struct MyConfig;
 // impl Config for MyConfig {
@@ -128,7 +130,7 @@ fn flattern<T>(
 ) {
     match dbg {
         desub_current::ValueDef::BitSequence(..) => {
-            println!("bitseq skipped");
+            // println!("bitseq skipped");
         }
         desub_current::ValueDef::Composite(inner) => match inner {
             Composite::Named(fields) => {
@@ -283,7 +285,7 @@ pub async fn watch_blocks(
     // Save metadata to a file:
     // let out_dir = std::env::var_os("OUT_DIR").unwrap();
 
-    let metadata_path = format!("{hash}.metadata.scale");
+    let metadata_path = format!("target/{hash}.metadata.scale");
 
     // let meta: RuntimeMetadataPrefixed =
     // Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
@@ -319,14 +321,14 @@ pub async fn watch_blocks(
                     panic!("Cannot connect to substrate node after {} retries", retries);
                 }
 
-                println!("trying to get metadata ttnr {url}");
+                println!("trying to get metadata from {url}");
                 // It might take a while for substrate node that spin up the RPC server.
                 // Thus, the connection might get rejected a few times.
                 let res = match subxt::rpc::ws_client(&url).await {
                     Ok(c) => c.request("state_getMetadata", None).await,
                     Err(e) => Err(e),
                 };
-                println!("finished trying {url} res {res:?}");
+                println!("finished trying {url}");
                 match res {
                     Ok(res) => {
                         // let _ = cmd.kill();
@@ -502,6 +504,17 @@ pub async fn watch_blocks(
                             
                             */
 
+                            // Seek out and expand Ump / UpwardMessageRecieved;
+                            if pallet == "ParaInherent" && variant == "enter" {
+                                let mut results = HashMap::new();
+                                flattern(&ext.call_data.arguments[0].value, "",&mut results);
+                                let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
+                                let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
+                                let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
+
+                                println!("FLATTERN UMP {:#?}", results);
+                            }
+                            // Seek out and expand Dmp / DownwardMessageRecieved;
                             if pallet == "ParachainSystem" && variant == "set_validation_data" {
                                 match &ext.call_data.arguments[0].value
                                 {
@@ -522,7 +535,18 @@ pub async fn watch_blocks(
                                                                     match ver_msg {
                                                                         VersionedXcm::V2(msg) => {
                                                                             for instruction in &msg.0 {
-                                                                                println!("instruction {:?}", instruction);
+                                                                                let instruction = format!("{:?}", instruction);
+                                                                                println!("instruction {:?}", &instruction);
+                                                                                children.push(DataEntity::Extrinsic {
+                                                                                    id: (block_header.number, i as u32),
+                                                                                    pallet: "Instruction".to_string(),
+                                                                                    variant: instruction.split_once(' ').unwrap().0.to_string(),
+                                                                                    args: vec![instruction],
+                                                                                    contains: vec![],
+                                                                                    raw: vec![], //TODO: should be simples
+                                                                                    link: None,
+                                                                                    details: Details::default()
+                                                                                });
                                                                             }
                                                                             for inst in msg.0 {
                                                                                 //TODO: should only be importing from one version probably.
@@ -655,12 +679,12 @@ pub async fn watch_blocks(
 //                                 );
                             }
                             if variant.contains("batch") {
-                                for arg in ext.call_data.arguments {
+                                for arg in &ext.call_data.arguments {
                                     //just first arg
-                                    match arg.value {
+                                    match &arg.value {
                                         ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
                                             for v in chars_vals {
-                                                match v.value {
+                                                match &v.value {
                                                     ValueDef::Variant(Variant {
                                                         ref name,
                                                         values: Composite::Unnamed(chars_vals),
@@ -668,7 +692,7 @@ pub async fn watch_blocks(
                                                         let inner_pallet = name;
 
                                                         for v in chars_vals {
-                                                            match v.value {
+                                                            match &v.value {
                                                                 ValueDef::Variant(Variant {
                                                                     name,
                                                                     values,
@@ -681,7 +705,8 @@ pub async fn watch_blocks(
                                                                         args: vec![format!("{:?}", values)],
                                                                         contains: vec![],
                                                                         raw: vec![], //TODO: should be simples
-                                                                        link: None
+                                                                        link: None,
+                                                                        details: Details::default()
                                                                     });
                                                                 }
                                                                 _ => {
@@ -704,6 +729,15 @@ pub async fn watch_blocks(
                                     }
                                 }
                             }
+
+                            let mut results = HashMap::new();
+                            for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
+                                flattern(&arg.value, &arg_index.to_string(),&mut results);
+                            }
+                            // println!("FLATTERN UMP {:#?}", results);
+
+                            // args.insert(0, format!("{results:#?}"));
+
                             exts.push(DataEntity::Extrinsic {
                                 id: (block_header.number, i as u32),
                                 pallet,
@@ -711,7 +745,12 @@ pub async fn watch_blocks(
                                 args,
                                 contains: children,
                                 raw: encoded_extrinsic,
-                                link
+                                link,
+                                details: Details{ 
+                                    hover: WideString("".to_string()), 
+                                    flattern: format!("{results:#?}"),
+                                    url:"".to_string()
+                                }
                             });
                         }
                         // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
