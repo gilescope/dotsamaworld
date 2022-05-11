@@ -2,17 +2,10 @@
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
-// use bevy_egui::EguiContext;
 use bevy_inspector_egui::{Inspectable};
-// use bevy_inspector_egui_derive::*;
-// use bevy_inspector_egui::{Inspectable, InspectorPlugin};
-// use bevy_inspector_egui::prelude::*;
 use bevy_egui::EguiSettings;
-use egui::TextBuffer;
 use bevy_inspector_egui::options::StringAttributes;
-// use egui::style::Spacing;
 use bevy_inspector_egui::Context;
-// use futures::future::WeakShared;
 
 #[derive(Component, Default, Clone)]
 pub struct Details {

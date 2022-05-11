@@ -1,11 +1,8 @@
 #![feature(drain_filter)]
 #![feature(hash_drain_filter)]
-// use std::time::Duration;
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-// use bevy::window::WindowFocused;
-// use bevy_atmosphere::*;
 use bevy_ecs::prelude::Component;
 
 use bevy_flycam::FlyCam;
@@ -13,27 +10,15 @@ use bevy_flycam::MovementSettings;
 use bevy_mod_picking::*;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::num::NonZeroU32;
-// use bevy_hanabi::ParticleEffectBundle;
-// use bevy_hanabi::ShapeDimension;
 use std::sync::Arc;
 use std::sync::Mutex;
-// pub use wasm_bindgen_rayon::init_thread_pool;
-//mod coded;
-// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-// use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy_flycam::NoCameraPlayerPlugin;
-// use bevy_rapier3d::prelude::NoUserData;
-// use bevy_rapier3d::prelude::RapierPhysicsPlugin;
-// use bevy_rapier3d::prelude::*;
-// use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
-// use parity_scale_codec::Decode;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use subxt::RawEventDetails;
 mod content;
-// use bevy_hanabi::HanabiPlugin;
 mod datasource;
 mod movement;
 mod style;
@@ -41,15 +26,11 @@ use sp_core::H256;
 use bevy_inspector_egui::RegisterInspectable;
 use std::convert::AsRef;
 use crate::details::Details;
-// use subxt::{ClientBuilder, DefaultConfig, DefaultExtra};
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
-
-// #[subxt::subxt(runtime_metadata_path = "moonbeam.network.json")]
-// pub mod moonbeam {}
 
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
@@ -963,15 +944,10 @@ pub struct UpdateTimer {
 }
 
 pub fn print_events(
-    mut commands: Commands,
     mut events: EventReader<PickingEvent>,
-    // query: Query<&mut Selection>,
-    mut query2: Query<(Entity, &mut Details)>,
-    // mut query3: Query<(Entity, With<ColorText>)>,
-    asset_server: Res<AssetServer>,
+    mut query2: Query<Entity>,
     mut inspector: ResMut<Inspector>,
 ) {
-    let t = Transform::from_xyz(1., 10., 0.);
     for event in events.iter() {
         match event {
             PickingEvent::Selection(selection) => {
@@ -984,7 +960,7 @@ pub fn print_events(
                     //     commands.entity(entity).despawn();
                     // });
 
-                    let (entity, details) = query2.get_mut(*entity).unwrap();
+                    let entity = query2.get_mut(*entity).unwrap();
             
                     if inspector.active == Some(entity) {
                         print!("deselected current selection");
