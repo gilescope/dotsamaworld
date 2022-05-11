@@ -75,7 +75,6 @@ mod networks;
 use networks::Env;
 
 mod details;
-use crate::details::WideString;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -164,15 +163,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             },
         )
-        .add_system_to_stage(CoreStage::PostUpdate, print_events)
-        
-        // .add_system_to_stage(
-        //     CoreStage::PostUpdate,
-        //     maintain_inspected_entities
-                
-        //         .after(bevy_mod_picking::PickingSystem::Focus),
-        // )
-        ;
+        .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
     for (relay_id, relay) in relays.into_iter().enumerate() {
         for (arc, mut chain_name) in relay {
@@ -237,45 +228,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// fn text(text: String, t: Transform, font: Handle<TextMeshFont>) -> TextMeshBundle {
-//     TextMeshBundle {
-//         // text_mesh: TextMesh::new_with_color(
-//         // format!("Block {}", block.blockhash), font.clone(), Color::rgb(0., 0., 1.)),
-//         text_mesh: TextMesh {
-//             text,
-//             style: TextMeshStyle {
-//                 font: font.clone(),
-//                 font_size: SizeUnit::NonStandard(36.),
-//                 color: Color::hex("e6007a").unwrap(), //Color::rgb(1.0, 1.0, 0.0),
-//                 font_style: FontStyle::UPPERCASE, // only UPPERCASE & LOWERCASE implemented currently
-//                 mesh_quality: Quality::Low,
-//                 ..Default::default()
-//             },
-//             alignment: TextMeshAlignment {
-//                 // vertical: VerticalAlign::Top, // FUNCTIONALITY NOT IMPLEMENTED YET - NO EFFECT
-//                 // horizontal: HorizontalAlign::Left, // FUNCTIONALITY NOT IMPLEMENTED YET - NO EFFECT
-//                 ..Default::default()
-//             },
-//             size: TextMeshSize {
-//                 width: SizeUnit::NonStandard(700.),      // partially implemented
-//                 height: SizeUnit::NonStandard(50.),      // partially implemented
-//                 depth: Some(SizeUnit::NonStandard(1.0)), // must be > 0 currently, 2d mesh not supported yet
-//                 wrapping: true,                          // partially implemented
-//                 overflow: false,                         // NOT IMPLEMENTED YET
-//                 ..Default::default()
-//             },
-//             ..Default::default()
-//         },
-
-//         transform: t,
-
-//         // size: TextMeshSize {
-//         //     width: SizeUnit::NonStandard(135.),
-//         //     ..Default::default()
-//         // },
-//         ..Default::default()
-//     }
-// }
 // use bevy_hanabi::AccelModifier;
 // use bevy_hanabi::ColorOverLifetimeModifier;
 // use bevy_hanabi::EffectAsset;
@@ -809,7 +761,7 @@ fn add_blocks<'a>(
 
                 bun.insert_bundle(PickableBundle::default())
                     .insert(Details {
-                        hover: WideString(format_entity(&chain_info.chain_name, block)),
+                        hover: format_entity(&chain_info.chain_name, block),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
                         flattern: block.details().flattern.clone(),
                         url: format!(
@@ -833,7 +785,7 @@ fn add_blocks<'a>(
 
         for event in events {
             let details = Details {
-                hover: WideString(format!("{:#?}", event)),
+                hover: format!("{:#?}", event),
                 flattern: String::new(),
                 url: format!(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
@@ -916,9 +868,9 @@ pub struct Rainable {
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
 
-// A unit struct to help identify the color-changing Text component
-#[derive(Component)]
-pub struct ColorText;
+// // A unit struct to help identify the color-changing Text component
+// #[derive(Component)]
+// pub struct ColorText;
 
 // #[derive(]
 // struct Data {
@@ -1015,7 +967,7 @@ pub fn print_events(
     mut events: EventReader<PickingEvent>,
     // query: Query<&mut Selection>,
     mut query2: Query<(Entity, &mut Details)>,
-    mut query3: Query<(Entity, With<ColorText>)>,
+    // mut query3: Query<(Entity, With<ColorText>)>,
     asset_server: Res<AssetServer>,
     mut inspector: ResMut<Inspector>,
 ) {
@@ -1028,9 +980,9 @@ pub fn print_events(
                   
 
                     // Unspawn the previous text:
-                    query3.for_each_mut(|(entity, _)| {
-                        commands.entity(entity).despawn();
-                    });
+                    // query3.for_each_mut(|(entity, _)| {
+                    //     commands.entity(entity).despawn();
+                    // });
 
                     let (entity, details) = query2.get_mut(*entity).unwrap();
             
@@ -1040,174 +992,16 @@ pub fn print_events(
 
                     } else {
                         inspector.active = Some(entity);
-                        print!("selected current entity");
-                        commands
-                        .spawn_bundle(TextBundle {
-                            style: Style {
-                                // align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
-                                ..Default::default()
-                            },
-                            text: Text::with_section(
-                                details.hover.as_str(),
-                                TextStyle {
-                                    font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
-                                    font_size: 60.0,
-                                    color: Color::WHITE,
-                                },
-                                TextAlignment {
-                                    vertical: bevy::prelude::VerticalAlign::Top,
-                                    horizontal: bevy::prelude::HorizontalAlign::Left,
-                                },
-                            ),
-                            transform: t,
-                            ..Default::default()
-                        })
-                        .insert(ColorText);
                     }
 
-
-
-
-
-
-
-
-
-                    // let pallet: &str = &details.raw.pallet;
-                    // let variant: &str = &details.raw.variant;
-
-                    // println!("hover={}", &details.hover);
-                    // decode_ex!(value, details, balances::events::Deposit);
-                    // decode_ex!(value, details, balances::events::Transfer);
-                    // decode_ex!(value, details, balances::events::Withdraw);
-                    // decode_ex!(value, details, para_inclusion::events::CandidateIncluded);
-                    // decode_ex!(value, details, para_inclusion::events::CandidateBacked);
-                    // decode_ex!(value, details, treasury::events::Deposit);
-                    // decode_ex!(value, details, system::events::ExtrinsicSuccess);
-                    // decode_ex!(value, details, system::events::ExtrinsicFailed);
-                    // decode_ex!(value, details, ump::events::ExecutedUpward);
-                    // decode_ex!(value, details, ump::events::UpwardMessagesReceived);
-                    // decode_ex!(value, details, paras::events::CurrentCodeUpdated);
-
-                    // use desub_current::{decoder, Metadata};
-                    // use frame_metadata::PalletEventMetadata;
-                    // use frame_metadata::{RuntimeMetadata, RuntimeMetadataPrefixed};
-                    // let metadata_bytes = std::fs::read(
-                    //     "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale",
-                    // )
-                    // .unwrap();
-                    // use core::slice::SlicePattern;
-                    // use scale_info::form::PortableForm;
-                    // let meta: RuntimeMetadataPrefixed =
-                    //     Decode::decode(&mut metadata_bytes.as_slice()).unwrap();
-                    // //  match meta
-
-                    // let metad = Metadata::from_bytes(&metadata_bytes).unwrap();
-                    // // println!("hohoho Extrinsic version: {}", metad.extrinsic().version());
-                    // if let RuntimeMetadata::V14(m) = meta.1 {
-                    // serde_json::to_value(registry).unwrap()
-
-                    // for e_meta in m.pallets {
-                    // println!("pallet name {:?}", e_meta.name);
-                    // use scale_info::Type;
-                    // println!("{:?}", e_meta.event);
-                    // if let Some(events) = e_meta.event {
-                    // let type_id = events.ty;
-
-                    // let registry = &m.types;
-                    // let type_info: &Type<PortableForm> =
-                    //     registry.resolve(type_id.id()).unwrap();
-                    // type_info.type_info();
-                    // use serde::{Deserialize, Serialize};
-                    //let port = type_info.into_portable();
-
-                    //let decoded = <&Type<PortableForm> as Decode>::decode( &mut details.raw.data.as_slice());
-                    // self.variant
-                    // let v = desub_current::Value<()>::deserialize(serde_bytes::ByteBuf::from(details.raw.data.as_slice()));
-
-                    // if let Ok(val) = desub_current::decoder::decode_value_by_id(
-                    //     &metad,
-                    //     type_id,
-                    //     &mut details.raw.data.as_slice(),
-                    // ) {
-                    //     println!(
-                    //         "We gooooooooooooooooooooooooooooooooot one!!!! {:?}",
-                    //         val
-                    //     );
-                    // }
-
-                    // type_info::<PortableForm>::decode(&mut details.raw.data.as_slice());
-                    // match type_info.type_def() {
-                    //     scale_info::TypeDef::Variant(v) => {
-                    //         for variant in v.variants() {
-                    //             println!("- {:?}: {}", variant.index(), variant.name());
-                    //             // variant.decode(&mut details.raw.data.as_slice());
-
-                    //             <&scale_info::Variant<PortableForm> as Decode>::decode(
-                    //                 // &variant,
-                    //                 &mut details.raw.data.as_slice(),
-                    //             );
-                    //         }
-                    //     }
-                    //     o => panic!("Unsupported variant: {:?}", o),
-                    // }
-                    // <PalletEventMetadata<_> as Decode>::decode(
-                    //     &mut details.raw.data.as_slice(),
-                    // );
-                    // for ev in events.iter() {
-                    // events.ty.decode(&mut details.raw.data.as_slice());
-                    // println!("event {events:?}");
-                    // }
-                    // }
-                    // println!("{:?}", e_meta.calls);
-
-                    // if let Ok(maybe) = e_meta.decode(details.raw.data) {
-                    //     println!("{maybe:?}");
-                    // };
-                    // }
-                    // };
-
-                    // let decoded = meta.decode_one_event(details.raw.data);
-
-                    // let decoded = match decoder::decode_extrinsic(&meta, &mut &*details.raw.data) {
-                    //     Ok(decoded) => decoded,
-                    //     Err(e) => {
-                    //         panic!("Cannot decode extrinsic: {}", e);
-                    //     }
-                    // };
-
-                    // println!("wooq {:?}", decoded);
-
-                    // let meta: Metadata = Metadata::new(meta.as_slice()).unwrap();
-                    // println!("{}", meta.pretty());
-
-                    // decode_ex!(value, details, polkadotxcm::events::Attempt);
-                    // decode_ex!(
-                    //     value,
-                    //     details,
-                    //     parachain_system::events::DownwardMessagesReceived
-                    // );
-                    // decode_ex!(value, details, dmpqueue::events::ExecutedDownward);
-
-                    // decode_ex!(value, details, );
-                    //  decode_ex!(value, details, );
-                    //   decode_ex!(value, details, );
-                    // match (pallet, variant) {
-                    //
-                    //     _ => {}
-                    // }
-
-                    info!("{}", details.hover.as_str());
+                    // info!("{}", details.hover.as_str());
                     // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
-
-                   
                 }
             }
             PickingEvent::Hover(_e) => {
                 // info!("Egads! A hover event!? {:?}", e)
             }
             PickingEvent::Clicked(_e) => {
-
                 // info!("Gee Willikers, it's a click! {:?}", e)
             }
         }
@@ -1290,31 +1084,6 @@ fn setup(
         }
     }
 
-    commands.spawn_bundle(UiCameraBundle::default());
-
-    // let mut t = Transform::from_xyz(0., 0., 0.);
-    // t.rotate(Quat::from_rotation_x(-90.));
-
-    // commands.spawn_bundle(TextBundle {
-    //     style: Style {
-    //         align_self: AlignSelf::Center, // Without this the text would be on the bottom left corner
-    //         ..Default::default()
-    //     },
-    //     text: Text::with_section(
-    //         "hello world!".to_string(),
-    //         TextStyle {
-    //             font: asset_server.load("fonts/Audiowide-Mono-Latest.ttf"),
-    //             font_size: 60.0,
-    //             color: Color::WHITE,
-    //         },
-    //         TextAlignment {
-    //             vertical: bevy::prelude::VerticalAlign::Center,
-    //             horizontal: bevy::prelude::HorizontalAlign::Center,
-    //         },
-    //     ),
-    //     // transform: t,
-    //     ..Default::default()
-    // });
 
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
@@ -1341,86 +1110,6 @@ fn setup(
         })
         .insert(FlyCam);
 
-    // commands.spawn_bundle(TextBundle {
-    //     style: Style {
-    //         align_self: AlignSelf::FlexEnd,
-    //         position_type: PositionType::Absolute,
-    //         position: Rect {
-    //             bottom: Val::Px(5.0),
-    //             right: Val::Px(15.0),
-    //             ..default()
-    //         },
-    //         ..default()
-    //     },
-    //     // Use the `Text::with_section` constructor
-    //     text: Text::with_section(
-    //         // Accepts a `String` or any type that converts into a `String`, such as `&str`
-    //         "hello\nbevy!",
-    //         TextStyle {
-    //             font: asset_server.load("/home/gilescope/fonts/Audiowide-Mono-Latest.ttf"),
-    //             font_size: 100.0,
-    //             color: Color::BLACK,
-    //         },
-    //         // Note: You can use `Default::default()` in place of the `TextAlignment`
-    //         TextAlignment {
-    //                             horizontal: HorizontalAlign::Center,
-    //             ..default()
-    //         },
-    //     ),
-    //     ..default()
-    // });
-
-    // cube
-    // commands.spawn_bundle(PbrBundle {
-    //     mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-    //     material: materials.add(
-    //         //    Color::hex("e6007a").unwrap().into()
-    //         StandardMaterial {
-    //             base_color: Color::rgba(0.2, 0.3, 0.5, 0.7),
-    //             // vary key PBR parameters on a grid of spheres to show the effect
-    //             alpha_mode: AlphaMode::Blend,
-    //             metallic: 0.2,
-    //             perceptual_roughness: 0.2,
-    //             ..default()
-    //         },
-    //     ),
-
-    //     transform: Transform::from_translation(Vec3::new(0.0, 0.5, 0.0)),
-    //     ..Default::default()
-    // });
-
-    // commands.spawn_bundle(PbrBundle {
-    //     mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //         radius: 0.45,
-    //         subdivisions: 32,
-    //     })),
-    //     material: materials.add(StandardMaterial {
-    //         base_color: Color::hex("e6007a").unwrap().into(),
-    //         // vary key PBR parameters on a grid of spheres to show the effect
-    //         metallic: 0.2,
-    //         perceptual_roughness: 0.2,
-    //         ..default()
-    //     }),
-    //     transform: Transform::from_xyz(0.3, 1.5, 0.0),
-    //     ..default()
-    // });
-
-    // commands.spawn_bundle(PbrBundle {
-    //     mesh: meshes.add(Mesh::from(shape::UVSphere {
-    //         sectors: 128,
-    //         stacks: 64,
-    //         ..default()
-    //     })),
-    //     material: materials.add(StandardMaterial {
-    //         base_color: Color::hex("e6007a").unwrap(),
-    //         // vary key PBR parameters on a grid of spheres to show the effect
-    //         metallic: 0.2,
-    //         perceptual_roughness: 0.2,
-    //         ..default()
-    //     }),
-    //     transform: Transform::from_xyz(2.3, -2.5, 1.0),
-    //     ..default()
-    // });
 
     use std::time::Duration;
     commands.insert_resource(UpdateTimer {
@@ -1449,62 +1138,6 @@ pub struct Inspector {
     #[inspectable(deletable = false)]
     active: Option<Entity>,
 }
-
-// fn maintain_inspected_entities(
-//     mut inspector: ResMut<Inspector>,
-//     query: Query<(Entity, &Interaction), Changed<Interaction>>,
-// ) {
-//     let entity = query
-//         .iter()
-//         .filter(|(_, interaction)| matches!(interaction, Interaction::Clicked))
-//         .map(|(entity, _)| entity)
-//         .next();
-
-//     if let Some(entity) = entity {
-//         if inspector.active == Some(entity) {
-//             inspector.active = None;
-//         } else {
-//             inspector.active = Some(entity);
-//         }
-//     }
-// }
-
-// pub struct UiPlugin;
-
-// impl Plugin for UiPlugin {
-//     fn build(&self, app: &mut App) {
-//         app
-//             //.init_resource::<TrackInputState>()
-//             .add_system(capture_mouse_on_click);
-//     }
-// }
-
-// // #[derive(Default)]
-// // struct TrackInputState<'a> {
-// //     mousebtn: EventReader<'a, 'a, MouseButtonInput>,
-// // }
-
-// fn capture_mouse_on_click(
-//     mouse: Res<Input<MouseButton>>,
-//     //    mut state: ResMut<'a, TrackInputState>,
-//     //  ev_mousebtn: Res<Events<MouseButtonInput>>,
-//     //key: Res<Input<KeyCode>>,
-// ) {
-//     if mouse.just_pressed(MouseButton::Left) {
-//         #[cfg(target_arch = "wasm32")]
-//         html_body::get().request_pointer_lock();
-//         // window.set_cursor_visibility(false);
-//         // window.set_cursor_lock_mode(true);
-//     }
-//     // if key.just_pressed(KeyCode::Escape) {
-//     //     //window.set_cursor_visibility(true);
-//     //     //window.set_cursor_lock_mode(false);
-//     // }
-//     // for _ev in state.mousebtn.iter(&ev_mousebtn) {
-//     //     html_body::get().request_pointer_lock();
-//     //     break;
-//     // }
-// }
 
 // #[cfg(target_arch = "wasm32")]
 // pub mod html_body {

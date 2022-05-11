@@ -11,17 +11,13 @@ use bevy_egui::EguiSettings;
 use egui::TextBuffer;
 use bevy_inspector_egui::options::StringAttributes;
 // use egui::style::Spacing;
-#[derive(Clone, Debug, Default)]
-pub struct WideStringAttributes {
-    pub multiline: bool,
-}
 use bevy_inspector_egui::Context;
 // use futures::future::WeakShared;
 
 #[derive(Component, Default, Clone)]
 pub struct Details {
     // #[inspectable(label = "Hover", multiline = true)]
-    pub hover: WideString,
+    pub hover: String,
     pub flattern: String,
     // pub flattened: String,
     // data: DataEntity,
@@ -41,10 +37,10 @@ impl Inspectable for Details {
         let mut changed = false;
         ui.vertical_centered(|ui| {
             Grid::new(context.id())
-            .min_col_width(500.)
+            .min_col_width(400.)
             .show(ui, |ui| {
                 // ui.label("Details");
-                changed |= self.hover.ui(ui, WideStringAttributes{multiline:true}, context);
+                changed |= self.hover.ui(ui, StringAttributes{multiline:true}, context);
                 ui.end_row();
                 changed |= self.flattern.ui(ui, StringAttributes{multiline:true}, context);
                 ui.end_row();
@@ -67,41 +63,6 @@ impl Inspectable for Details {
 }
 
 
-#[derive(Clone, Default)]
-pub struct WideString(pub String);
-
-impl WideString {
-   pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl AsRef<str> for WideString {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl TextBuffer for WideString {
-    fn is_mutable(&self) -> bool { false }
-    fn insert_text(&mut self, _: &str, _: usize) -> usize { 0 }
-    fn delete_char_range(&mut self, _: std::ops::Range<usize>) { }
-}
-
-impl Inspectable for WideString {
-    type Attributes = WideStringAttributes;
-
-    fn ui(&mut self, ui: &mut egui::Ui, options: Self::Attributes, _: &mut Context) -> bool {
-        let widget = match options.multiline {
-            false => egui::widgets::TextEdit::singleline(self),
-            true => egui::widgets::TextEdit::multiline(self),
-        };
-        let widget = widget.desired_width(f32::INFINITY);
-        // egui::widgets::TextEdit::desired_width(widget, 1000.);
-        // PERF: this is changed if text if highlighted
-        ui.add(widget).changed()
-    }
-}
 
 pub fn configure_visuals(
     // egui_ctx: ResMut<EguiContext>,   

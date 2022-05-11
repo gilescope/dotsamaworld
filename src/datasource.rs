@@ -23,7 +23,6 @@ use desub_current::value::*;
 use desub_current::ValueDef;
 use lazy_static::lazy_static;
 use std::convert::TryFrom;
-use crate::WideString;
 use std::num::NonZeroU32;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
@@ -173,7 +172,7 @@ fn flattern<T>(
             results.insert(location.to_string(), val.to_string());
         }
         desub_current::ValueDef::Primitive(..) => {
-            println!("primitiv skipped");
+            // println!("primitiv skipped");
         }
         desub_current::ValueDef::Variant(Variant { name, values }) => match values {
             Composite::Named(fields) => {
@@ -747,7 +746,7 @@ pub async fn watch_blocks(
                                 raw: encoded_extrinsic,
                                 link,
                                 details: Details{ 
-                                    hover: WideString("".to_string()), 
+                                    hover: "".to_string(),
                                     flattern: format!("{results:#?}"),
                                     url:"".to_string()
                                 }
