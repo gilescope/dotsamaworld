@@ -1,61 +1,27 @@
 use super::polkadot;
+use crate::polkadot::runtime_types::xcm::VersionedXcm;
 use crate::ABlocks;
 use crate::DataEntity;
+use crate::Details;
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
 use bevy::prelude::warn;
+use desub_current::value::*;
+use desub_current::ValueDef;
 use desub_current::{decoder, Metadata};
-// use frame_metadata::RuntimeMetadataPrefixed;
+use lazy_static::lazy_static;
 use parity_scale_codec::Decode;
 use parity_scale_codec::Encode;
 use sp_core::H256;
 use std::collections::hash_map::DefaultHasher;
-// use std::collections::hash_map::Entry;
-use std::hash::Hash;
-// use subxt::rpc::Subscription;
-// use subxt::sp_runtime::generic::Header;
-// use subxt::sp_runtime::traits::BlakeTwo256;
-// use subxt::sp_runtime::Deserialize;
-use subxt::ClientBuilder;
-// use subxt::Config;
-use crate::polkadot::runtime_types::xcm::VersionedXcm;
-use desub_current::value::*;
-use desub_current::ValueDef;
-use lazy_static::lazy_static;
 use std::convert::TryFrom;
+use std::hash::Hash;
 use std::num::NonZeroU32;
+use subxt::rpc::ClientT;
+use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
 use subxt::RawEventDetails;
-use crate::Details;
-// #[derive(Clone, Debug, Default, Eq, PartialEq)]
-// pub struct MyConfig;
-// impl Config for MyConfig {
-//     // This is different from the default `u32`.
-//     //
-//     // *Note* that in this example it does differ from the actual `Index` type in the
-//     // polkadot runtime used, so some operations will fail. Normally when using a custom `Config`
-//     // impl types MUST match exactly those used in the actual runtime.
-//     type Index = u64;
-//     type BlockNumber = <DefaultConfig as Config>::BlockNumber;
-//     type Hash = <DefaultConfig as Config>::Hash;
-//     type Hashing = <DefaultConfig as Config>::Hashing;
-//     type AccountId = <DefaultConfig as Config>::AccountId;
-//     type Address = <DefaultConfig as Config>::Address;
-//     type Header = <DefaultConfig as Config>::Header;
-//     type Signature = <DefaultConfig as Config>::Signature;
-//     type Extrinsic = ExtrinsicVec;//<DefaultConfig as Config>::Extrinsic;
-// }
-
-// #[derive(PartialEq, Eq, Clone, Default, Encode, Decode, Debug, serde::Serialize, Deserialize)]
-// pub struct ExtrinsicVec(pub Vec<u8>);
-
-// impl subxt::sp_runtime::traits::Extrinsic for ExtrinsicVec {
-
-// }
-// use std::path::Path;
-// use std::time::Duration;
-use subxt::rpc::ClientT;
 
 #[derive(Decode)]
 pub struct ExtrinsicVec(pub Vec<u8>);
@@ -745,7 +711,7 @@ pub async fn watch_blocks(
                                 contains: children,
                                 raw: encoded_extrinsic,
                                 link,
-                                details: Details{ 
+                                details: Details{
                                     hover: "".to_string(),
                                     flattern: format!("{results:#?}"),
                                     url:"".to_string()

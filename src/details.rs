@@ -2,18 +2,15 @@
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
-use bevy_inspector_egui::{Inspectable};
 use bevy_egui::EguiSettings;
 use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
+use bevy_inspector_egui::Inspectable;
 
 #[derive(Component, Default, Clone)]
 pub struct Details {
-    // #[inspectable(label = "Hover", multiline = true)]
     pub hover: String,
     pub flattern: String,
-    // pub flattened: String,
-    // data: DataEntity,
     // #[inspectable(label = "Url:")]
     pub url: String,
 }
@@ -29,13 +26,15 @@ impl Inspectable for Details {
     ) -> bool {
         let mut changed = false;
         ui.vertical_centered(|ui| {
-            Grid::new(context.id())
-            .min_col_width(400.)
-            .show(ui, |ui| {
+            Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
                 // ui.label("Details");
-                changed |= self.hover.ui(ui, StringAttributes{multiline:true}, context);
+                changed |= self
+                    .hover
+                    .ui(ui, StringAttributes { multiline: true }, context);
                 ui.end_row();
-                changed |= self.flattern.ui(ui, StringAttributes{multiline:true}, context);
+                changed |= self
+                    .flattern
+                    .ui(ui, StringAttributes { multiline: true }, context);
                 ui.end_row();
                 // ui.label("Rotation");
                 // changed |= self.rotation.ui(ui, Default::default(), context);
@@ -55,13 +54,10 @@ impl Inspectable for Details {
     }
 }
 
-
-
 pub fn configure_visuals(
-    // egui_ctx: ResMut<EguiContext>,   
-     mut egui_settings: ResMut<EguiSettings>
-    //  ,windows: Res<Windows>
-    ) {
+    // egui_ctx: ResMut<EguiContext>,
+    mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
+) {
     // egui_ctx.ctx_mut().set_visuals(egui::Visuals {
     //     window_rounding: 0.0.into(),
     //     // scale:1.2,
@@ -80,8 +76,8 @@ pub fn configure_visuals(
     //         ..default()
     //     }
     // );
-//  .desired_width(f32::INFINITY)
-    // if let Some(window) = windows.get_primary().is_some() 
+    //  .desired_width(f32::INFINITY)
+    // if let Some(window) = windows.get_primary().is_some()
     {
         egui_settings.scale_factor = 1.5;
     }
