@@ -5,14 +5,8 @@ use subxt::Phase;
 /// For the relay chain including parachain blocks is useful work.
 pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
     match event {
-        &DataEntity::Extrinsic {
-            ref pallet,
-            ref variant,
-            ..
-        } => {
-            let pallet: &str = pallet.as_str();
-            let variant: &str = variant.as_str();
-            return is_boring(pallet, variant);
+        &DataEntity::Extrinsic { ref details, .. } => {
+            return is_boring(details.pallet.as_str(), details.variant.as_str());
         }
         &DataEntity::Event { ref raw, .. } => {
             !matches!(raw.phase, Phase::ApplyExtrinsic(_)) || is_boring(&raw.pallet, &raw.variant)

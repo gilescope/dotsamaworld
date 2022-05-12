@@ -253,6 +253,6 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "basilisk-rpc.dwellir.com",
                 ],
             ]
-        }
+        } // TODO; networks with ink: astar, shiden, phala, peeq, aleph zero
     }
 }

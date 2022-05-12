@@ -9,6 +9,8 @@ use bevy_inspector_egui::Inspectable;
 
 #[derive(Component, Default, Clone)]
 pub struct Details {
+    pub pallet: String,
+    pub variant: String,
     pub hover: String,
     pub flattern: String,
     // #[inspectable(label = "Url:")]
@@ -27,7 +29,17 @@ impl Inspectable for Details {
         let mut changed = false;
         ui.vertical_centered(|ui| {
             Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
-                // ui.label("Details");
+                // ui.label("Pallet");
+                changed |= self
+                    .pallet
+                    .ui(ui, StringAttributes { multiline: false }, context);
+                ui.end_row();
+                // ui.label("Method");
+                changed |= self
+                    .variant
+                    .ui(ui, StringAttributes { multiline: false }, context);
+                ui.end_row();
+
                 changed |= self
                     .hover
                     .ui(ui, StringAttributes { multiline: true }, context);

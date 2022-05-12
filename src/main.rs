@@ -262,10 +262,9 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
         }
         DataEntity::Extrinsic {
             id: _,
-            pallet,
-            variant,
             args,
             contains,
+            details,
             ..
         } => {
             let kids = if contains.is_empty() {
@@ -275,7 +274,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
             };
             format!(
                 "{}\n{} {} {}\n{:#?}",
-                chain_name, pallet, variant, kids, args
+                chain_name, details.pallet, details.variant, kids, args
             )
         }
     };
@@ -295,8 +294,8 @@ pub enum DataEntity {
     },
     Extrinsic {
         id: (u32, u32),
-        pallet: String,
-        variant: String,
+        // pallet: String,
+        // variant: String,
         args: Vec<String>,
         contains: Vec<DataEntity>,
         raw: Vec<u8>,
@@ -326,13 +325,13 @@ impl DataEntity {
     pub fn pallet(&self) -> &str {
         match self {
             Self::Event { raw, .. } => raw.pallet.as_ref(),
-            Self::Extrinsic { pallet, .. } => pallet,
+            Self::Extrinsic { details, .. } => &details.pallet,
         }
     }
     pub fn variant(&self) -> &str {
         match self {
             Self::Event { raw, .. } => raw.variant.as_ref(),
-            Self::Extrinsic { variant, .. } => variant,
+            Self::Extrinsic { details, .. } => &details.variant,
         }
     }
 
@@ -736,6 +735,8 @@ fn add_blocks<'a>(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
                             &encoded, &call_data
                         ),
+                        pallet: block.pallet().to_string(),
+                        variant: block.variant().to_string(),
                     })
                     .insert(Rainable {
                         dest: target_y * build_direction,
@@ -759,6 +760,8 @@ fn add_blocks<'a>(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
                     &encoded, &hex_block_hash
                 ),
+                pallet: event.pallet.to_string(),
+                variant: event.variant.to_string(),
             };
             let entity = DataEntity::Event {
                 raw: (*event).clone(),

@@ -68,13 +68,11 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
         //         color: Color::hex("000000").unwrap(),
         //     },
         // }
-        DataEntity::Extrinsic {
-            pallet, variant, ..
-        } => {
+        DataEntity::Extrinsic { details, .. } => {
             let color = palette::Lchuv::new(
                 80.,
-                80. + (calculate_hash(&variant) as f32 % 100.),
-                (calculate_hash(&pallet) as f32) % 360.,
+                80. + (calculate_hash(&details.variant) as f32 % 100.),
+                (calculate_hash(&details.pallet) as f32) % 360.,
             );
             let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
 

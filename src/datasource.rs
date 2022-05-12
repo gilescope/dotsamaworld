@@ -6,6 +6,7 @@ use crate::Details;
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
 use bevy::prelude::warn;
+use core::slice::SlicePattern;
 use desub_current::value::*;
 use desub_current::ValueDef;
 use desub_current::{decoder, Metadata};
@@ -21,6 +22,7 @@ use subxt::rpc::ClientT;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
+use subxt::EventDetails;
 use subxt::RawEventDetails;
 
 #[derive(Decode)]
@@ -470,15 +472,15 @@ pub async fn watch_blocks(
                             */
 
                             // Seek out and expand Ump / UpwardMessageRecieved;
-                            if pallet == "ParaInherent" && variant == "enter" {
-                                let mut results = HashMap::new();
-                                flattern(&ext.call_data.arguments[0].value, "",&mut results);
-                                let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
-                                let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
-                                let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
+                            // if pallet == "ParaInherent" && variant == "enter" {
+                            //     let mut results = HashMap::new();
+                            //     flattern(&ext.call_data.arguments[0].value, "",&mut results);
+                            //     let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
+                            //     let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
+                            //     let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
 
-                                println!("FLATTERN UMP {:#?}", results);
-                            }
+                            //     println!("FLATTERN UMP {:#?}", results);
+                            // }
                             // Seek out and expand Dmp / DownwardMessageRecieved;
                             if pallet == "ParachainSystem" && variant == "set_validation_data" {
                                 match &ext.call_data.arguments[0].value
@@ -486,61 +488,173 @@ pub async fn watch_blocks(
                                     ValueDef::Composite(Composite::Named(named)) =>
                                     {
                                         for (name, val) in named {
-                                            if name == "downward_messages" {
-                                                if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                    for val in vals {
-                                                        let mut results = HashMap::new();
-                                                        flattern(&val.value, "",&mut results);
-                                                        println!("FLATTERN {:#?}", results);
-                                                        // also .sent_at
-                                                        if let Some(msg) = results.get(".msg") {
-                                                            if let Some(sent_at) = results.get(".sent_at") {
-                                                                let bytes = hex::decode(msg).unwrap();
-                                                                if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
-                                                                    match ver_msg {
-                                                                        VersionedXcm::V2(msg) => {
-                                                                            for instruction in &msg.0 {
-                                                                                let instruction = format!("{:?}", instruction);
-                                                                                println!("instruction {:?}", &instruction);
-                                                                                children.push(DataEntity::Extrinsic {
-                                                                                    id: (block_header.number, i as u32),
-                                                                                    pallet: "Instruction".to_string(),
-                                                                                    variant: instruction.split_once(' ').unwrap().0.to_string(),
-                                                                                    args: vec![instruction],
-                                                                                    contains: vec![],
-                                                                                    raw: vec![], //TODO: should be simples
-                                                                                    link: None,
-                                                                                    details: Details::default()
-                                                                                });
+                                            match name.as_str() {
+                                                "horizontal_messages" => {
+                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                        
+                                                        for val in vals {
+                                                            // channels
+                                                            if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                for val in vals {
+                                                                    // single channel
+                                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                        for val in vals {
+                                                                            // Should be a msg
+                                                                            for val in vals {
+                                                                                //msgs
+                                                                                if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                                    if vals.len() > 0 {
+                                                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &vals[0].value {
+                                                                                        // messages
+                                                                                      
+                                                                                    } 
+
+
+                                                                                    for m in vals {
+                                                                                        if let ValueDef::Primitive(Primitive::U32(from_para_id))= &m.value {
+                                                                                            // println!("from {}", from_para_id);
+                                                                                        }
+
+                                                                                        if vals.len() > 1 {
+                                                                                            let mut results = HashMap::new();
+                                                                                            flattern(&val.value, "",&mut results);
+                                                                                            println!("INNER {:#?}", results);
+                                                                                            //Could be that these are not yet in the wild 
+                                                                                            std::process::exit(1);       
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                                    
+                                                                                    // print_val();
+            
+                                                                                }
                                                                             }
-                                                                            for inst in msg.0 {
-                                                                                //TODO: should only be importing from one version probably.
-                                                                                use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
-                                                                                if let DepositAsset{beneficiary, ..} = inst {
-                                                                                    let MultiLocation{ interior, .. } = &beneficiary;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }, 
+                                                "downward_messages" => {
+                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                        for val in vals {
+                                                            let mut results = HashMap::new();
+                                                            flattern(&val.value, "",&mut results);
+                                                            println!("FLATTERN {:#?}", results);
+                                                            // also .sent_at
+                                                            if let Some(msg) = results.get(".msg") {
+                                                                if let Some(sent_at) = results.get(".sent_at") {
+                                                                    let bytes = hex::decode(msg).unwrap();
+                                                                    if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
+                                                                        match ver_msg {
+                                                                            VersionedXcm::V0(msg) => {                                                                            
+                                                                                // Only one xcm instruction in a v1 message. 
+                                                                                    let instruction = format!("{:?}", &msg);
+                                                                                    println!("instruction {:?}", &instruction);
+                                                                                    children.push(DataEntity::Extrinsic {
+                                                                                        id: (block_header.number, i as u32),
+                                                                                    
+                                                                                        args: vec![instruction.clone()],
+                                                                                        contains: vec![],
+                                                                                        raw: vec![], //TODO: should be simples
+                                                                                        link: None,
+                                                                                        details: Details{  pallet: "Instruction".to_string(),
+                                                                                        variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
+                                                                                    });
+                                                                                let inst = msg;
+                                                                                use crate::polkadot::runtime_types::xcm::v0::Xcm::TransferReserveAsset;
+                                                                                use crate::polkadot::runtime_types::xcm::v0::multi_location::MultiLocation;
+                                                                                use crate::polkadot::runtime_types::xcm::v0::junction::Junction;
+                                                                                if let TransferReserveAsset{dest, ..} = inst {
+                                                                                    if let MultiLocation::X1(x1) = &dest {
                                                                                     //todo assert parent
-                                                                                    if let Junctions::X1(x1) = interior {
                                                                                         if let Junction::AccountId32 {id, ..} = x1 {
                                                                                             let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
-                                                                                            println!("RECIEVE HASH {}", msg_id);
+                                                                                            println!("RECIEVE HASH v0 {}", msg_id);
                                                                                             link = Some(msg_id);
                                                                                         };
                                                                                     } else { panic!("unknonwn") }                                                                                }
                                                                             }
+                                                                            VersionedXcm::V1(msg) => {                                                                            
+                                                                                // Only one xcm instruction in a v1 message. 
+                                                                                    let instruction = format!("{:?}", &msg);
+                                                                                    println!("instruction {:?}", &instruction);
+                                                                                    children.push(DataEntity::Extrinsic {
+                                                                                        id: (block_header.number, i as u32),
+                                                                                    
+                                                                                        args: vec![instruction.clone()],
+                                                                                        contains: vec![],
+                                                                                        raw: vec![], //TODO: should be simples
+                                                                                        link: None,
+                                                                                        details: Details{  pallet: "Instruction".to_string(),
+                                                                                        variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
+                                                                                    });
+                                                                                let inst = msg;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::Xcm::TransferReserveAsset;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
+                                                                                use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
+                                                                                if let TransferReserveAsset{dest, ..} = inst {
+                                                                                    let MultiLocation{ interior, .. } = &dest;
+                                                                                    //todo assert parent
+                                                                                    if let Junctions::X1(x1) = interior {
+                                                                                        if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                            let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                            println!("RECIEVE HASH v1 {}", msg_id);
+                                                                                            link = Some(msg_id);
+                                                                                        };
+                                                                                    } else { panic!("unknonwn") }                                                                                }
+                                                                            }
+                                                                            VersionedXcm::V2(msg) => {
+                                                                                for instruction in &msg.0 {
+                                                                                    let instruction = format!("{:?}", instruction);
+                                                                                    println!("instruction {:?}", &instruction);
+                                                                                    children.push(DataEntity::Extrinsic {
+                                                                                        id: (block_header.number, i as u32),
+                                                                                    
+                                                                                        args: vec![instruction.clone()],
+                                                                                        contains: vec![],
+                                                                                        raw: vec![], //TODO: should be simples
+                                                                                        link: None,
+                                                                                        details: Details
+                                                                                        {  
+                                                                                            pallet: "Instruction".to_string(),
+                                                                                            variant: instruction.split_once(' ').unwrap_or((&instruction,"")).0.to_string(), 
+                                                                                            ..Details::default() 
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                                for inst in msg.0 {
+                                                                                    //TODO: should only be importing from one version probably.
+                                                                                    use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
+                                                                                    use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
+                                                                                    use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
+                                                                                    use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
+                                                                                    if let DepositAsset{beneficiary, ..} = inst {
+                                                                                        let MultiLocation{ interior, .. } = &beneficiary;
+                                                                                        //todo assert parent
+                                                                                        if let Junctions::X1(x1) = interior {
+                                                                                            if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                                let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                                println!("RECIEVE HASH v2 {}", msg_id);
+                                                                                                link = Some(msg_id);
+                                                                                            };
+                                                                                        } else { panic!("unknonwn") }                                                                                }
+                                                                                }
+                                                                            }
+                                                                            _  => { println!("unknown message version"); }
                                                                         }
-                                                                        _  => { println!("unknown message version"); }
+                                                                    } else {
+                                                                        println!("could not decode msg: {}", msg);
                                                                     }
-                                                                } else {
-                                                                    println!("could not decode msg: {}", msg);
                                                                 }
+                                                                // println!("{:#?}", event);
                                                             }
-                                                            // println!("{:#?}", event);
                                                         }
                                                     }
                                                 }
+                                                _  => {}
                                             }
                                         }
                                     },
@@ -561,6 +675,31 @@ pub async fn watch_blocks(
                                      let mut results = HashMap::new();
                                     flattern(&ext.call_data.arguments[1].value, "",&mut results);
                                     let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
+
+                                    if let Some(to) = to {
+                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                        println!("SEND MSG hash {}", msg_id);
+                                        link = Some(msg_id);
+                                    }
+                                    println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                    // if ext.call_data.arguments.len() > 1 {
+                                    //     let mut results = HashMap::new();
+                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    //     println!("FLATTERN DEST2 {:#?}", results);
+                                    //     println!("ARGS {:?}", ext.call_data.arguments);
+                                    // } else { 
+                                    //     warn!("expected more params...");
+                                    // }
+                                }
+                                if let Some(dest) =  results.get(".V0.0.X1.0.Parachain.0") {    
+                                    println!("first time!");                                
+                                    //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
+                                    let dest: NonZeroU32 = dest.parse().unwrap();
+                                    let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
+                                     let mut results = HashMap::new();
+                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    let to = results.get(".V0.0.X1.0.AccountId32.id");
 
                                     if let Some(to) = to {
                                         let msg_id = format!("{}-{}", block_num, please_hash(to));
@@ -665,13 +804,12 @@ pub async fn watch_blocks(
                                                                     // println!("{pallet} {variant} has inside a {inner_pallet} {name}");
                                                                     children.push(DataEntity::Extrinsic {
                                                                         id: (block_header.number, i as u32),
-                                                                        pallet: inner_pallet.to_string(),
-                                                                        variant: name.clone(),
                                                                         args: vec![format!("{:?}", values)],
                                                                         contains: vec![],
                                                                         raw: vec![], //TODO: should be simples
                                                                         link: None,
-                                                                        details: Details::default()
+                                                                        details: Details { pallet: inner_pallet.to_string(),
+                                                                            variant: name.clone(), ..Details::default()}
                                                                     });
                                                                 }
                                                                 _ => {
@@ -701,12 +839,11 @@ pub async fn watch_blocks(
                             }
                             // println!("FLATTERN UMP {:#?}", results);
 
+                            
                             // args.insert(0, format!("{results:#?}"));
 
                             exts.push(DataEntity::Extrinsic {
                                 id: (block_header.number, i as u32),
-                                pallet,
-                                variant,
                                 args,
                                 contains: children,
                                 raw: encoded_extrinsic,
@@ -714,7 +851,9 @@ pub async fn watch_blocks(
                                 details: Details{
                                     hover: "".to_string(),
                                     flattern: format!("{results:#?}"),
-                                    url:"".to_string()
+                                    url:"".to_string(),
+                                    pallet,
+                                    variant,
                                 }
                             });
                         }
@@ -770,6 +909,26 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
             let events = events?;
             let blockhash = events.block_hash();
             blocknum += 1;
+
+            for ev in events.iter() {
+                // println!("{:#?}", ev);
+                if let Ok(EventDetails { event, .. }) = ev {
+                    if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
+                        println!("got here rnrtnrtrtnrt");
+                        println!("got here rnrtnrtrtnrt");
+                        println!("got here rnrtnrtrtnrt");
+                        println!("got here rnrtnrtrtnrt");
+                        println!("got here rnrtnrtrtnrt");
+                        println!("{:#?}", event);
+                        msg.as_slice();
+                        if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
+                            println!("decodearama {:#?}!!!!", ver_msg);
+                        } else {
+                            println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
+                        }
+                    }
+                }
+            }
 
             tx.lock().unwrap().0.insert(
                 events.block_hash().to_string(),
@@ -843,5 +1002,11 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn decode_a_ump_message() {
+        let msg = "60ba677909cd50310087509462d25c85010c8ea95d61f2351b42f6b54463f5cf";
+        //TODO
     }
 }
