@@ -26,6 +26,8 @@ use crate::details::Details;
 use bevy_inspector_egui::RegisterInspectable;
 use sp_core::H256;
 use std::convert::AsRef;
+#[cfg(feature="spacemouse")]
+use bevy_spacemouse::{SpaceMouseControllable, SpaceMousePlugin};
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -78,15 +80,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
-         .insert_resource(WinitSettings::desktop_app())
+        //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
         .insert_resource(MovementSettings {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
-        })
+        })        
         .insert_resource(movement::MouseCapture::default())
-        .add_plugin(NoCameraPlayerPlugin)
-        .add_plugins(DefaultPickingPlugins)
-        .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+        .add_plugin(NoCameraPlayerPlugin);
+
+        #[cfg(feature="spacemouse")]
+        app.add_plugin(SpaceMousePlugin);
+
+        app.add_plugins(DefaultPickingPlugins)
+        // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .register_inspectable::<Details>()
         // .add_plugin(DebugEventsPickingPlugin)
@@ -134,7 +140,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             },
         )
-        .add_system_to_stage(CoreStage::PostUpdate, print_events);
+        .add_system_to_stage(CoreStage::PostUpdate, print_events)
+        ;
 
     for (relay_id, relay) in relays.into_iter().enumerate() {
         for (arc, mut chain_name) in relay {
@@ -1059,7 +1066,8 @@ fn setup(
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
     // camera
-    commands
+   
+    let mut entity_comands = commands
         .spawn_bundle(PerspectiveCameraBundle {
             transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             perspective_projection: PerspectiveProjection {
@@ -1075,9 +1083,12 @@ fn setup(
                 ..default()
             },
             ..default()
-        })
-        .insert_bundle(PickingCameraBundle { ..default() })
-        .insert(FlyCam);
+        });
+        entity_comands.insert(FlyCam)       
+        .insert_bundle(PickingCameraBundle { ..default() });
+
+    #[cfg(feature="spacemouse")]
+    entity_comands.insert(SpaceMouseControllable);
 
     use std::time::Duration;
     commands.insert_resource(UpdateTimer {

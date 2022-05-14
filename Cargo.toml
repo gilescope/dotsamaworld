@@ -7,6 +7,11 @@ repository = "https://github.com/gilescope/dotsamatown"
 resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["spacemouse"]
+# 3d mouse support.
+spacemouse = ["bevy_spacemouse"]
+
 [dependencies]
 sp-core = "*"
 
@@ -33,6 +38,7 @@ fastrand = "*"
 bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 #rayon = "*"
+bevy_spacemouse = { path= "/home/gilescope/git/bevy-spacemouse-example", optional = true }
 serde = "*"
 bevy_egui = "*"
 egui = "*"
@@ -93,6 +99,7 @@ opt-level = 1
 
 [profile.release]
 
-[features]
+
+
 # lto = true
 # opt-level = 's'

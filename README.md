@@ -41,10 +41,19 @@ I was using `trunk serve` to run up a wasm version but at the moment I'm using s
 
 ## Build and run native version
 ```
-cargo run
+cargo run --no-default-features
 ```
 
 You will need to change Cargo.toml to wayland if your using that - at the moment it's set to X11.
+
+## Features
+
+Note: spacemouse is on by default at the moment.
+
+| Feature    | Description                       |
+| spacemouse | n-degees of freedom mouse support |
+
+## License
 
 License: MIT/Apache2 just like rust.
 

@@ -74,19 +74,19 @@ pub fn scroll(
     windows: Res<Windows>,
     mut query: Query<(&FlyCam, &mut Camera, &mut PerspectiveProjection)>,
 ) {
-    for event in mouse_wheel_events.iter() {
-        for (_camera, mut camera, mut project) in query.iter_mut() {
-            project.fov = (project.fov - event.y * 0.01).abs();
-            let prim = windows.get_primary().unwrap();
+    // for event in mouse_wheel_events.iter() {
+    //     for (_camera, mut camera, mut project) in query.iter_mut() {
+    //         project.fov = (project.fov - event.y * 0.01).abs();
+    //         let prim = windows.get_primary().unwrap();
 
-            //Calculate projection with new fov
-            project.update(prim.width(), prim.height());
+    //         //Calculate projection with new fov
+    //         project.update(prim.width(), prim.height());
 
-            //Update camera with the new fov
-            camera.projection_matrix = project.get_projection_matrix();
-            camera.depth_calculation = project.depth_calculation();
+    //         //Update camera with the new fov
+    //         camera.projection_matrix = project.get_projection_matrix();
+    //         camera.depth_calculation = project.depth_calculation();
 
-            // println!("FOV: {:?}", project.fov);
-        }
-    }
+    //         // println!("FOV: {:?}", project.fov);
+    //     }
+    // }
 }

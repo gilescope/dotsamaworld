@@ -487,6 +487,7 @@ dependencies = [
  "bevy_flycam",
  "bevy_mod_picking",
  "bevy_polyline",
+ "bevy_spacemouse",
  "bevy_webgl2",
  "desub",
  "desub-current",
@@ -1252,6 +1253,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_spacemouse"
+version = "0.1.0"
+dependencies = [
+ "bevy 0.7.0",
+ "spacenav-plus",
+]
+
+[[package]]
 name = "bevy_sprite"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1777,6 +1786,9 @@ name = "cc"
 version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
+dependencies = [
+ "jobserver",
+]
 
 [[package]]
 name = "cesu8"
@@ -3437,6 +3449,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
+name = "jobserver"
+version = "0.1.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af25a77299a7f711a01975c35a6a424eb6862092cc2d6c72c4ed6cbc56dfc1fa"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "jpeg-decoder"
 version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3664,6 +3685,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
 dependencies = [
  "libsecp256k1-core",
+]
+
+[[package]]
+name = "libspnav-bindings"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fee995babad53c32bdd4480395a8ad1678776956bae5790ff16312ebe8b692c2"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -6007,6 +6039,16 @@ dependencies = [
  "parity-scale-codec",
  "sp-std",
  "wasmi",
+]
+
+[[package]]
+name = "spacenav-plus"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b0427f492d819e98a76d58ddc8d1e6b9e5291b96e5a8f1b1d057add2d4b6ef3"
+dependencies = [
+ "lazy_static",
+ "libspnav-bindings",
 ]
 
 [[package]]
