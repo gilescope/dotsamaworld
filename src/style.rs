@@ -35,7 +35,10 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
     let msg = crate::content::is_message(entry);
     match entry {
         DataEntity::Event { raw, .. } => {
-            if raw.pallet.as_str() == "System" && raw.variant.as_str() == "ExtrinsicFailed" {
+            if matches!((raw.pallet.as_str(), raw.variant.as_str()),
+            ("System","ExtrinsicFailed")
+            // | ("PolkadotXcm", "Attempted") - only an error if !completed variant.
+            ) {
                 return ExStyle {
                     color: Color::rgb(1., 0., 0.),
                 };

@@ -30,6 +30,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                 ],
                 vec![
                     "rococo-rpc.polkadot.io",
+                    "rococo-statemint-rpc.polkadot.io",
                     "rococo-canvas-rpc.polkadot.io",
                     "rococo.api.encointer.org",
                     "rpc-rococo.bajun.network",

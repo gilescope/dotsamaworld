@@ -1040,4 +1040,30 @@ mod tests {
 
         println!("{:?}", result);
     }
+
+    #[test]
+    fn decode_xcm_cant_transact_error(){
+        use crate::polkadot::runtime_types::xcm::v2::traits::Outcome;
+        use crate::polkadot::runtime_types::xcm::v2::traits::Error;
+        let msg = vec![
+            1u8,
+            0,
+            202,
+            154,
+            59,
+            0,
+            0,
+            0,
+            0,
+            9,
+        ];
+        let result =
+        <Outcome as Decode>::decode(&mut msg.as_slice()).unwrap();
+        if let Outcome::Incomplete(_weight, Error::FailedToTransactAsset) = result {
+            // The thing only has a string message locally!!!
+            //(err_msg)
+         //   println!("err msg: {}", err_msg);
+        }
+        println!("{:?}", result);
+    }
 }
