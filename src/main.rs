@@ -2,13 +2,15 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
+use bevy::winit::WinitSettings;
 use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_flycam::NoCameraPlayerPlugin;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+use bevy_inspector_egui::{Inspectable, InspectorPlugin, plugin::InspectorWindows};
 use bevy_mod_picking::*;
+//use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -76,6 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins)
+         .insert_resource(WinitSettings::desktop_app())
         .insert_resource(MovementSettings {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
@@ -299,8 +302,10 @@ pub enum DataEntity {
         args: Vec<String>,
         contains: Vec<DataEntity>,
         raw: Vec<u8>,
-        /// psudo-unique id to link to some other node.
-        link: Option<String>,
+        /// psudo-unique id to link to some other node(s).
+        /// There can be multiple destinations per block! (TODO: need better resolution)
+        /// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
+        link: Vec<String>,
         details: Details,
     },
 }
@@ -349,13 +354,15 @@ impl DataEntity {
         }
     }
 
-    pub fn link(&self) -> Option<&String> {
+    pub fn link(&self) -> &Vec<String> {
         match self {
-            Self::Extrinsic { link, .. } => link.as_ref(),
-            Self::Event { .. } => None,
+            Self::Extrinsic { link, .. } => &link,
+            Self::Event { .. } => &EMPTY_VEC,
         }
     }
 }
+
+static EMPTY_VEC: Vec<String> = vec![];
 
 const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
@@ -658,7 +665,8 @@ fn add_blocks<'a>(
 
                 let mut found = false;
 
-                let create_source = if let Some(link) = block.link() {
+                let mut create_source = vec![];
+                for link in block.link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {
@@ -706,16 +714,12 @@ fn add_blocks<'a>(
                             commands.entity(entity).remove::<MessageSource>();
                         }
                     }
-                    if found {
-                        None
-                    } else {
+                    if !found {
                         println!("inserting source of rainbow!");
-                        Some(MessageSource {
+                        create_source.push(MessageSource {
                             id: link.to_string(),
-                        })
+                        });
                     }
-                } else {
-                    None
                 };
 
                 let mut bun = commands.spawn_bundle(PbrBundle {
@@ -743,7 +747,7 @@ fn add_blocks<'a>(
                     })
                     .insert(Name::new("BlockEvent"));
 
-                if let Some(source) = create_source {
+                for source in create_source {
                     bun.insert(source);
                 }
             }
@@ -937,11 +941,15 @@ pub fn print_events(
     mut events: EventReader<PickingEvent>,
     mut query2: Query<Entity>,
     mut inspector: ResMut<Inspector>,
+  //  mut inspector_windows: Res<InspectorWindows>,
 ) {
     for event in events.iter() {
-        match event {
+        match event {            
             PickingEvent::Selection(selection) => {
                 if let SelectionEvent::JustSelected(entity) = selection {
+                  //  let mut inspector_window_data = inspector_windows.window_data::<Details>();
+    //   let window_size = &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
+                
                     // let selection = query.get_mut(*entity).unwrap();
 
                     // Unspawn the previous text:

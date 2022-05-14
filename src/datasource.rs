@@ -6,7 +6,6 @@ use crate::Details;
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
 use bevy::prelude::warn;
-use core::slice::SlicePattern;
 use desub_current::value::*;
 use desub_current::ValueDef;
 use desub_current::{decoder, Metadata};
@@ -25,7 +24,7 @@ use subxt::DefaultExtra;
 use subxt::EventDetails;
 use subxt::RawEventDetails;
 
-#[derive(Decode)]
+#[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
 #[allow(dead_code)]
@@ -422,7 +421,7 @@ pub async fn watch_blocks(
                         {
                             let pallet = ext.call_data.pallet_name.to_string();
                             let variant = ext.call_data.ty.name().to_owned();
-                            let mut link = None;
+                            let mut link = vec![];
 
                             let mut args: Vec<_> = ext
                                 .call_data
@@ -489,6 +488,10 @@ pub async fn watch_blocks(
                                     {
                                         for (name, val) in named {
                                             match name.as_str() {
+                                                "upward_messages" => {
+                                                    println!("found upward msgs (first time)");
+                                                    print_val(&val.value);
+                                                },
                                                 "horizontal_messages" => {
                                                     if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
                                                         
@@ -500,18 +503,12 @@ pub async fn watch_blocks(
                                                                     if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
                                                                         for val in vals {
                                                                             // Should be a msg
-                                                                            for val in vals {
+                                                                          //  for val in vals {
                                                                                 //msgs
-                                                                                if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                                                    if vals.len() > 0 {
-                                                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &vals[0].value {
-                                                                                        // messages
-                                                                                      
-                                                                                    } 
-
-
+                                                                            if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                                if vals.len() > 0 {                                                                                    
                                                                                     for m in vals {
-                                                                                        if let ValueDef::Primitive(Primitive::U32(from_para_id))= &m.value {
+                                                                                        if let ValueDef::Primitive(Primitive::U32(_from_para_id))= &m.value {
                                                                                             // println!("from {}", from_para_id);
                                                                                         }
 
@@ -523,10 +520,6 @@ pub async fn watch_blocks(
                                                                                             std::process::exit(1);       
                                                                                         }
                                                                                     }
-                                                                                }
-                                                                                    
-                                                                                    // print_val();
-            
                                                                                 }
                                                                             }
                                                                         }
@@ -558,7 +551,7 @@ pub async fn watch_blocks(
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
-                                                                                        link: None,
+                                                                                        link: vec![],
                                                                                         details: Details{  pallet: "Instruction".to_string(),
                                                                                         variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
                                                                                     });
@@ -572,7 +565,7 @@ pub async fn watch_blocks(
                                                                                         if let Junction::AccountId32 {id, ..} = x1 {
                                                                                             let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
                                                                                             println!("RECIEVE HASH v0 {}", msg_id);
-                                                                                            link = Some(msg_id);
+                                                                                            link.push(msg_id);
                                                                                         };
                                                                                     } else { panic!("unknonwn") }                                                                                }
                                                                             }
@@ -586,7 +579,7 @@ pub async fn watch_blocks(
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
-                                                                                        link: None,
+                                                                                        link: vec![],
                                                                                         details: Details{  pallet: "Instruction".to_string(),
                                                                                         variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
                                                                                     });
@@ -602,7 +595,7 @@ pub async fn watch_blocks(
                                                                                         if let Junction::AccountId32 {id, ..} = x1 {
                                                                                             let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
                                                                                             println!("RECIEVE HASH v1 {}", msg_id);
-                                                                                            link = Some(msg_id);
+                                                                                            link.push(msg_id);
                                                                                         };
                                                                                     } else { panic!("unknonwn") }                                                                                }
                                                                             }
@@ -616,7 +609,7 @@ pub async fn watch_blocks(
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
-                                                                                        link: None,
+                                                                                        link: vec![],
                                                                                         details: Details
                                                                                         {  
                                                                                             pallet: "Instruction".to_string(),
@@ -638,12 +631,11 @@ pub async fn watch_blocks(
                                                                                             if let Junction::AccountId32 {id, ..} = x1 {
                                                                                                 let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
                                                                                                 println!("RECIEVE HASH v2 {}", msg_id);
-                                                                                                link = Some(msg_id);
+                                                                                                link.push(msg_id);
                                                                                             };
                                                                                         } else { panic!("unknonwn") }                                                                                }
                                                                                 }
                                                                             }
-                                                                            _  => { println!("unknown message version"); }
                                                                         }
                                                                     } else {
                                                                         println!("could not decode msg: {}", msg);
@@ -668,6 +660,31 @@ pub async fn watch_blocks(
                                 flattern(&ext.call_data.arguments[0].value, "",&mut results);
                                 println!("FLATTERN {:#?}", results);
 
+                                if let Some(dest) =  results.get(".V2.0.interior.X1.0.Parachain.0") { 
+                                    println!("first time!");                                   
+                                    //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
+                                    let dest: NonZeroU32 = dest.parse().unwrap();
+                                    let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
+                                     let mut results = HashMap::new();
+                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    let to = results.get(".V2.0.interior.X1.0.AccountId32.id");
+
+                                    if let Some(to) = to {
+                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                        println!("SEND MSG v2 hash {}", msg_id);
+                                        link.push(msg_id);
+                                    }
+                                    println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                    // if ext.call_data.arguments.len() > 1 {
+                                    //     let mut results = HashMap::new();
+                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                    //     println!("FLATTERN DEST2 {:#?}", results);
+                                    //     println!("ARGS {:?}", ext.call_data.arguments);
+                                    // } else { 
+                                    //     warn!("expected more params...");
+                                    // }
+                                }
                                 if let Some(dest) =  results.get(".V1.0.interior.X1.0.Parachain.0") {                                    
                                     //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
                                     let dest: NonZeroU32 = dest.parse().unwrap();
@@ -678,8 +695,8 @@ pub async fn watch_blocks(
 
                                     if let Some(to) = to {
                                         let msg_id = format!("{}-{}", block_num, please_hash(to));
-                                        println!("SEND MSG hash {}", msg_id);
-                                        link = Some(msg_id);
+                                        println!("SEND MSG v1 hash {}", msg_id);
+                                        link.push(msg_id);
                                     }
                                     println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
 
@@ -693,7 +710,6 @@ pub async fn watch_blocks(
                                     // }
                                 }
                                 if let Some(dest) =  results.get(".V0.0.X1.0.Parachain.0") {    
-                                    println!("first time!");                                
                                     //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
                                     let dest: NonZeroU32 = dest.parse().unwrap();
                                     let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
@@ -703,8 +719,8 @@ pub async fn watch_blocks(
 
                                     if let Some(to) = to {
                                         let msg_id = format!("{}-{}", block_num, please_hash(to));
-                                        println!("SEND MSG hash {}", msg_id);
-                                        link = Some(msg_id);
+                                        println!("SEND MSG v0 hash {}", msg_id);
+                                        link.push(msg_id);
                                     }
                                     println!("Rreserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
 
@@ -807,7 +823,7 @@ pub async fn watch_blocks(
                                                                         args: vec![format!("{:?}", values)],
                                                                         contains: vec![],
                                                                         raw: vec![], //TODO: should be simples
-                                                                        link: None,
+                                                                        link: vec![],
                                                                         details: Details { pallet: inner_pallet.to_string(),
                                                                             variant: name.clone(), ..Details::default()}
                                                                     });
@@ -921,6 +937,8 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
                         println!("got here rnrtnrtrtnrt");
                         println!("{:#?}", event);
                         msg.as_slice();
+
+                        // msg is a msg id! not decodable - match against hash of original
                         if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
                             println!("decodearama {:#?}!!!!", ver_msg);
                         } else {
@@ -1007,6 +1025,19 @@ mod tests {
     #[test]
     fn decode_a_ump_message() {
         let msg = "60ba677909cd50310087509462d25c85010c8ea95d61f2351b42f6b54463f5cf";
-        //TODO
+        let bytes = hex::decode(msg).unwrap();
+
+        let result = <ExtrinsicVec as Decode>::decode(&mut bytes.as_slice()).unwrap();
+        println!("{}", hex::encode(result.0.as_slice()));
+
+        println!("{:?}", &result);
+        // let result =
+        //     <VersionedXcm as Decode>::decode(&mut result.0.as_slice()).unwrap();
+
+
+        let result =
+            <crate::polkadot::runtime_types::xcm::v1::Xcm as Decode>::decode(&mut result.0.as_slice());
+
+        println!("{:?}", result);
     }
 }
