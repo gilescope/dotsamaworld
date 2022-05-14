@@ -2,6 +2,7 @@ use super::polkadot;
 use crate::polkadot::runtime_types::xcm::VersionedXcm;
 use crate::ABlocks;
 use crate::DataEntity;
+use crate::DataEvent;
 use crate::Details;
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
@@ -494,7 +495,6 @@ pub async fn watch_blocks(
                                                 },
                                                 "horizontal_messages" => {
                                                     if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                        
                                                         for val in vals {
                                                             // channels
                                                             if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
@@ -506,7 +506,7 @@ pub async fn watch_blocks(
                                                                           //  for val in vals {
                                                                                 //msgs
                                                                             if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                                                if vals.len() > 0 {                                                                                    
+                                                                                if vals.len() > 0 {
                                                                                     for m in vals {
                                                                                         if let ValueDef::Primitive(Primitive::U32(_from_para_id))= &m.value {
                                                                                             // println!("from {}", from_para_id);
@@ -517,7 +517,7 @@ pub async fn watch_blocks(
                                                                                             flattern(&val.value, "",&mut results);
                                                                                             println!("INNER {:#?}", results);
                                                                                             //Could be that these are not yet in the wild 
-                                                                                            std::process::exit(1);       
+                                                                                            std::process::exit(1);
                                                                                         }
                                                                                     }
                                                                                 }
@@ -528,7 +528,7 @@ pub async fn watch_blocks(
                                                             }
                                                         }
                                                     }
-                                                }, 
+                                                },
                                                 "downward_messages" => {
                                                     if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
                                                         for val in vals {
@@ -541,13 +541,12 @@ pub async fn watch_blocks(
                                                                     let bytes = hex::decode(msg).unwrap();
                                                                     if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
                                                                         match ver_msg {
-                                                                            VersionedXcm::V0(msg) => {                                                                            
+                                                                            VersionedXcm::V0(msg) => {
                                                                                 // Only one xcm instruction in a v1 message. 
                                                                                     let instruction = format!("{:?}", &msg);
                                                                                     println!("instruction {:?}", &instruction);
                                                                                     children.push(DataEntity::Extrinsic {
                                                                                         id: (block_header.number, i as u32),
-                                                                                    
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
@@ -567,15 +566,15 @@ pub async fn watch_blocks(
                                                                                             println!("RECIEVE HASH v0 {}", msg_id);
                                                                                             link.push(msg_id);
                                                                                         };
-                                                                                    } else { panic!("unknonwn") }                                                                                }
+                                                                                    } else { panic!("unknonwn") }
+                                                                                }
                                                                             }
-                                                                            VersionedXcm::V1(msg) => {                                                                            
+                                                                            VersionedXcm::V1(msg) => {
                                                                                 // Only one xcm instruction in a v1 message. 
                                                                                     let instruction = format!("{:?}", &msg);
                                                                                     println!("instruction {:?}", &instruction);
                                                                                     children.push(DataEntity::Extrinsic {
                                                                                         id: (block_header.number, i as u32),
-                                                                                    
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
@@ -605,16 +604,15 @@ pub async fn watch_blocks(
                                                                                     println!("instruction {:?}", &instruction);
                                                                                     children.push(DataEntity::Extrinsic {
                                                                                         id: (block_header.number, i as u32),
-                                                                                    
                                                                                         args: vec![instruction.clone()],
                                                                                         contains: vec![],
                                                                                         raw: vec![], //TODO: should be simples
                                                                                         link: vec![],
                                                                                         details: Details
-                                                                                        {  
+                                                                                        {
                                                                                             pallet: "Instruction".to_string(),
                                                                                             variant: instruction.split_once(' ').unwrap_or((&instruction,"")).0.to_string(), 
-                                                                                            ..Details::default() 
+                                                                                            ..Details::default()
                                                                                         }
                                                                                     });
                                                                                 }
@@ -854,8 +852,6 @@ pub async fn watch_blocks(
                                 flattern(&arg.value, &arg_index.to_string(),&mut results);
                             }
                             // println!("FLATTERN UMP {:#?}", results);
-
-                            
                             // args.insert(0, format!("{results:#?}"));
 
                             exts.push(DataEntity::Extrinsic {
@@ -909,9 +905,9 @@ pub struct PolkaBlock {
     pub blocknum: usize,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
-    pub events: Vec<RawEventDetails>,
+    pub events: Vec<DataEvent>,
 }
-
+use core::slice::SlicePattern;
 pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::error::Error>> {
     let api = ClientBuilder::new()
         .set_url(url)
@@ -926,26 +922,42 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
             let blockhash = events.block_hash();
             blocknum += 1;
 
-            for ev in events.iter() {
-                // println!("{:#?}", ev);
-                if let Ok(EventDetails { event, .. }) = ev {
-                    if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
-                        println!("got here rnrtnrtrtnrt");
-                        println!("got here rnrtnrtrtnrt");
-                        println!("got here rnrtnrtrtnrt");
-                        println!("got here rnrtnrtrtnrt");
-                        println!("got here rnrtnrtrtnrt");
-                        println!("{:#?}", event);
-                        msg.as_slice();
+            let mut data_events = vec![];
+            for ev_raw in events.iter_raw() {
+                let mut details = Details::default();
+                let mut link = vec![];
 
-                        // msg is a msg id! not decodable - match against hash of original
-                        if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
-                            println!("decodearama {:#?}!!!!", ver_msg);
-                        } else {
-                            println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
+                if let Ok(ev) = &ev_raw {
+                    let ev = <polkadot::Event as Decode>::decode(&mut ev.data.as_slice());
+                    if let Ok(event) = ev {
+                        // println!("{:#?}", ev);
+                        // if let EventDetails { event, .. } = ev {
+                        if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
+                            println!("got here rnrtnrtrtnrt");
+                            println!("got here rnrtnrtrtnrt");
+                            println!("got here rnrtnrtrtnrt");
+                            println!("got here rnrtnrtrtnrt");
+                            println!("got here rnrtnrtrtnrt");
+                            println!("{:#?}", event);
+
+                            let received_hash = format!("{}-{}",blockhash, hex::encode(msg));
+                            println!("recieved UMP hash {}", &received_hash);
+                            link.push(received_hash);
+                            // // msg is a msg id! not decodable - match against hash of original
+                            // if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
+                            //     println!("decodearama {:#?}!!!!", ver_msg);
+                            // } else {
+                            //     println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
+                            // }
                         }
                     }
+                    // }
                 }
+                data_events.push(DataEvent {
+                    raw: ev_raw.unwrap(),
+                    link,
+                    details,
+                })
             }
 
             tx.lock().unwrap().0.insert(
@@ -954,7 +966,7 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
                     blocknum,
                     blockhash,
                     extrinsics: vec![],
-                    events: events.iter_raw().map(|c| c.unwrap()).collect::<Vec<_>>(),
+                    events: data_events,
                 },
             );
         }
@@ -964,9 +976,9 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
 
 pub fn associate_events(
     ext: Vec<DataEntity>,
-    mut events: Vec<RawEventDetails>,
-) -> Vec<(Option<DataEntity>, Vec<RawEventDetails>)> {
-    let mut ext: Vec<(Option<DataEntity>, Vec<RawEventDetails>)> = ext
+    mut events: Vec<DataEvent>,
+) -> Vec<(Option<DataEntity>, Vec<DataEvent>)> {
+    let mut ext: Vec<(Option<DataEntity>, Vec<DataEvent>)> = ext
         .into_iter()
         .map(|extrinsic| {
             let eid = if let DataEntity::Extrinsic {
@@ -981,8 +993,8 @@ pub fn associate_events(
             (
                 Some(extrinsic),
                 events
-                    .drain_filter(|raw| match &raw.phase {
-                        subxt::Phase::ApplyExtrinsic(extrinsic_id) => *extrinsic_id == eid,
+                    .drain_filter(|ev| match ev.raw.phase {
+                        subxt::Phase::ApplyExtrinsic(extrinsic_id) => extrinsic_id == eid,
                         _ => false,
                     })
                     .collect(),
@@ -1034,35 +1046,23 @@ mod tests {
         // let result =
         //     <VersionedXcm as Decode>::decode(&mut result.0.as_slice()).unwrap();
 
-
-        let result =
-            <crate::polkadot::runtime_types::xcm::v1::Xcm as Decode>::decode(&mut result.0.as_slice());
+        let result = <crate::polkadot::runtime_types::xcm::v1::Xcm as Decode>::decode(
+            &mut result.0.as_slice(),
+        );
 
         println!("{:?}", result);
     }
 
     #[test]
-    fn decode_xcm_cant_transact_error(){
-        use crate::polkadot::runtime_types::xcm::v2::traits::Outcome;
+    fn decode_xcm_cant_transact_error() {
         use crate::polkadot::runtime_types::xcm::v2::traits::Error;
-        let msg = vec![
-            1u8,
-            0,
-            202,
-            154,
-            59,
-            0,
-            0,
-            0,
-            0,
-            9,
-        ];
-        let result =
-        <Outcome as Decode>::decode(&mut msg.as_slice()).unwrap();
+        use crate::polkadot::runtime_types::xcm::v2::traits::Outcome;
+        let msg = vec![1u8, 0, 202, 154, 59, 0, 0, 0, 0, 9];
+        let result = <Outcome as Decode>::decode(&mut msg.as_slice()).unwrap();
         if let Outcome::Incomplete(_weight, Error::FailedToTransactAsset) = result {
             // The thing only has a string message locally!!!
             //(err_msg)
-         //   println!("err msg: {}", err_msg);
+            //   println!("err msg: {}", err_msg);
         }
         println!("{:?}", result);
     }

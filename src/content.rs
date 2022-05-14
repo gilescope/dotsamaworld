@@ -1,4 +1,5 @@
 use crate::DataEntity;
+use crate::DataEvent;
 use subxt::Phase;
 
 /// Is this extrinsic part of the overheads of running this blockchain?
@@ -8,7 +9,7 @@ pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
         &DataEntity::Extrinsic { ref details, .. } => {
             return is_boring(details.pallet.as_str(), details.variant.as_str());
         }
-        &DataEntity::Event { ref raw, .. } => {
+        &DataEntity::Event(DataEvent { ref raw, .. }) => {
             !matches!(raw.phase, Phase::ApplyExtrinsic(_)) || is_boring(&raw.pallet, &raw.variant)
         }
     }
@@ -36,14 +37,21 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
     }
 }
 
-pub fn is_message(entry: &DataEntity) -> bool {
+pub fn is_event_message(entry: &DataEvent) -> bool {
     match entry {
-        &DataEntity::Event { ref raw, .. } => {
+        &DataEvent { ref raw, .. } => {
             matches!(
                 raw.pallet.as_str().to_ascii_lowercase().as_str(),
                 "ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
             )
         }
+        _ => false,
+    }
+}
+
+pub fn is_message(entry: &DataEntity) -> bool {
+    match entry {
+        &DataEntity::Event(ref event) => is_event_message(event),
         _ => false,
     }
 }

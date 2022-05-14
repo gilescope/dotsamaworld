@@ -2,13 +2,13 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
-use bevy::winit::WinitSettings;
 use bevy::prelude::*;
+use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 use bevy_flycam::FlyCam;
 use bevy_flycam::MovementSettings;
 use bevy_flycam::NoCameraPlayerPlugin;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin, plugin::InspectorWindows};
+use bevy_inspector_egui::{plugin::InspectorWindows, Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
@@ -24,10 +24,10 @@ mod movement;
 mod style;
 use crate::details::Details;
 use bevy_inspector_egui::RegisterInspectable;
+#[cfg(feature = "spacemouse")]
+use bevy_spacemouse::{SpaceMouseControllable, SpaceMousePlugin};
 use sp_core::H256;
 use std::convert::AsRef;
-#[cfg(feature="spacemouse")]
-use bevy_spacemouse::{SpaceMouseControllable, SpaceMousePlugin};
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -84,14 +84,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .insert_resource(MovementSettings {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
-        })        
+        })
         .insert_resource(movement::MouseCapture::default())
         .add_plugin(NoCameraPlayerPlugin);
 
-        #[cfg(feature="spacemouse")]
-        app.add_plugin(SpaceMousePlugin);
+    #[cfg(feature = "spacemouse")]
+    app.add_plugin(SpaceMousePlugin);
 
-        app.add_plugins(DefaultPickingPlugins)
+    app.add_plugins(DefaultPickingPlugins)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .register_inspectable::<Details>()
@@ -140,8 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             },
         )
-        .add_system_to_stage(CoreStage::PostUpdate, print_events)
-        ;
+        .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
     for (relay_id, relay) in relays.into_iter().enumerate() {
         for (arc, mut chain_name) in relay {
@@ -267,7 +266,7 @@ enum BuildDirection {
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
     let res = match entity {
-        DataEntity::Event { raw, .. } => {
+        DataEntity::Event(DataEvent { raw, .. }) => {
             format!("{:#?}", raw)
         }
         DataEntity::Extrinsic {
@@ -298,10 +297,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 
 #[derive(Clone)]
 pub enum DataEntity {
-    Event {
-        raw: RawEventDetails,
-        details: Details,
-    },
+    Event(DataEvent),
     Extrinsic {
         id: (u32, u32),
         // pallet: String,
@@ -317,6 +313,13 @@ pub enum DataEntity {
     },
 }
 
+#[derive(Clone)]
+pub struct DataEvent {
+    raw: RawEventDetails,
+    details: Details,
+    link: Vec<String>,
+}
+
 /// A tag to identify an entity as being the source of a message.
 #[derive(Component)]
 pub struct MessageSource {
@@ -330,33 +333,33 @@ static EMPTY_BYTE_SLICE: Vec<u8> = vec![];
 impl DataEntity {
     pub fn details(&self) -> &Details {
         match self {
-            Self::Event { details, .. } => details,
+            Self::Event(DataEvent { details, .. }) => details,
             Self::Extrinsic { details, .. } => details,
         }
     }
     pub fn pallet(&self) -> &str {
         match self {
-            Self::Event { raw, .. } => raw.pallet.as_ref(),
+            Self::Event(DataEvent { raw, .. }) => raw.pallet.as_ref(),
             Self::Extrinsic { details, .. } => &details.pallet,
         }
     }
     pub fn variant(&self) -> &str {
         match self {
-            Self::Event { raw, .. } => raw.variant.as_ref(),
+            Self::Event(DataEvent { raw, .. }) => raw.variant.as_ref(),
             Self::Extrinsic { details, .. } => &details.variant,
         }
     }
 
     pub fn contains(&self) -> &[DataEntity] {
         match self {
-            Self::Event { .. } => EMPTY_SLICE.as_slice(),
+            Self::Event(DataEvent { .. }) => EMPTY_SLICE.as_slice(),
             Self::Extrinsic { contains, .. } => contains.as_slice(),
         }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         match self {
-            Self::Event { .. } => EMPTY_BYTE_SLICE.as_slice(),
+            Self::Event(DataEvent { .. }) => EMPTY_BYTE_SLICE.as_slice(),
             Self::Extrinsic { raw, .. } => raw.as_slice(),
         }
     }
@@ -364,7 +367,7 @@ impl DataEntity {
     pub fn link(&self) -> &Vec<String> {
         match self {
             Self::Extrinsic { link, .. } => &link,
-            Self::Event { .. } => &EMPTY_VEC,
+            Self::Event(DataEvent { .. }) => &EMPTY_VEC,
         }
     }
 }
@@ -589,7 +592,7 @@ fn add_blocks<'a>(
     chain_info: &ChainInfo,
     block_num: u32,
     chain: usize,
-    block_events: Vec<(Option<DataEntity>, Vec<RawEventDetails>)>,
+    block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -727,7 +730,7 @@ fn add_blocks<'a>(
                             id: link.to_string(),
                         });
                     }
-                };
+                }
 
                 let mut bun = commands.spawn_bundle(PbrBundle {
                     mesh,
@@ -765,25 +768,26 @@ fn add_blocks<'a>(
 
         for event in events {
             let details = Details {
-                hover: format!("{:#?}", event),
-                flattern: String::new(),
+                hover: format!("{:#?}", event.raw),
+                // flattern: String::new(),
                 url: format!(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
                     &encoded, &hex_block_hash
                 ),
-                pallet: event.pallet.to_string(),
-                variant: event.variant.to_string(),
+                // pallet: event.raw.pallet.to_string(),
+                // variant: event.raw.variant.to_string(),
+                ..event.details.clone()
             };
-            let entity = DataEntity::Event {
-                raw: (*event).clone(),
+            let entity = DataEvent {
                 details,
+                ..event.clone()
             };
-            let style = style::style_event(&entity);
+            let style = style::style_data_event(&entity);
             let material = mat_map
                 .entry(style.clone())
                 .or_insert_with(|| materials.add(style.color.clone().into()));
 
-            let mesh = if content::is_message(&entity) {
+            let mesh = if content::is_event_message(&entity) {
                 mesh_xcm.clone()
             } else {
                 mesh.clone()
@@ -807,7 +811,7 @@ fn add_blocks<'a>(
                     ..Default::default()
                 })
                 .insert_bundle(PickableBundle::default())
-                .insert(entity.details().clone())
+                .insert(entity.details.clone())
                 .insert(Rainable {
                     dest: target_y * build_direction,
                 })
@@ -948,15 +952,15 @@ pub fn print_events(
     mut events: EventReader<PickingEvent>,
     mut query2: Query<Entity>,
     mut inspector: ResMut<Inspector>,
-  //  mut inspector_windows: Res<InspectorWindows>,
+    //  mut inspector_windows: Res<InspectorWindows>,
 ) {
     for event in events.iter() {
-        match event {            
+        match event {
             PickingEvent::Selection(selection) => {
                 if let SelectionEvent::JustSelected(entity) = selection {
-                  //  let mut inspector_window_data = inspector_windows.window_data::<Details>();
-    //   let window_size = &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
-                
+                    //  let mut inspector_window_data = inspector_windows.window_data::<Details>();
+                    //   let window_size = &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
+
                     // let selection = query.get_mut(*entity).unwrap();
 
                     // Unspawn the previous text:
@@ -1066,28 +1070,28 @@ fn setup(
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
     // camera
-   
-    let mut entity_comands = commands
-        .spawn_bundle(PerspectiveCameraBundle {
-            transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-            perspective_projection: PerspectiveProjection {
-                // far: 1., // 1000 will be 100 blocks that you can s
-                far: 0.0001,
-                near: 0.000001,
-                ..default()
-            },
-            camera: Camera {
-                far: 0.0001,
-                near: 0.000001,
 
-                ..default()
-            },
+    let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
+        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        perspective_projection: PerspectiveProjection {
+            // far: 1., // 1000 will be 100 blocks that you can s
+            far: 0.0001,
+            near: 0.000001,
             ..default()
-        });
-        entity_comands.insert(FlyCam)       
+        },
+        camera: Camera {
+            far: 0.0001,
+            near: 0.000001,
+
+            ..default()
+        },
+        ..default()
+    });
+    entity_comands
+        .insert(FlyCam)
         .insert_bundle(PickingCameraBundle { ..default() });
 
-    #[cfg(feature="spacemouse")]
+    #[cfg(feature = "spacemouse")]
     entity_comands.insert(SpaceMouseControllable);
 
     use std::time::Duration;
