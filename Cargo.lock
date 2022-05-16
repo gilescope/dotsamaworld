@@ -1255,6 +1255,7 @@ dependencies = [
 [[package]]
 name = "bevy_spacemouse"
 version = "0.1.0"
+source = "git+https://github.com/gilescope/bevy_spacemouse.git?rev=5a5879132c191a66c7486eb232d303b33ebad3bd#5a5879132c191a66c7486eb232d303b33ebad3bd"
 dependencies = [
  "bevy 0.7.0",
  "spacenav-plus",

@@ -5,9 +5,9 @@ use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
-use bevy_flycam::FlyCam;
-use bevy_flycam::MovementSettings;
-use bevy_flycam::NoCameraPlayerPlugin;
+#[cfg(feature = "normalmouse")]
+use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
+
 use bevy_inspector_egui::{plugin::InspectorWindows, Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
@@ -25,14 +25,32 @@ mod style;
 use crate::details::Details;
 use bevy_inspector_egui::RegisterInspectable;
 #[cfg(feature = "spacemouse")]
-use bevy_spacemouse::{SpaceMouseControllable, SpaceMousePlugin};
+use bevy_spacemouse::{SpaceMouseRelativeControllable, SpaceMousePlugin};
 use sp_core::H256;
 use std::convert::AsRef;
+
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
+
+#[cfg(feature = "spacemouse")]
+pub struct MovementSettings {
+    pub sensitivity: f32,
+    pub speed: f32,
+}
+
+#[cfg(feature = "spacemouse")]
+impl Default for MovementSettings {
+    fn default() -> Self {
+        Self {
+            sensitivity: 0.00012,
+            speed: 12.,
+        }
+    }
+}
+
 
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
@@ -63,6 +81,13 @@ mod details;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
+
+    let mut as_of = None;
+
+    if let Env::Local = selected_env {
+        as_of = Some("0"); // If local show from the first block...
+    }
+
     let relays = networks::get_network(&selected_env);
     let is_self_sovereign = selected_env.is_self_sovereign();
     let relays = relays
@@ -79,14 +104,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clone_chains_for_lanes = relays.clone();
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins);
         //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-        .insert_resource(MovementSettings {
+        
+        app.insert_resource(MovementSettings {
             sensitivity: 0.00020, // default: 0.00012
             speed: 12.0,          // default: 12.0
-        })
-        .insert_resource(movement::MouseCapture::default())
-        .add_plugin(NoCameraPlayerPlugin);
+        });
+
+        #[cfg(feature = "normalmouse")]        
+        app.add_plugin(NoCameraPlayerPlugin);
+        app.insert_resource(movement::MouseCapture::default());
 
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
@@ -100,16 +128,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // .add_plugin(LogDiagnosticsPlugin::default())
         // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(PolylinePlugin)
-        .add_system(movement::scroll)
+        // .add_system(movement::scroll)
         .add_startup_system(
             move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>| {
+                  materials: ResMut<Assets<StandardMaterial>>
+                  | {
                 let clone_chains_for_lanes = clone_chains_for_lanes.clone();
                 setup(commands, meshes, materials, clone_chains_for_lanes);
             },
-        )
-        .add_system(movement::player_move_arrows)
+        );
+        #[cfg(feature = "spacemouse")]
+        app.add_startup_system(
+            move |mut scale: ResMut<bevy_spacemouse::Scale>| {
+                      scale.rotate_scale = 0.00015;
+                      scale.translate_scale = 0.004;
+            },
+        );
+        app.add_system(movement::player_move_arrows)
         .add_system(rain)
         .add_system(right_click_system)
         .add_startup_system(details::configure_visuals)
@@ -164,8 +200,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while reconnects < 20 {
                     println!("Connecting to {}", &url);
                     let _ = async_std::task::block_on(datasource::watch_events(
-                        lock_clone.clone(),
+                        lock_clone.clone(),                        
                         &url,
+                        as_of
                     ));
                     println!("Problem with {} events (retrys left {})", &url, reconnects);
                     std::thread::sleep(std::time::Duration::from_secs(20));
@@ -185,6 +222,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         lock_clone.clone(),
                         url_clone.clone(),
                         relay_id.to_string(),
+                        as_of
                     ));
                     println!(
                         "Problem with {} blocks (retries left {})",
@@ -684,11 +722,7 @@ fn add_blocks<'a>(
                             println!("creating rainbow!");
 
                             let mut vertices = vec![
-                                Vec3::new(
-                                    source_global.translation.x,
-                                    source_global.translation.y,
-                                    source_global.translation.z,
-                                ),
+                                source_global.translation,
                                 Vec3::new(px, target_y * build_direction, pz),
                             ];
                             rainbow(&mut vertices, 50);
@@ -950,7 +984,7 @@ pub struct UpdateTimer {
 
 pub fn print_events(
     mut events: EventReader<PickingEvent>,
-    mut query2: Query<Entity>,
+    mut query2: Query<(Entity, &Details)>,
     mut inspector: ResMut<Inspector>,
     //  mut inspector_windows: Res<InspectorWindows>,
 ) {
@@ -968,14 +1002,14 @@ pub fn print_events(
                     //     commands.entity(entity).despawn();
                     // });
 
-                    let entity = query2.get_mut(*entity).unwrap();
+                    let (entity, details) = query2.get_mut(*entity).unwrap();
 
-                    if inspector.active == Some(entity) {
-                        print!("deselected current selection");
-                        inspector.active = None;
-                    } else {
-                        inspector.active = Some(entity);
-                    }
+                    // if inspector.active == Some(details) {
+                    //     print!("deselected current selection");
+                    //     inspector.active = None;
+                    // } else {
+                        inspector.active = Some(details.clone());
+                    // }
 
                     // info!("{}", details.hover.as_str());
                     // decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived, value, details);
@@ -1087,12 +1121,15 @@ fn setup(
         },
         ..default()
     });
+    #[cfg(feature = "normalmouse")]
     entity_comands
-        .insert(FlyCam)
+        .insert(FlyCam);
+    entity_comands
+        .insert(Viewport)
         .insert_bundle(PickingCameraBundle { ..default() });
 
     #[cfg(feature = "spacemouse")]
-    entity_comands.insert(SpaceMouseControllable);
+    entity_comands.insert(SpaceMouseRelativeControllable);
 
     use std::time::Duration;
     commands.insert_resource(UpdateTimer {
@@ -1119,8 +1156,11 @@ fn setup(
 #[derive(Inspectable, Default)]
 pub struct Inspector {
     #[inspectable(deletable = false)]
-    active: Option<Entity>,
+    active: Option<Details>,
 }
+
+#[derive(Component)]
+pub struct Viewport;
 
 // #[cfg(target_arch = "wasm32")]
 // pub mod html_body {

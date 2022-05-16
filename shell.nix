@@ -1,14 +1,25 @@
-
-{ pkgs ? import <nixpkgs> {} }:
-with pkgs; mkShell {
+# { pkgs ? import <nixpkgs> {} }:
+let
+  mozillaOverlay =
+    import (builtins.fetchGit {
+      url = "https://github.com/mozilla/nixpkgs-mozilla.git";
+      rev = "e1f7540fc0a8b989fb8cf701dc4fd7fc76bcf168";
+    });
+  nixpkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
+  rust-nightly = with nixpkgs; ((rustChannelOf { date = "2022-05-14"; channel = "nightly"; }).rust.override {
+  });
+in
+with nixpkgs; mkShell {
   nativeBuildInputs = [
     pkgconfig
     clang lld # To use lld linker
   ];
   buildInputs = [
-    udev alsaLib vulkan-loader
+    libspnav udev alsaLib vulkan-loader
     xlibsWrapper xorg.libXcursor xorg.libXrandr xorg.libXi # To use x11 feature
     libxkbcommon wayland # To use wayland feature
+    libspnav
+    rust-nightly
   ];
   shellHook = ''export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [
     udev alsaLib vulkan-loader

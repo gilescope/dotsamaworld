@@ -8,9 +8,10 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["spacemouse"]
-# 3d mouse support.
+default = ["normalmouse"]
+# 3d mouse support (it's best not to have both features enabled at once).
 spacemouse = ["bevy_spacemouse"]
+normalmouse = ["bevy_flycam"]
 
 [dependencies]
 sp-core = "*"
@@ -24,7 +25,7 @@ futures = "0.3.13"
 
 winit = { version = "*", features = ["x11"] }
 #sp-keyring = "5.0.0"
-bevy_flycam = "0.7"
+bevy_flycam = {version ="0.7", optional = true }
 #bevy_text_mesh = "0.2"
 bevy_mod_picking = "0.6"
 hex = "*"
@@ -38,7 +39,7 @@ fastrand = "*"
 bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 #rayon = "*"
-bevy_spacemouse = { path= "/home/gilescope/git/bevy-spacemouse-example", optional = true }
+bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="5a5879132c191a66c7486eb232d303b33ebad3bd", optional = true }
 serde = "*"
 bevy_egui = "*"
 egui = "*"

@@ -8,8 +8,13 @@ use bevy::prelude::*;
 use bevy::render::camera::CameraProjection;
 use bevy::transform::components::Transform;
 use bevy::window::Windows;
-use bevy_flycam::FlyCam;
-use bevy_flycam::MovementSettings;
+use crate::Viewport;
+
+#[cfg(feature = "normalmouse")]
+use bevy_flycam::{FlyCam,MovementSettings};
+#[cfg(feature = "spacemouse")]
+use crate::MovementSettings;
+
 
 pub struct MouseCapture(pub bool);
 
@@ -25,7 +30,7 @@ pub fn player_move_arrows(
     time: Res<Time>,
     windows: Res<Windows>,
     mut settings: ResMut<MovementSettings>,
-    mut query: Query<&mut Transform, With<FlyCam>>,
+    mut query: Query<&mut Transform, With<Viewport>>,
     mut toggle_mouse_capture: ResMut<MouseCapture>,
 ) {
     let window = windows.get_primary().unwrap();
@@ -68,25 +73,25 @@ pub fn player_move_arrows(
     }
 }
 
-/// the mouse-scroll changes the field-of-view of the camera
-pub fn scroll(
-    mut mouse_wheel_events: EventReader<MouseWheel>,
-    windows: Res<Windows>,
-    mut query: Query<(&FlyCam, &mut Camera, &mut PerspectiveProjection)>,
-) {
-    // for event in mouse_wheel_events.iter() {
-    //     for (_camera, mut camera, mut project) in query.iter_mut() {
-    //         project.fov = (project.fov - event.y * 0.01).abs();
-    //         let prim = windows.get_primary().unwrap();
+// the mouse-scroll changes the field-of-view of the camera
+// pub fn scroll(
+//     mut mouse_wheel_events: EventReader<MouseWheel>,
+//     windows: Res<Windows>,
+//     mut query: Query<(&FlyCam, &mut Camera, &mut PerspectiveProjection)>,
+// ) {
+//     // for event in mouse_wheel_events.iter() {
+//     //     for (_camera, mut camera, mut project) in query.iter_mut() {
+//     //         project.fov = (project.fov - event.y * 0.01).abs();
+//     //         let prim = windows.get_primary().unwrap();
 
-    //         //Calculate projection with new fov
-    //         project.update(prim.width(), prim.height());
+//     //         //Calculate projection with new fov
+//     //         project.update(prim.width(), prim.height());
 
-    //         //Update camera with the new fov
-    //         camera.projection_matrix = project.get_projection_matrix();
-    //         camera.depth_calculation = project.depth_calculation();
+//     //         //Update camera with the new fov
+//     //         camera.projection_matrix = project.get_projection_matrix();
+//     //         camera.depth_calculation = project.depth_calculation();
 
-    //         // println!("FOV: {:?}", project.fov);
-    //     }
-    // }
-}
+//     //         // println!("FOV: {:?}", project.fov);
+//     //     }
+//     // }
+// }

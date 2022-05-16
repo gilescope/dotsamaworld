@@ -241,6 +241,7 @@ pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
     relay_id: String,
+    as_of: Option<&str>
 ) -> Result<(), Box<dyn std::error::Error>> {
     // use core::slice::SlicePattern;
     // use scale_info::form::PortableForm;
@@ -908,7 +909,7 @@ pub struct PolkaBlock {
     pub events: Vec<DataEvent>,
 }
 use core::slice::SlicePattern;
-pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn watch_events(tx: ABlocks, url: &str, as_of: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let api = ClientBuilder::new()
         .set_url(url)
         .build()
@@ -925,9 +926,19 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
             let mut data_events = vec![];
             for ev_raw in events.iter_raw() {
                 let mut details = Details::default();
-                let mut link = vec![];
+                let mut link = vec![];                
 
                 if let Ok(ev) = &ev_raw {
+                    details.pallet = ev.pallet.clone();
+                    details.variant = ev.variant.clone();
+
+                    if details.pallet == "XcmPallet" && details.variant == "Attempted" {
+                        use crate::polkadot::runtime_types::xcm::v2::traits::Error;
+                        use crate::polkadot::runtime_types::xcm::v2::traits::Outcome;//TODO version
+                        let result = <Outcome as Decode>::decode(&mut ev.data.as_slice());
+                        details.flattern = format!("{:#?}", result);
+                    }
+
                     let ev = <polkadot::Event as Decode>::decode(&mut ev.data.as_slice());
                     if let Ok(event) = ev {
                         // println!("{:#?}", ev);
@@ -940,7 +951,12 @@ pub async fn watch_events(tx: ABlocks, url: &str) -> Result<(), Box<dyn std::err
                             println!("got here rnrtnrtrtnrt");
                             println!("{:#?}", event);
 
-                            let received_hash = format!("{}-{}",blockhash, hex::encode(msg));
+                            // Hypothesis: there's no sent_at because it would be the sent at of the individual chain.
+                            // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
+                            // TL/DR: we have to wait before we can match up things going upwards...
+                            
+                            // blockhash of the recieving block would be incorrect.
+                            let received_hash = format!("{}",hex::encode(msg));
                             println!("recieved UMP hash {}", &received_hash);
                             link.push(received_hash);
                             // // msg is a msg id! not decodable - match against hash of original
