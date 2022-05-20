@@ -7,10 +7,21 @@ use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
 use bevy_inspector_egui::Inspectable;
 
-#[derive(Component, Default, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub enum Success {
+    #[default]
+    Happy,
+    Worried,
+    Sad,
+}
+
+
+#[derive(Component, Default, Clone, Debug)]
 pub struct Details {
     pub pallet: String,
+    pub parent: Option<u32>,
     pub variant: String,
+    pub success: Success,
     pub hover: String,
     pub flattern: String,
     // #[inspectable(label = "Url:")]

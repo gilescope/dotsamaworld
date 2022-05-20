@@ -3,12 +3,12 @@
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-use bevy::winit::WinitSettings;
+// use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 
-use bevy_inspector_egui::{plugin::InspectorWindows, Inspectable, InspectorPlugin};
+use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
@@ -17,7 +17,6 @@ use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use subxt::RawEventDetails;
 mod content;
 mod datasource;
 mod movement;
@@ -25,10 +24,9 @@ mod style;
 use crate::details::Details;
 use bevy_inspector_egui::RegisterInspectable;
 #[cfg(feature = "spacemouse")]
-use bevy_spacemouse::{SpaceMouseRelativeControllable, SpaceMousePlugin};
+use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
 use std::convert::AsRef;
-
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -50,7 +48,6 @@ impl Default for MovementSettings {
         }
     }
 }
-
 
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
@@ -81,8 +78,7 @@ mod details;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-
-    let mut as_of = None;
+    let mut as_of = Some("0");
 
     if let Env::Local = selected_env {
         as_of = Some("0"); // If local show from the first block...
@@ -105,16 +101,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
-        //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-        
-        app.insert_resource(MovementSettings {
-            sensitivity: 0.00020, // default: 0.00012
-            speed: 12.0,          // default: 12.0
-        });
+    //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 
-        #[cfg(feature = "normalmouse")]        
-        app.add_plugin(NoCameraPlayerPlugin);
-        app.insert_resource(movement::MouseCapture::default());
+    app.insert_resource(MovementSettings {
+        sensitivity: 0.00020, // default: 0.00012
+        speed: 12.0,          // default: 12.0
+    });
+
+    #[cfg(feature = "normalmouse")]
+    app.add_plugin(NoCameraPlayerPlugin);
+    app.insert_resource(movement::MouseCapture::default());
 
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
@@ -132,20 +128,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_startup_system(
             move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>
-                  | {
+                  materials: ResMut<Assets<StandardMaterial>>| {
                 let clone_chains_for_lanes = clone_chains_for_lanes.clone();
                 setup(commands, meshes, materials, clone_chains_for_lanes);
             },
         );
-        #[cfg(feature = "spacemouse")]
-        app.add_startup_system(
-            move |mut scale: ResMut<bevy_spacemouse::Scale>| {
-                      scale.rotate_scale = 0.00015;
-                      scale.translate_scale = 0.004;
-            },
-        );
-        app.add_system(movement::player_move_arrows)
+    #[cfg(feature = "spacemouse")]
+    app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
+        scale.rotate_scale = 0.00010;
+        scale.translate_scale = 0.004;
+    });
+    app.add_system(movement::player_move_arrows)
         .add_system(rain)
         .add_system(right_click_system)
         .add_startup_system(details::configure_visuals)
@@ -200,9 +193,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while reconnects < 20 {
                     println!("Connecting to {}", &url);
                     let _ = async_std::task::block_on(datasource::watch_events(
-                        lock_clone.clone(),                        
+                        lock_clone.clone(),
                         &url,
-                        as_of
+                        as_of,
                     ));
                     println!("Problem with {} events (retrys left {})", &url, reconnects);
                     std::thread::sleep(std::time::Duration::from_secs(20));
@@ -222,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         lock_clone.clone(),
                         url_clone.clone(),
                         relay_id.to_string(),
-                        as_of
+                        as_of,
                     ));
                     println!(
                         "Problem with {} blocks (retries left {})",
@@ -304,8 +297,8 @@ enum BuildDirection {
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
     let res = match entity {
-        DataEntity::Event(DataEvent { raw, .. }) => {
-            format!("{:#?}", raw)
+        DataEntity::Event(DataEvent { details, .. }) => {
+            format!("{:#?}", details)
         }
         DataEntity::Extrinsic {
             id: _,
@@ -346,16 +339,19 @@ pub enum DataEntity {
         /// psudo-unique id to link to some other node(s).
         /// There can be multiple destinations per block! (TODO: need better resolution)
         /// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
-        link: Vec<String>,
+        start_link: Vec<String>,
+        /// list of links that we have finished
+        end_link: Vec<String>,
         details: Details,
     },
 }
 
 #[derive(Clone)]
 pub struct DataEvent {
-    raw: RawEventDetails,
+    // raw: RawEventDetails,
     details: Details,
-    link: Vec<String>,
+    start_link: Vec<String>,
+    end_link: Vec<String>,
 }
 
 /// A tag to identify an entity as being the source of a message.
@@ -377,13 +373,13 @@ impl DataEntity {
     }
     pub fn pallet(&self) -> &str {
         match self {
-            Self::Event(DataEvent { raw, .. }) => raw.pallet.as_ref(),
+            Self::Event(DataEvent { details, .. }) => details.pallet.as_ref(),
             Self::Extrinsic { details, .. } => &details.pallet,
         }
     }
     pub fn variant(&self) -> &str {
         match self {
-            Self::Event(DataEvent { raw, .. }) => raw.variant.as_ref(),
+            Self::Event(DataEvent { details, .. }) => details.variant.as_ref(),
             Self::Extrinsic { details, .. } => &details.variant,
         }
     }
@@ -402,9 +398,15 @@ impl DataEntity {
         }
     }
 
-    pub fn link(&self) -> &Vec<String> {
+    pub fn start_link(&self) -> &Vec<String> {
         match self {
-            Self::Extrinsic { link, .. } => &link,
+            Self::Extrinsic { start_link, .. } => &start_link,
+            Self::Event(DataEvent { .. }) => &EMPTY_VEC,
+        }
+    }
+    pub fn end_link(&self) -> &Vec<String> {
+        match self {
+            Self::Extrinsic { end_link, .. } => &end_link,
             Self::Event(DataEvent { .. }) => &EMPTY_VEC,
         }
     }
@@ -714,7 +716,7 @@ fn add_blocks<'a>(
                 let mut found = false;
 
                 let mut create_source = vec![];
-                for link in block.link() {
+                for link in block.end_link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {
@@ -758,12 +760,12 @@ fn add_blocks<'a>(
                             commands.entity(entity).remove::<MessageSource>();
                         }
                     }
-                    if !found {
-                        println!("inserting source of rainbow!");
-                        create_source.push(MessageSource {
-                            id: link.to_string(),
-                        });
-                    }
+                }
+                for link in block.start_link() {
+                    println!("inserting source of rainbow!");
+                    create_source.push(MessageSource {
+                        id: link.to_string(),
+                    });
                 }
 
                 let mut bun = commands.spawn_bundle(PbrBundle {
@@ -783,6 +785,8 @@ fn add_blocks<'a>(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
                             &encoded, &call_data
                         ),
+                        parent: None,
+                        success: details::Success::Happy,
                         pallet: block.pallet().to_string(),
                         variant: block.variant().to_string(),
                     })
@@ -802,7 +806,7 @@ fn add_blocks<'a>(
 
         for event in events {
             let details = Details {
-                hover: format!("{:#?}", event.raw),
+                // hover: format!("{:#?}", event.raw),
                 // flattern: String::new(),
                 url: format!(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
@@ -837,19 +841,26 @@ fn add_blocks<'a>(
             ));
 
             // t.translation.y += ;
-            commands
-                .spawn_bundle(PbrBundle {
-                    mesh,
-                    material: material.clone(),
-                    transform: t,
-                    ..Default::default()
-                })
+            let mut x = commands.spawn_bundle(PbrBundle {
+                mesh,
+                material: material.clone(),
+                transform: t,
+                ..Default::default()
+            });
+            let event_bun = x
                 .insert_bundle(PickableBundle::default())
                 .insert(entity.details.clone())
                 .insert(Rainable {
                     dest: target_y * build_direction,
                 })
                 .insert(Name::new("BlockEvent"));
+
+            for link in &event.start_link {
+                println!("inserting source of rainbow (an event)!");
+                event_bun.insert(MessageSource {
+                    id: link.to_string(),
+                });
+            }
         }
     }
 }
@@ -860,11 +871,15 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
     let start = vertices[0];
     let end = vertices[1];
     let diff = end - start;
+    println!("start {:#?}", start);
+    println!("end {:#?}", end);
+    println!("diff {:#?}", diff);
     // x, z are linear interpolations, it is only y that goes up!
 
     let center = (start + end) / 2.;
-
+    println!("center {:#?}", center);
     let r = end - center;
+    println!("r {:#?}", r);
     let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be aproximate
                                                              // println!("vertst {},{},{}", start.x, start.y, start.z);
                                                              // println!("verten {},{},{}", end.x, end.y, end.z);
@@ -1008,7 +1023,7 @@ pub fn print_events(
                     //     print!("deselected current selection");
                     //     inspector.active = None;
                     // } else {
-                        inspector.active = Some(details.clone());
+                    inspector.active = Some(details.clone());
                     // }
 
                     // info!("{}", details.hover.as_str());
@@ -1122,8 +1137,7 @@ fn setup(
         ..default()
     });
     #[cfg(feature = "normalmouse")]
-    entity_comands
-        .insert(FlyCam);
+    entity_comands.insert(FlyCam);
     entity_comands
         .insert(Viewport)
         .insert_bundle(PickingCameraBundle { ..default() });
@@ -1140,7 +1154,7 @@ fn setup(
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.7,
+        brightness: 0.9,
     });
 
     // commands.spawn_bundle(PointLightBundle {

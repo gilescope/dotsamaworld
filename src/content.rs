@@ -1,6 +1,5 @@
 use crate::DataEntity;
 use crate::DataEvent;
-use subxt::Phase;
 
 /// Is this extrinsic part of the overheads of running this blockchain?
 /// For the relay chain including parachain blocks is useful work.
@@ -9,8 +8,8 @@ pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
         &DataEntity::Extrinsic { ref details, .. } => {
             return is_boring(details.pallet.as_str(), details.variant.as_str());
         }
-        &DataEntity::Event(DataEvent { ref raw, .. }) => {
-            !matches!(raw.phase, Phase::ApplyExtrinsic(_)) || is_boring(&raw.pallet, &raw.variant)
+        &DataEntity::Event(DataEvent { ref details, .. }) => {
+            details.parent.is_none() || is_boring(&details.pallet, &details.variant)
         }
     }
 }
@@ -39,9 +38,9 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
 
 pub fn is_event_message(entry: &DataEvent) -> bool {
     match entry {
-        &DataEvent { ref raw, .. } => {
+        &DataEvent { ref details, .. } => {
             matches!(
-                raw.pallet.as_str().to_ascii_lowercase().as_str(),
+                details.pallet.as_str().to_ascii_lowercase().as_str(),
                 "ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
             )
         }
