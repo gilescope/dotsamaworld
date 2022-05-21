@@ -871,7 +871,7 @@ pub async fn watch_blocks(
                         .0
                         .entry(block_hash.to_string())
                         .or_insert(PolkaBlock {
-                            blocknum: block_header.number as usize,
+                            blocknum: block_header.number,
                             blockhash: block_hash,
                             extrinsics: exts,
                             events: vec![],
@@ -894,9 +894,8 @@ pub async fn watch_blocks(
     }
     Ok(())
 }
-
 pub struct PolkaBlock {
-    pub blocknum: usize,
+    pub blocknum: u32,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
@@ -923,21 +922,29 @@ pub async fn watch_events(
     let client = ClientBuilder::new().set_url(url).build().await?;
 
     // system.events query is 0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7
-
     if let Some(as_of) = as_of {
         let mut as_of: u32 = as_of.parse().unwrap();
-        for i in as_of..(as_of + 10) {
-            let filename = format!("{}/{}.events", events_path, i);
+        for blocknum in as_of..(as_of + 10) {
+            let filename = format!("{}/{}.events", events_path, blocknum);
+
+            //too often
+            let blockhash: sp_core::H256 = client
+                .rpc()
+                .block_hash(Some(blocknum.into()))
+                .await
+                .unwrap()
+                .unwrap();
 
             let bytes = if let Ok(contents) = std::fs::read(&filename) {
                 println!("cache hit!");
                 Some(contents)
             } else {
-                let hash = client.rpc().block_hash(Some(i.into())).await.unwrap();
-
                 let call = client
                     .storage()
-                    .fetch_raw(sp_core::storage::StorageKey(storage_key.clone()), hash)
+                    .fetch_raw(
+                        sp_core::storage::StorageKey(storage_key.clone()),
+                        Some(blockhash),
+                    )
                     .await?;
 
                 if let Some(sp_core::storage::StorageData(events_raw)) = call {
@@ -958,27 +965,127 @@ pub async fn watch_events(
                     &mut events_raw.as_slice(),
                 ) {
                     if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
+                        let mut data_events = vec![];
                         for event in &events {
+                            let start_link = vec![];
+                            let mut end_link = vec![];
+                            let mut details = Details::default();
+
                             println!("start event");
                             print_val(&event.value);
 
-                            if let ValueDef::Composite(Composite::Named(pairs)) = event.value {
+                            if let ValueDef::Composite(Composite::Named(ref pairs)) = event.value {
                                 for (name, val) in pairs {
-                                    //phase
-                                    // pallet variant?
+                                    if name == "phase" {
+                                        println!("phase start");
+                                        if let ValueDef::Variant(ref var) = val.value {
+                                            if var.name == "ApplyExtrinsic" {
+                                                //Has extrisic
+
+                                                if let Composite::Unnamed(ref vals) = var.values {
+                                                    for val in vals {
+                                                        if let ValueDef::Primitive(
+                                                            Primitive::U32(v),
+                                                        ) = val.value
+                                                        {
+                                                            details.parent = Some(v);
+                                                            println!("set extrisic to {}", v);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if name == "event" {
+                                        if let ValueDef::Variant(ref var) = val.value {
+                                            println!(
+                                                "event deeeeeep nameedddd data!!!!!! pallet {}",
+                                                &var.name
+                                            );
+                                            details.pallet = var.name.clone();
+                                            if let Composite::Unnamed(pairs) = &var.values {
+                                                for val in pairs.iter() {
+                                                    // println!("NANEN unnamed start");
+                                                    if let ValueDef::Variant(ref variant) =
+                                                        &val.value
+                                                    {
+                                                        details.variant = variant.name.clone();
+                                                        //  println!("event data!!!!!! variant = {}", &details.variant);
+                                                    }
+                                                    // print_val(&val.value);
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        println!("found {}", name);
+                                        print_val(&val.value);
+                                    }
+                                    // details.pallet = ev.pallet.clone();
+                                    // details.variant = ev.variant.clone();
+                                    // if let subxt::Phase::ApplyExtrinsic(ext) = ev.phase {
+                                    //     details.parent = Some(ext);
+                                    // }
+
+                                    //  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
+                                    //                                 // use crate::polkadot::runtime_types::xcm::v2::traits::Error;
+                                    //                                 use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO version
+                                    //                                 let result = <Outcome as Decode>::decode(&mut ev.data.as_slice());
+                                    //                                 if let Ok(outcome) = &result {
+                                    //                                     match outcome {
+                                    //                                         Outcome::Complete(_) => details.success = Success::Happy,
+                                    //                                         Outcome::Incomplete(_, _) => details.success = Success::Worried,
+                                    //                                         Outcome::Error(_) => details.success = Success::Sad,
+                                    //                                     }
+                                    //                                 }
+                                    //                                 details.flattern = format!("{:#?}", result);
+                                    //                             }
+                                    // if details.pallet == "XcmPallet"
+                                    //     && details.variant == "ReserveAssetDeposited"
+                                    // {
+                                    //     println!("got here rnrtnrtrtnrt");
+                                    //     println!("{:#?}", details);
+                                    // }
+                                    //     if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
+                                    //     println!("{:#?}", event);
+
+                                    //     // Hypothesis: there's no sent_at because it would be the sent at of the individual chain.
+                                    //     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
+                                    //     // TL/DR: we have to wait before we can match up things going upwards...
+
+                                    //     // blockhash of the recieving block would be incorrect.
+                                    //     let received_hash = format!("{}",hex::encode(msg));
+                                    //     println!("recieved UMP hash {}", &received_hash);
+                                    //     end_link.push(received_hash);
+                                    //     // // msg is a msg id! not decodable - match against hash of original
+                                    //     // if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
+                                    //     //     println!("decodearama {:#?}!!!!", ver_msg);
+                                    //     // } else {
+                                    //     //     println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
+                                    //     // }
+                                    // }
                                 }
                             }
-
-
                             println!("end event");
-                            
-
-
+                            data_events.push(DataEvent {
+                                // raw: ev_raw.unwrap(),
+                                start_link,
+                                end_link,
+                                details,
+                            })
                         }
                         println!("events count {}!", events.len());
+
+                        tx.lock().unwrap().0.insert(
+                            hex::encode(blockhash.as_bytes()),
+                            PolkaBlock {
+                                blocknum,
+                                blockhash,
+                                extrinsics: vec![],
+                                events: data_events,
+                            },
+                        );
                     }
                 } else {
-                    println!("can't decode events {} / {}", &url, i);
+                    println!("can't decode events {} / {}", &url, blocknum);
                 };
 
                 // let para_id = <u32 as Decode>::decode(&mut events_raw.as_slice()).unwrap();
@@ -986,7 +1093,7 @@ pub async fn watch_events(
 
                 // Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
             } else {
-                warn!("could not find events {}", &i);
+                warn!("could not find events {}", &blocknum);
                 // None
             };
 
@@ -1013,7 +1120,7 @@ pub async fn watch_events(
     } else {
         let api = client
             .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-    {
+        {
             if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
                 let mut blocknum = 1;
                 while let Some(events) = event_sub.next().await {
@@ -1032,19 +1139,18 @@ pub async fn watch_events(
                     //     details
                     // }).collect();
 
-                    for ev_raw  in events.iter_raw() {
+                    for ev_raw in events.iter_raw() {
                         let start_link = vec![];
                         let mut end_link = vec![];
                         let mut details = Details::default();
                         if let Ok(ev) = &ev_raw {
-                            
                             details.pallet = ev.pallet.clone();
-                        details.variant = ev.variant.clone();
-                        
+                            details.variant = ev.variant.clone();
+
                             if let subxt::Phase::ApplyExtrinsic(ext) = ev.phase {
                                 details.parent = Some(ext);
                             }
-                           
+
                             if details.pallet == "XcmPallet" && details.variant == "Attempted" {
                                 // use crate::polkadot::runtime_types::xcm::v2::traits::Error;
                                 use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO version
@@ -1052,7 +1158,9 @@ pub async fn watch_events(
                                 if let Ok(outcome) = &result {
                                     match outcome {
                                         Outcome::Complete(_) => details.success = Success::Happy,
-                                        Outcome::Incomplete(_, _) => details.success = Success::Worried,
+                                        Outcome::Incomplete(_, _) => {
+                                            details.success = Success::Worried
+                                        }
                                         Outcome::Error(_) => details.success = Success::Sad,
                                     }
                                 }
@@ -1101,7 +1209,6 @@ pub async fn watch_events(
                         }
                         data_events.push(DataEvent {
                             // raw: ev_raw.unwrap(),
-                            
                             start_link,
                             end_link,
                             details,

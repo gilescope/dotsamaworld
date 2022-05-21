@@ -15,7 +15,6 @@ pub enum Success {
     Sad,
 }
 
-
 #[derive(Component, Default, Clone, Debug)]
 pub struct Details {
     pub pallet: String,
