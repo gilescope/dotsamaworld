@@ -289,6 +289,31 @@ async fn get_desub_metadata(url: &str) -> Metadata {
     Metadata::from_bytes(&metadata_bytes).unwrap()
 }
 
+async fn get_parachain_id<T: subxt::Config>(
+    client: &subxt::Client<T>,
+    url: &str,
+) -> Option<NonZeroU32> {
+    // parachainInfo / parachainId returns u32 paraId
+    let storage_key =
+        hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
+    let call = client
+        .storage()
+        .fetch_raw(sp_core::storage::StorageKey(storage_key), None)
+        .await
+        .unwrap();
+
+    if let Some(sp_core::storage::StorageData(val)) = call {
+        let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
+        println!("{} is para id {}", &url, para_id);
+
+        Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
+    } else {
+        // This is expected for relay chains...
+        warn!("could not find para id for {}", &url);
+        None
+    }
+}
+
 pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
@@ -304,24 +329,7 @@ pub async fn watch_blocks(
 
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
-    // parachainInfo / parachainId returns u32 paraId
-    let storage_key =
-        hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
-    let call = client
-        .storage()
-        .fetch_raw(sp_core::storage::StorageKey(storage_key), None)
-        .await?;
-
-    let para_id = if let Some(sp_core::storage::StorageData(val)) = call {
-        let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
-        println!("{} is para id {}", &url, para_id);
-
-        Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
-    } else {
-        // This is expected for relay chains...
-        warn!("could not find para id for {}", &url);
-        None
-    };
+    let para_id = get_parachain_id(&client, &url).await;
 
     let mut api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
@@ -366,142 +374,145 @@ pub async fn watch_blocks(
     //         .await?;
 
     // For non-finalised blocks use `.subscribe_finalized_blocks()`
-    let mut reconnects = 0;
-    while reconnects < 20 {
-        if let Ok(mut block_headers)//: Subscription<Header<u32, BlakeTwo256>> 
-        =
-            api.client.rpc().subscribe_finalized_blocks().await {
+    if let Some(as_of) = as_of {
+    } else {
+        let mut reconnects = 0;
+        while reconnects < 20 {
+            if let Ok(mut block_headers)//: Subscription<Header<u32, BlakeTwo256>> 
+            =
+                api.client.rpc().subscribe_finalized_blocks().await {
 
-            while let Some(Ok(block_header)) = block_headers.next().await {
-                let block_num = block_header.number;
-                let block_hash = block_header.hash();
-                // println!(
-                //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
-                //     block_header.number,
-                //     block_hash,
-                //     block_header.parent_hash,
-                //     block_header.state_root,
-                //     block_header.extrinsics_root
-                // );
-                if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
-                    let mut exts = vec![];
-                    // println!("block hash! {}", block_hash.to_string());
-                    for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
-                        // let s : String = ext_bytes;
-                        // ext_bytes.using_encoded(|ref slice| {
-                        //     assert_eq!(slice, &b"\x0f");
+                while let Some(Ok(block_header)) = block_headers.next().await {
+                    let block_num = block_header.number;
+                    let block_hash = block_header.hash();
+                    // println!(
+                    //     "block number: {} hash:{} parent:{} state root:{} extrinsics root:{}",
+                    //     block_header.number,
+                    //     block_hash,
+                    //     block_header.parent_hash,
+                    //     block_header.state_root,
+                    //     block_header.extrinsics_root
+                    // );
+                    if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
+                        let mut exts = vec![];
+                        // println!("block hash! {}", block_hash.to_string());
+                        for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
+                            // let s : String = ext_bytes;
+                            // ext_bytes.using_encoded(|ref slice| {
+                            //     assert_eq!(slice, &b"\x0f");
 
-                        let encoded_extrinsic = ext_bytes.encode();
-                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                            .unwrap()
-                            .0;
-                        // This works too but unsafe:
-                        //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
+                            let encoded_extrinsic = ext_bytes.encode();
+                            let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                                .unwrap()
+                                .0;
+                            // This works too but unsafe:
+                            //let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
 
-                        // use parity_scale_codec::Encode;
-                        // ext_bytes.encode();
-                        if let Ok(ext) =
-                            decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                        {
-                            let pallet = ext.call_data.pallet_name.to_string();
-                            let variant = ext.call_data.ty.name().to_owned();
-                            let mut start_link = vec![];
-                            let mut end_link = vec![];
+                            // use parity_scale_codec::Encode;
+                            // ext_bytes.encode();
+                            if let Ok(ext) =
+                                decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+                            {
+                                let pallet = ext.call_data.pallet_name.to_string();
+                                let variant = ext.call_data.ty.name().to_owned();
+                                let mut start_link = vec![];
+                                let mut end_link = vec![];
 
-                            let mut args: Vec<_> = ext
-                                .call_data
-                                .arguments
-                                .iter()
-                                .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
-                                .collect();
+                                let mut args: Vec<_> = ext
+                                    .call_data
+                                    .arguments
+                                    .iter()
+                                    .map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
+                                    .collect();
 
-                            if pallet == "System" && variant == "remark" {
-                                match &ext.call_data.arguments[0].value {
-                                    desub_current::ValueDef::Composite(
-                                        desub_current::value::Composite::Unnamed(chars_vals),
-                                    ) => {
-                                        let bytes = chars_vals
-                                            .iter()
-                                            .map(|arg| match arg.value {
-                                                desub_current::ValueDef::Primitive(
-                                                    desub_current::value::Primitive::U8(ch),
-                                                ) => ch,
-                                                _ => b'!',
-                                            })
-                                            .collect::<Vec<u8>>();
-                                        let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
-                                        args.insert(0, rmrk);
+                                if pallet == "System" && variant == "remark" {
+                                    match &ext.call_data.arguments[0].value {
+                                        desub_current::ValueDef::Composite(
+                                            desub_current::value::Composite::Unnamed(chars_vals),
+                                        ) => {
+                                            let bytes = chars_vals
+                                                .iter()
+                                                .map(|arg| match arg.value {
+                                                    desub_current::ValueDef::Primitive(
+                                                        desub_current::value::Primitive::U8(ch),
+                                                    ) => ch,
+                                                    _ => b'!',
+                                                })
+                                                .collect::<Vec<u8>>();
+                                            let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
+                                            args.insert(0, rmrk);
+                                        }
+
+                                        _ => {}
                                     }
-
-                                    _ => {}
                                 }
-                            }
 
-                            // Maybe we can rely on the common type system for XCM versions as it has to be quite standard...
+                                // Maybe we can rely on the common type system for XCM versions as it has to be quite standard...
 
-                            let mut children = vec![];
-                            // println!("checking batch");
+                                let mut children = vec![];
+                                // println!("checking batch");
 
-                            /*
-                            Value { variant v1
-                                value: V1 ( <--unnamed composit
-                                    Value { value:  { <-- named composit
-                                        parents: Value { value: U8(0), context: TypeId(2) }, 
-                                        interior: Value { value: X1 (Value { value:    <-- variant x1, un named composit, 
-                                            Parachain (Value {      <-- variant parachain
-                                                value: U32(2012),    <-- unnamed composit
-                                                context: TypeId(114) },),  
-                            context: TypeId(113) },), context: TypeId(112) } }, context: TypeId(111) },), context: TypeId(144) }
-                            
-                            */
+                                /*
+                                Value { variant v1
+                                    value: V1 ( <--unnamed composit
+                                        Value { value:  { <-- named composit
+                                            parents: Value { value: U8(0), context: TypeId(2) }, 
+                                            interior: Value { value: X1 (Value { value:    <-- variant x1, un named composit, 
+                                                Parachain (Value {      <-- variant parachain
+                                                    value: U32(2012),    <-- unnamed composit
+                                                    context: TypeId(114) },),  
+                                context: TypeId(113) },), context: TypeId(112) } }, context: TypeId(111) },), context: TypeId(144) }
+                                
+                                */
 
-                            // Seek out and expand Ump / UpwardMessageRecieved;
-                            // if pallet == "ParaInherent" && variant == "enter" {
-                            //     let mut results = HashMap::new();
-                            //     flattern(&ext.call_data.arguments[0].value, "",&mut results);
-                            //     let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
-                            //     let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
-                            //     let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
+                                // Seek out and expand Ump / UpwardMessageRecieved;
+                                // if pallet == "ParaInherent" && variant == "enter" {
+                                //     let mut results = HashMap::new();
+                                //     flattern(&ext.call_data.arguments[0].value, "",&mut results);
+                                //     let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
+                                //     let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
+                                //     let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
 
-                            //     println!("FLATTERN UMP {:#?}", results);
-                            // }
-                            // Seek out and expand Dmp / DownwardMessageRecieved;
-                            if pallet == "ParachainSystem" && variant == "set_validation_data" {
-                                match &ext.call_data.arguments[0].value
-                                {
-                                    ValueDef::Composite(Composite::Named(named)) =>
+                                //     println!("FLATTERN UMP {:#?}", results);
+                                // }
+                                // Seek out and expand Dmp / DownwardMessageRecieved;
+                                if pallet == "ParachainSystem" && variant == "set_validation_data" {
+                                    match &ext.call_data.arguments[0].value
                                     {
-                                        for (name, val) in named {
-                                            match name.as_str() {
-                                                "upward_messages" => {
-                                                    println!("found upward msgs (first time)");
-                                                    print_val(&val.value);
-                                                },
-                                                "horizontal_messages" => {
-                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                        for val in vals {
-                                                            // channels
-                                                            if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                                for val in vals {
-                                                                    // single channel
-                                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                                        for val in vals {
-                                                                            // Should be a msg
-                                                                          //  for val in vals {
-                                                                                //msgs
-                                                                            if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                                                if vals.len() > 0 {
-                                                                                    for m in vals {
-                                                                                        if let ValueDef::Primitive(Primitive::U32(_from_para_id))= &m.value {
-                                                                                            // println!("from {}", from_para_id);
-                                                                                        }
+                                        ValueDef::Composite(Composite::Named(named)) =>
+                                        {
+                                            for (name, val) in named {
+                                                match name.as_str() {
+                                                    "upward_messages" => {
+                                                        println!("found upward msgs (first time)");
+                                                        print_val(&val.value);
+                                                    },
+                                                    "horizontal_messages" => {
+                                                        if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                            for val in vals {
+                                                                // channels
+                                                                if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                    for val in vals {
+                                                                        // single channel
+                                                                        if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                            for val in vals {
+                                                                                // Should be a msg
+                                                                            //  for val in vals {
+                                                                                    //msgs
+                                                                                if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                                                    if vals.len() > 0 {
+                                                                                        for m in vals {
+                                                                                            if let ValueDef::Primitive(Primitive::U32(_from_para_id))= &m.value {
+                                                                                                // println!("from {}", from_para_id);
+                                                                                            }
 
-                                                                                        if vals.len() > 1 {
-                                                                                            let mut results = HashMap::new();
-                                                                                            flattern(&val.value, "",&mut results);
-                                                                                            println!("INNER {:#?}", results);
-                                                                                            //Could be that these are not yet in the wild 
-                                                                                            std::process::exit(1);
+                                                                                            if vals.len() > 1 {
+                                                                                                let mut results = HashMap::new();
+                                                                                                flattern(&val.value, "",&mut results);
+                                                                                                println!("INNER {:#?}", results);
+                                                                                                //Could be that these are not yet in the wild 
+                                                                                                std::process::exit(1);
+                                                                                            }
                                                                                         }
                                                                                     }
                                                                                 }
@@ -511,386 +522,387 @@ pub async fn watch_blocks(
                                                                 }
                                                             }
                                                         }
-                                                    }
-                                                },
-                                                "downward_messages" => {
-                                                    if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-                                                        for val in vals {
-                                                            let mut results = HashMap::new();
-                                                            flattern(&val.value, "",&mut results);
-                                                            println!("FLATTERN {:#?}", results);
-                                                            // also .sent_at
-                                                            if let Some(msg) = results.get(".msg") {
-                                                                if let Some(sent_at) = results.get(".sent_at") {
-                                                                    let bytes = hex::decode(msg).unwrap();
-                                                                    if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
-                                                                        match ver_msg {
-                                                                            VersionedXcm::V0(msg) => {
-                                                                                // Only one xcm instruction in a v1 message. 
-                                                                                    let instruction = format!("{:?}", &msg);
-                                                                                    println!("instruction {:?}", &instruction);
-                                                                                    children.push(DataEntity::Extrinsic {
-                                                                                        id: (block_header.number, i as u32),
-                                                                                        args: vec![instruction.clone()],
-                                                                                        contains: vec![],
-                                                                                        raw: vec![], //TODO: should be simples
-                                                                                        start_link: vec![],
-                                                                                        end_link: vec![],
-                                                                                        details: Details{  pallet: "Instruction".to_string(),
-                                                                                        variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
-                                                                                    });
-                                                                                let inst = msg;
-                                                                                use crate::polkadot::runtime_types::xcm::v0::Xcm::TransferReserveAsset;
-                                                                                use crate::polkadot::runtime_types::xcm::v0::multi_location::MultiLocation;
-                                                                                use crate::polkadot::runtime_types::xcm::v0::junction::Junction;
-                                                                                if let TransferReserveAsset{dest, ..} = inst {
-                                                                                    if let MultiLocation::X1(x1) = &dest {
-                                                                                    //todo assert parent
-                                                                                        if let Junction::AccountId32 {id, ..} = x1 {
-                                                                                            let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
-                                                                                            println!("RECIEVE HASH v0 {}", msg_id);
-                                                                                            end_link.push(msg_id.clone());
-                                                                                            start_link.push(msg_id); // for reserve assets received.
-                                                                                        };
-                                                                                    } else { panic!("unknonwn") }
+                                                    },
+                                                    "downward_messages" => {
+                                                        if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
+                                                            for val in vals {
+                                                                let mut results = HashMap::new();
+                                                                flattern(&val.value, "",&mut results);
+                                                                println!("FLATTERN {:#?}", results);
+                                                                // also .sent_at
+                                                                if let Some(msg) = results.get(".msg") {
+                                                                    if let Some(sent_at) = results.get(".sent_at") {
+                                                                        let bytes = hex::decode(msg).unwrap();
+                                                                        if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut bytes.as_slice()) {
+                                                                            match ver_msg {
+                                                                                VersionedXcm::V0(msg) => {
+                                                                                    // Only one xcm instruction in a v1 message. 
+                                                                                        let instruction = format!("{:?}", &msg);
+                                                                                        println!("instruction {:?}", &instruction);
+                                                                                        children.push(DataEntity::Extrinsic {
+                                                                                            id: (block_header.number, i as u32),
+                                                                                            args: vec![instruction.clone()],
+                                                                                            contains: vec![],
+                                                                                            raw: vec![], //TODO: should be simples
+                                                                                            start_link: vec![],
+                                                                                            end_link: vec![],
+                                                                                            details: Details{  pallet: "Instruction".to_string(),
+                                                                                            variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
+                                                                                        });
+                                                                                    let inst = msg;
+                                                                                    use crate::polkadot::runtime_types::xcm::v0::Xcm::TransferReserveAsset;
+                                                                                    use crate::polkadot::runtime_types::xcm::v0::multi_location::MultiLocation;
+                                                                                    use crate::polkadot::runtime_types::xcm::v0::junction::Junction;
+                                                                                    if let TransferReserveAsset{dest, ..} = inst {
+                                                                                        if let MultiLocation::X1(x1) = &dest {
+                                                                                        //todo assert parent
+                                                                                            if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                                let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                                println!("RECIEVE HASH v0 {}", msg_id);
+                                                                                                end_link.push(msg_id.clone());
+                                                                                                start_link.push(msg_id); // for reserve assets received.
+                                                                                            };
+                                                                                        } else { panic!("unknonwn") }
+                                                                                    }
                                                                                 }
-                                                                            }
-                                                                            VersionedXcm::V1(msg) => {
-                                                                                // Only one xcm instruction in a v1 message. 
-                                                                                    let instruction = format!("{:?}", &msg);
-                                                                                    println!("instruction {:?}", &instruction);
-                                                                                    children.push(DataEntity::Extrinsic {
-                                                                                        id: (block_header.number, i as u32),
-                                                                                        args: vec![instruction.clone()],
-                                                                                        contains: vec![],
-                                                                                        raw: vec![], //TODO: should be simples
-                                                                                        start_link: vec![],
-                                                                                        end_link: vec![],
-                                                                                        details: Details{  pallet: "Instruction".to_string(),
-                                                                                        variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
-                                                                                    });
-                                                                                let inst = msg;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::Xcm::TransferReserveAsset;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
-                                                                                use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
-                                                                                if let TransferReserveAsset{dest, ..} = inst {
-                                                                                    let MultiLocation{ interior, .. } = &dest;
-                                                                                    //todo assert parent
-                                                                                    if let Junctions::X1(x1) = interior {
-                                                                                        if let Junction::AccountId32 {id, ..} = x1 {
-                                                                                            let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
-                                                                                            println!("RECIEVE HASH v1 {}", msg_id);
-                                                                                            end_link.push(msg_id.clone());
-                                                                                            start_link.push(msg_id); // for reserve assets received.
-                                                                                        };
-                                                                                    } else { panic!("unknonwn") }                                                                                }
-                                                                            }
-                                                                            VersionedXcm::V2(msg) => {
-                                                                                for instruction in &msg.0 {
-                                                                                    let instruction = format!("{:?}", instruction);
-                                                                                    println!("instruction {:?}", &instruction);
-                                                                                    children.push(DataEntity::Extrinsic {
-                                                                                        id: (block_header.number, i as u32),
-                                                                                        args: vec![instruction.clone()],
-                                                                                        contains: vec![],
-                                                                                        raw: vec![], //TODO: should be simples
-                                                                                        start_link: vec![],
-                                                                                        end_link: vec![],
-                                                                                        details: Details
-                                                                                        {
-                                                                                            pallet: "Instruction".to_string(),
-                                                                                            variant: instruction.split_once(' ').unwrap_or((&instruction,"")).0.to_string(), 
-                                                                                            ..Details::default()
-                                                                                        }
-                                                                                    });
-                                                                                }
-                                                                                for inst in msg.0 {
-                                                                                    //TODO: should only be importing from one version probably.
-                                                                                    use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
+                                                                                VersionedXcm::V1(msg) => {
+                                                                                    // Only one xcm instruction in a v1 message. 
+                                                                                        let instruction = format!("{:?}", &msg);
+                                                                                        println!("instruction {:?}", &instruction);
+                                                                                        children.push(DataEntity::Extrinsic {
+                                                                                            id: (block_header.number, i as u32),
+                                                                                            args: vec![instruction.clone()],
+                                                                                            contains: vec![],
+                                                                                            raw: vec![], //TODO: should be simples
+                                                                                            start_link: vec![],
+                                                                                            end_link: vec![],
+                                                                                            details: Details{  pallet: "Instruction".to_string(),
+                                                                                            variant: instruction.split_once(' ').unwrap().0.to_string(), ..Details::default() }
+                                                                                        });
+                                                                                    let inst = msg;
+                                                                                    use crate::polkadot::runtime_types::xcm::v1::Xcm::TransferReserveAsset;
                                                                                     use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
                                                                                     use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
                                                                                     use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
-                                                                                    if let DepositAsset{beneficiary, ..} = inst {
-                                                                                        let MultiLocation{ interior, .. } = &beneficiary;
+                                                                                    if let TransferReserveAsset{dest, ..} = inst {
+                                                                                        let MultiLocation{ interior, .. } = &dest;
                                                                                         //todo assert parent
                                                                                         if let Junctions::X1(x1) = interior {
                                                                                             if let Junction::AccountId32 {id, ..} = x1 {
                                                                                                 let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
-                                                                                                println!("RECIEVE HASH v2 {}", msg_id);
+                                                                                                println!("RECIEVE HASH v1 {}", msg_id);
                                                                                                 end_link.push(msg_id.clone());
                                                                                                 start_link.push(msg_id); // for reserve assets received.
                                                                                             };
                                                                                         } else { panic!("unknonwn") }                                                                                }
                                                                                 }
+                                                                                VersionedXcm::V2(msg) => {
+                                                                                    for instruction in &msg.0 {
+                                                                                        let instruction = format!("{:?}", instruction);
+                                                                                        println!("instruction {:?}", &instruction);
+                                                                                        children.push(DataEntity::Extrinsic {
+                                                                                            id: (block_header.number, i as u32),
+                                                                                            args: vec![instruction.clone()],
+                                                                                            contains: vec![],
+                                                                                            raw: vec![], //TODO: should be simples
+                                                                                            start_link: vec![],
+                                                                                            end_link: vec![],
+                                                                                            details: Details
+                                                                                            {
+                                                                                                pallet: "Instruction".to_string(),
+                                                                                                variant: instruction.split_once(' ').unwrap_or((&instruction,"")).0.to_string(), 
+                                                                                                ..Details::default()
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                    for inst in msg.0 {
+                                                                                        //TODO: should only be importing from one version probably.
+                                                                                        use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
+                                                                                        use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
+                                                                                        use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
+                                                                                        use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
+                                                                                        if let DepositAsset{beneficiary, ..} = inst {
+                                                                                            let MultiLocation{ interior, .. } = &beneficiary;
+                                                                                            //todo assert parent
+                                                                                            if let Junctions::X1(x1) = interior {
+                                                                                                if let Junction::AccountId32 {id, ..} = x1 {
+                                                                                                    let msg_id = format!("{}-{}", sent_at, please_hash(hex::encode(id)));
+                                                                                                    println!("RECIEVE HASH v2 {}", msg_id);
+                                                                                                    end_link.push(msg_id.clone());
+                                                                                                    start_link.push(msg_id); // for reserve assets received.
+                                                                                                };
+                                                                                            } else { panic!("unknonwn") }                                                                                }
+                                                                                    }
+                                                                                }
                                                                             }
+                                                                        } else {
+                                                                            println!("could not decode msg: {}", msg);
                                                                         }
-                                                                    } else {
-                                                                        println!("could not decode msg: {}", msg);
+                                                                    }
+                                                                    // println!("{:#?}", event);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    _  => {}
+                                                }
+                                            }
+                                        },
+                                        _  => {}
+                                    }
+                                }
+
+                                // Anything that looks batch like we will assume is a batch
+                                if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
+                                    let mut results = HashMap::new();
+                                    flattern(&ext.call_data.arguments[0].value, "",&mut results);
+                                    println!("FLATTERN {:#?}", results);
+
+                                    if let Some(dest) =  results.get(".V2.0.interior.X1.0.Parachain.0") { 
+                                        println!("first time!");                                   
+                                        //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
+                                        let dest: NonZeroU32 = dest.parse().unwrap();
+                                        let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
+                                        let mut results = HashMap::new();
+                                        flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        let to = results.get(".V2.0.interior.X1.0.AccountId32.id");
+
+                                        if let Some(to) = to {
+                                            let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                            println!("SEND MSG v2 hash {}", msg_id);
+                                            start_link.push(msg_id);
+                                        }
+                                        println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                        // if ext.call_data.arguments.len() > 1 {
+                                        //     let mut results = HashMap::new();
+                                        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        //     println!("FLATTERN DEST2 {:#?}", results);
+                                        //     println!("ARGS {:?}", ext.call_data.arguments);
+                                        // } else { 
+                                        //     warn!("expected more params...");
+                                        // }
+                                    }
+                                    if let Some(dest) =  results.get(".V1.0.interior.X1.0.Parachain.0") {                                    
+                                        //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
+                                        let dest: NonZeroU32 = dest.parse().unwrap();
+                                        let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
+                                        let mut results = HashMap::new();
+                                        flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
+
+                                        if let Some(to) = to {
+                                            let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                            println!("SEND MSG v1 hash {}", msg_id);
+                                            start_link.push(msg_id);
+                                        }
+                                        println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                        // if ext.call_data.arguments.len() > 1 {
+                                        //     let mut results = HashMap::new();
+                                        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        //     println!("FLATTERN DEST2 {:#?}", results);
+                                        //     println!("ARGS {:?}", ext.call_data.arguments);
+                                        // } else { 
+                                        //     warn!("expected more params...");
+                                        // }
+                                    }
+                                    if let Some(dest) =  results.get(".V0.0.X1.0.Parachain.0") {    
+                                        //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
+                                        let dest: NonZeroU32 = dest.parse().unwrap();
+                                        let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
+                                        let mut results = HashMap::new();
+                                        flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        let to = results.get(".V0.0.X1.0.AccountId32.id");
+
+                                        if let Some(to) = to {
+                                            let msg_id = format!("{}-{}", block_num, please_hash(to));
+                                            println!("SEND MSG v0 hash {}", msg_id);
+                                            start_link.push(msg_id);
+                                        }
+                                        println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
+
+                                        // if ext.call_data.arguments.len() > 1 {
+                                        //     let mut results = HashMap::new();
+                                        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+                                        //     println!("FLATTERN DEST2 {:#?}", results);
+                                        //     println!("ARGS {:?}", ext.call_data.arguments);
+                                        // } else { 
+                                        //     warn!("expected more params...");
+                                        // }
+                                    }
+
+    //                                 print_val(&ext.call_data.arguments[0].value);
+    //                                 println!("Got here!!!!!");
+    //                                 println!("{:#?}", &ext.call_data.arguments[0].value);
+
+
+    //                                 let v = &ext.call_data.arguments[0];
+    //                                 match &v.value {
+    //                                     // ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
+    //                                     //     for v in chars_vals {
+    //                                     //         match &v.value {
+    //                                     //             ValueDef::Variant(Variant {
+    //                                     //                 ref name,//V1
+    //                                     //                 values: Composite::Unnamed(chars_vals),
+    //                                     //             }) => {
+    //                                     //                 for v in chars_vals {
+    //                                     //                     match &v.value {
+    //                                     //                         ValueDef::Variant(Variant {
+    //                                     //                             name,
+    //                                     //                             values,
+    //                                     //                         }) => {
+    //                                     //                             println!("{pallet} {variant} has it {name}");
+    //                                     //                         }
+    //                                     //                         _ => {
+    //                                     //                             println!("miss3");
+    //                                     //                         }
+    //                                     //                     }
+    //                                     //                 }
+
+    //                                     //             }
+    //                                     //             _ => {
+    //                                     //                  println!("inner miss");
+    //                                     //                  print_val(&v.value);
+    //                                     //             }
+    //                                     //         }
+    //                                     //     }
+    //                                     // }, 
+    //                                     ValueDef::Variant(Variant{ name, values:Composite::Unnamed(values)})  => {
+    //                                         // println!("{} but expecetd V1", var.name);
+    //                                         // if let ValueDef::Composite(()) = values {
+    //                                         for v in values {
+    //                                             match &v.value {
+    //                                                 ValueDef::Variant(Variant {
+    //                                                     name,
+    //                                                     values,
+    //                                                 }) => {
+    //                                                     println!("{pallet} {variant} has it {name}");
+    //                                                 }
+    //                                                 _ => {
+    //                                                     println!("misshchg3");
+    //                                                 }
+    //                                             }
+    //                                         }
+    //                                     // }
+    //                                     }
+    //                                     _ => {
+    //                                          println!("inner misshh");
+    //                                          print_val(&v.value);
+    //                                     }
+    //                                 }
+
+    //                                 panic!(
+    // "op"
+    //                                 );
+                                }
+                                if variant.contains("batch") {
+                                    for arg in &ext.call_data.arguments {
+                                        //just first arg
+                                        match &arg.value {
+                                            ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
+                                                for v in chars_vals {
+                                                    match &v.value {
+                                                        ValueDef::Variant(Variant {
+                                                            ref name,
+                                                            values: Composite::Unnamed(chars_vals),
+                                                        }) => {
+                                                            let inner_pallet = name;
+
+                                                            for v in chars_vals {
+                                                                match &v.value {
+                                                                    ValueDef::Variant(Variant {
+                                                                        name,
+                                                                        values,
+                                                                    }) => {
+                                                                        // println!("{pallet} {variant} has inside a {inner_pallet} {name}");
+                                                                        children.push(DataEntity::Extrinsic {
+                                                                            id: (block_header.number, i as u32),
+                                                                            args: vec![format!("{:?}", values)],
+                                                                            contains: vec![],
+                                                                            raw: vec![], //TODO: should be simples
+                                                                            start_link: vec![],
+                                                                            end_link: vec![],
+                                                                            details: Details { pallet: inner_pallet.to_string(),
+                                                                                variant: name.clone(), ..Details::default()}
+                                                                        });
+                                                                    }
+                                                                    _ => {
+                                                                        println!("miss yet close");
                                                                     }
                                                                 }
-                                                                // println!("{:#?}", event);
                                                             }
+                                                        }
+                                                        _ => {
+                                                            // println!("inner miss");
+                                                            // print_val(&v.value);
                                                         }
                                                     }
                                                 }
-                                                _  => {}
+                                            }
+
+                                            _ => {
+                                                // println!("miss");
                                             }
                                         }
-                                    },
-                                    _  => {}
+                                    }
                                 }
-                            }
 
-                            // Anything that looks batch like we will assume is a batch
-                            if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
                                 let mut results = HashMap::new();
-                                flattern(&ext.call_data.arguments[0].value, "",&mut results);
-                                println!("FLATTERN {:#?}", results);
-
-                                if let Some(dest) =  results.get(".V2.0.interior.X1.0.Parachain.0") { 
-                                    println!("first time!");                                   
-                                    //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-                                    let dest: NonZeroU32 = dest.parse().unwrap();
-                                    let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
-                                     let mut results = HashMap::new();
-                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    let to = results.get(".V2.0.interior.X1.0.AccountId32.id");
-
-                                    if let Some(to) = to {
-                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
-                                        println!("SEND MSG v2 hash {}", msg_id);
-                                        start_link.push(msg_id);
-                                    }
-                                    println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
-
-                                    // if ext.call_data.arguments.len() > 1 {
-                                    //     let mut results = HashMap::new();
-                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    //     println!("FLATTERN DEST2 {:#?}", results);
-                                    //     println!("ARGS {:?}", ext.call_data.arguments);
-                                    // } else { 
-                                    //     warn!("expected more params...");
-                                    // }
+                                for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
+                                    flattern(&arg.value, &arg_index.to_string(),&mut results);
                                 }
-                                if let Some(dest) =  results.get(".V1.0.interior.X1.0.Parachain.0") {                                    
-                                    //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-                                    let dest: NonZeroU32 = dest.parse().unwrap();
-                                    let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
-                                     let mut results = HashMap::new();
-                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
+                                // println!("FLATTERN UMP {:#?}", results);
+                                // args.insert(0, format!("{results:#?}"));
 
-                                    if let Some(to) = to {
-                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
-                                        println!("SEND MSG v1 hash {}", msg_id);
-                                        start_link.push(msg_id);
+                                exts.push(DataEntity::Extrinsic {
+                                    id: (block_header.number, i as u32),
+                                    args,
+                                    contains: children,
+                                    raw: encoded_extrinsic,
+                                    start_link,
+                                    end_link,
+                                    details: Details{
+                                        hover: "".to_string(),
+                                        flattern: format!("{results:#?}"),
+                                        url:"".to_string(),
+                                        parent: None,
+                                        success: crate::details::Success::Happy,
+                                        pallet,
+                                        variant,
                                     }
-                                    println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
-
-                                    // if ext.call_data.arguments.len() > 1 {
-                                    //     let mut results = HashMap::new();
-                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    //     println!("FLATTERN DEST2 {:#?}", results);
-                                    //     println!("ARGS {:?}", ext.call_data.arguments);
-                                    // } else { 
-                                    //     warn!("expected more params...");
-                                    // }
-                                }
-                                if let Some(dest) =  results.get(".V0.0.X1.0.Parachain.0") {    
-                                    //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-                                    let dest: NonZeroU32 = dest.parse().unwrap();
-                                    let name = if let Some(name) = PARA_ID_TO_NAME.read().await.get(&(relay_id.clone(), dest)) { name.clone() } else {  "unknown".to_string() };
-                                     let mut results = HashMap::new();
-                                    flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    let to = results.get(".V0.0.X1.0.AccountId32.id");
-
-                                    if let Some(to) = to {
-                                        let msg_id = format!("{}-{}", block_num, please_hash(to));
-                                        println!("SEND MSG v0 hash {}", msg_id);
-                                        start_link.push(msg_id);
-                                    }
-                                    println!("Reserve_transfer_assets from {:?} to {} ({})", para_id, dest, name);
-
-                                    // if ext.call_data.arguments.len() > 1 {
-                                    //     let mut results = HashMap::new();
-                                    //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-                                    //     println!("FLATTERN DEST2 {:#?}", results);
-                                    //     println!("ARGS {:?}", ext.call_data.arguments);
-                                    // } else { 
-                                    //     warn!("expected more params...");
-                                    // }
-                                }
-
-//                                 print_val(&ext.call_data.arguments[0].value);
-//                                 println!("Got here!!!!!");
-//                                 println!("{:#?}", &ext.call_data.arguments[0].value);
-
-
-//                                 let v = &ext.call_data.arguments[0];
-//                                 match &v.value {
-//                                     // ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
-//                                     //     for v in chars_vals {
-//                                     //         match &v.value {
-//                                     //             ValueDef::Variant(Variant {
-//                                     //                 ref name,//V1
-//                                     //                 values: Composite::Unnamed(chars_vals),
-//                                     //             }) => {
-//                                     //                 for v in chars_vals {
-//                                     //                     match &v.value {
-//                                     //                         ValueDef::Variant(Variant {
-//                                     //                             name,
-//                                     //                             values,
-//                                     //                         }) => {
-//                                     //                             println!("{pallet} {variant} has it {name}");
-//                                     //                         }
-//                                     //                         _ => {
-//                                     //                             println!("miss3");
-//                                     //                         }
-//                                     //                     }
-//                                     //                 }
-
-//                                     //             }
-//                                     //             _ => {
-//                                     //                  println!("inner miss");
-//                                     //                  print_val(&v.value);
-//                                     //             }
-//                                     //         }
-//                                     //     }
-//                                     // }, 
-//                                     ValueDef::Variant(Variant{ name, values:Composite::Unnamed(values)})  => {
-//                                         // println!("{} but expecetd V1", var.name);
-//                                         // if let ValueDef::Composite(()) = values {
-//                                         for v in values {
-//                                             match &v.value {
-//                                                 ValueDef::Variant(Variant {
-//                                                     name,
-//                                                     values,
-//                                                 }) => {
-//                                                     println!("{pallet} {variant} has it {name}");
-//                                                 }
-//                                                 _ => {
-//                                                     println!("misshchg3");
-//                                                 }
-//                                             }
-//                                         }
-//                                     // }
-//                                     }
-//                                     _ => {
-//                                          println!("inner misshh");
-//                                          print_val(&v.value);
-//                                     }
-//                                 }
-
-//                                 panic!(
-// "op"
-//                                 );
+                                });
                             }
-                            if variant.contains("batch") {
-                                for arg in &ext.call_data.arguments {
-                                    //just first arg
-                                    match &arg.value {
-                                        ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
-                                            for v in chars_vals {
-                                                match &v.value {
-                                                    ValueDef::Variant(Variant {
-                                                        ref name,
-                                                        values: Composite::Unnamed(chars_vals),
-                                                    }) => {
-                                                        let inner_pallet = name;
-
-                                                        for v in chars_vals {
-                                                            match &v.value {
-                                                                ValueDef::Variant(Variant {
-                                                                    name,
-                                                                    values,
-                                                                }) => {
-                                                                    // println!("{pallet} {variant} has inside a {inner_pallet} {name}");
-                                                                    children.push(DataEntity::Extrinsic {
-                                                                        id: (block_header.number, i as u32),
-                                                                        args: vec![format!("{:?}", values)],
-                                                                        contains: vec![],
-                                                                        raw: vec![], //TODO: should be simples
-                                                                        start_link: vec![],
-                                                                        end_link: vec![],
-                                                                        details: Details { pallet: inner_pallet.to_string(),
-                                                                            variant: name.clone(), ..Details::default()}
-                                                                    });
-                                                                }
-                                                                _ => {
-                                                                    println!("miss yet close");
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    _ => {
-                                                        // println!("inner miss");
-                                                        // print_val(&v.value);
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        _ => {
-                                            // println!("miss");
-                                        }
-                                    }
-                                }
-                            }
-
-                            let mut results = HashMap::new();
-                            for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
-                                flattern(&arg.value, &arg_index.to_string(),&mut results);
-                            }
-                            // println!("FLATTERN UMP {:#?}", results);
-                            // args.insert(0, format!("{results:#?}"));
-
-                            exts.push(DataEntity::Extrinsic {
-                                id: (block_header.number, i as u32),
-                                args,
-                                contains: children,
-                                raw: encoded_extrinsic,
-                                start_link,
-                                end_link,
-                                details: Details{
-                                    hover: "".to_string(),
-                                    flattern: format!("{results:#?}"),
-                                    url:"".to_string(),
-                                    parent: None,
-                                    success: crate::details::Success::Happy,
-                                    pallet,
-                                    variant,
-                                }
-                            });
+                            // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
                         }
-                        // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
+                        let ext_clone = exts.clone();
+                        let mut handle = tx.lock().unwrap();
+                        let current = handle
+                            .0
+                            .entry(block_hash.to_string())
+                            .or_insert(PolkaBlock {
+                                blocknum: block_header.number,
+                                blockhash: block_hash,
+                                extrinsics: exts,
+                                events: vec![],
+                            });
+                        if !current.events.is_empty()  //- blocks sometimes have no events in them.
+                        {
+                            let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
+                            current.extrinsics = ext_clone;
+                            handle.1.push(current);
+                        }
+                        //TODO: assert_eq!(block_header.hash(), block.hash());
                     }
-                    let ext_clone = exts.clone();
-                    let mut handle = tx.lock().unwrap();
-                    let current = handle
-                        .0
-                        .entry(block_hash.to_string())
-                        .or_insert(PolkaBlock {
-                            blocknum: block_header.number,
-                            blockhash: block_hash,
-                            extrinsics: exts,
-                            events: vec![],
-                        });
-                    if !current.events.is_empty()  //- blocks sometimes have no events in them.
-                    {
-                        let mut current = handle.0.remove(&block_hash.to_string()).unwrap();
-                        current.extrinsics = ext_clone;
-                        handle.1.push(current);
-                    }
-                    //TODO: assert_eq!(block_header.hash(), block.hash());
                 }
             }
+            std::thread::sleep(std::time::Duration::from_secs(20));
+            reconnects += 1;
+            client = ClientBuilder::new().set_url(&url).build().await?;
+            api = client
+                .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
+                );
         }
-        std::thread::sleep(std::time::Duration::from_secs(20));
-        reconnects += 1;
-        client = ClientBuilder::new().set_url(&url).build().await?;
-        api = client
-            .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
     }
     Ok(())
 }
