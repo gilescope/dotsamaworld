@@ -293,27 +293,66 @@ async fn get_parachain_id<T: subxt::Config>(
     client: &subxt::Client<T>,
     url: &str,
 ) -> Option<NonZeroU32> {
-    // parachainInfo / parachainId returns u32 paraId
-    let storage_key =
-        hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
-    let call = client
-        .storage()
-        .fetch_raw(sp_core::storage::StorageKey(storage_key), None)
-        .await
-        .unwrap();
+    let urlhash = please_hash(url);
+    let path = format!("target/{urlhash}.metadata.scale.events");
 
-    if let Some(sp_core::storage::StorageData(val)) = call {
-        let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
-        println!("{} is para id {}", &url, para_id);
-
-        Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
+    let filename = format!("{}/.parachainid", path);
+    if let Ok(contents) = std::fs::read(&filename) {
+        println!("cache hit!");
+        let para_id: NonZeroU32 = String::from_utf8_lossy(&contents).parse().unwrap();
+        Some(para_id)
     } else {
-        // This is expected for relay chains...
-        warn!("could not find para id for {}", &url);
-        None
+        // parachainInfo / parachainId returns u32 paraId
+        let storage_key =
+            hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f")
+                .unwrap();
+        let call = client
+            .storage()
+            .fetch_raw(sp_core::storage::StorageKey(storage_key), None)
+            .await
+            .unwrap();
+
+        if let Some(sp_core::storage::StorageData(val)) = call {
+            let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
+            println!("{} is para id {}", &url, para_id);
+
+            let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
+            std::fs::write(&filename, &para_id.to_string().as_bytes())
+                .expect("Couldn't write event output");
+            Some(para_id)
+        } else {
+            // This is expected for relay chains...
+            warn!("could not find para id for {}", &url);
+            None
+        }
     }
 }
+use subxt::DefaultExtraWithTxPayment;
+use crate::polkadot::RuntimeApi;
+ use subxt::Client;
+async fn get_parachain_name<T: subxt::Config>
+ 
+(
+    api: &polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
+    url: &str,
+) -> Option<String> where RuntimeApi<DefaultConfig, DefaultExtraWithTxPayment<DefaultConfig, subxt::extrinsic::ChargeTransactionPayment<DefaultConfig>>>: From<Client<T>>
+{
+    let urlhash = please_hash(url);
+    let path = format!("target/{urlhash}.metadata.scale.events");
 
+    let filename = format!("{}/.parachainname", path);
+    if let Ok(contents) = std::fs::read(&filename) {
+        println!("cache hit!");
+        let para_name = String::from_utf8_lossy(&contents);
+        Some(para_name.to_string())
+    } else {
+        // let mut api = client
+        //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+        let parachain_name: String = api.client.rpc().system_chain().await.unwrap();
+        std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
+        Some(parachain_name)
+    }
+}
 pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
@@ -330,10 +369,9 @@ pub async fn watch_blocks(
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
     let para_id = get_parachain_id(&client, &url).await;
-
-    let mut api =
-        client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-    let parachain_name = api.client.rpc().system_chain().await?;
+    let mut api = client
+             .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+    let parachain_name = get_parachain_name(&api, &url).await.unwrap();
 
     {
         let mut parachain_info = tx.lock().unwrap();
@@ -374,10 +412,50 @@ pub async fn watch_blocks(
     //         .await?;
 
     // For non-finalised blocks use `.subscribe_finalized_blocks()`
+    let urlhash = please_hash(url);
+    let path = format!("target/{urlhash}.metadata.scale.blocks");
     if let Some(as_of) = as_of {
+        let mut as_of: u32 = as_of.parse().unwrap();
+        for blocknum in as_of..(as_of + 10) {
+            //TODO: too often
+            let block_hash: sp_core::H256 = client
+                .rpc()
+                .block_hash(Some(blocknum.into()))
+                .await
+                .unwrap()
+                .unwrap();
+
+            let filename = format!("{}/{}.blocks", path, blocknum);
+            let bytes = if let Ok(contents) = std::fs::read(&filename) {
+                println!("cache hit!");
+                Some(contents)
+            } else {
+                 if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
+                     let bytes = block_body.encode();
+                     std::fs::write(&filename, &bytes).expect("Couldn't write block");
+                     Some(bytes)
+                 } else { None}
+                 
+            }.unwrap();
+
+            let block_num = blocknum;
+            // let block_hash = blockhash;
+    
+            //TODO decode block
+            let all = desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice());//AllExtrinsicBytes::new(&bytes).unwrap();
+            // for ext in all.iter() {
+
+            // }
+            // if let Ok(ext) = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+            // {
+                
+            // }
+
+        }
     } else {
         let mut reconnects = 0;
         while reconnects < 20 {
+            
             if let Ok(mut block_headers)//: Subscription<Header<u32, BlakeTwo256>> 
             =
                 api.client.rpc().subscribe_finalized_blocks().await {
@@ -937,9 +1015,7 @@ pub async fn watch_events(
     if let Some(as_of) = as_of {
         let mut as_of: u32 = as_of.parse().unwrap();
         for blocknum in as_of..(as_of + 10) {
-            let filename = format!("{}/{}.events", events_path, blocknum);
-
-            //too often
+            //TODO: too often
             let blockhash: sp_core::H256 = client
                 .rpc()
                 .block_hash(Some(blocknum.into()))
@@ -947,6 +1023,7 @@ pub async fn watch_events(
                 .unwrap()
                 .unwrap();
 
+            let filename = format!("{}/{}.events", events_path, blocknum);
             let bytes = if let Ok(contents) = std::fs::read(&filename) {
                 println!("cache hit!");
                 Some(contents)
@@ -980,7 +1057,7 @@ pub async fn watch_events(
                         let mut data_events = vec![];
                         for event in &events {
                             let start_link = vec![];
-                            let mut end_link = vec![];
+                            let end_link = vec![];
                             let mut details = Details::default();
 
                             println!("start event");
