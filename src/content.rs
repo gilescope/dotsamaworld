@@ -44,7 +44,6 @@ pub fn is_event_message(entry: &DataEvent) -> bool {
                 "ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
             )
         }
-        _ => false,
     }
 }
 

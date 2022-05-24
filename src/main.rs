@@ -192,11 +192,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 while reconnects < 20 {
                     println!("Connecting to {}", &url);
-                    let _ = async_std::task::block_on(datasource::watch_events(
+                    let res = async_std::task::block_on(datasource::watch_events(
                         lock_clone.clone(),
                         &url,
                         as_of,
                     ));
+                    if res.is_ok() { break; }
                     println!("Problem with {} events (retrys left {})", &url, reconnects);
                     std::thread::sleep(std::time::Duration::from_secs(20));
                     reconnects += 1;
@@ -211,12 +212,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 while reconnects < 20 {
                     println!("Connecting to {}", &url_clone);
-                    let _ = async_std::task::block_on(datasource::watch_blocks(
+                    let res = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
                         url_clone.clone(),
                         relay_id.to_string(),
                         as_of,
                     ));
+                    if res.is_ok() { break; }
                     println!(
                         "Problem with {} blocks (retries left {})",
                         &url_clone, reconnects
@@ -1017,7 +1019,7 @@ pub fn print_events(
                     //     commands.entity(entity).despawn();
                     // });
 
-                    let (entity, details) = query2.get_mut(*entity).unwrap();
+                    let (_entity, details) = query2.get_mut(*entity).unwrap();
 
                     // if inspector.active == Some(details) {
                     //     print!("deselected current selection");

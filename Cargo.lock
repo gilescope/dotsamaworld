@@ -497,6 +497,7 @@ dependencies = [
  "futures",
  "getrandom 0.2.6",
  "hex",
+ "jsonrpsee-types",
  "lazy_static",
  "open",
  "palette",

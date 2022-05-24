@@ -68,7 +68,7 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 }
 
 pub fn style_data_event(entry: &DataEvent) -> ExStyle {
-    let msg = crate::content::is_event_message(entry);
+    // let msg = crate::content::is_event_message(entry);
     let raw = &entry.details;
     if matches!(
         (raw.pallet.as_str(), raw.variant.as_str()),

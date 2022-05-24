@@ -6,6 +6,7 @@ use bevy_egui::EguiSettings;
 use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
 use bevy_inspector_egui::Inspectable;
+use bevy_inspector_egui::options::NumberAttributes;
 
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum Success {
@@ -49,7 +50,10 @@ impl Inspectable for Details {
                     .variant
                     .ui(ui, StringAttributes { multiline: false }, context);
                 ui.end_row();
-
+                changed |= self
+                    .parent.unwrap_or_default()
+                    .ui(ui, NumberAttributes::default(), context);
+                ui.end_row();
                 changed |= self
                     .hover
                     .ui(ui, StringAttributes { multiline: true }, context);
