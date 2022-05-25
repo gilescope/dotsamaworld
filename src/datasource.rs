@@ -295,7 +295,7 @@ async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Metad
     Metadata::from_bytes(&metadata_bytes).unwrap()
 }
 
-async fn get_parachain_id<T: subxt::Config>(
+pub async fn get_parachain_id<T: subxt::Config>(
     client: &subxt::Client<T>,
     url: &str,
 ) -> Option<NonZeroU32> {
@@ -339,6 +339,15 @@ async fn get_parachain_id<T: subxt::Config>(
             None
         }
     }
+}
+
+pub async fn get_parachain_id_from_url(
+    url: &str,
+) -> Option<NonZeroU32> {
+    let client : subxt::Client<subxt::DefaultConfig> = ClientBuilder::new().set_url(url).build().await.unwrap();
+    let para_id: Option<NonZeroU32> = get_parachain_id(&client, &url).await;
+para_id
+// Some(std::num::NonZeroU32::try_from(3).unwrap())
 }
 
 async fn get_metadata_version<T: subxt::Config>(
@@ -450,11 +459,15 @@ where
     }
 }
 
+pub type RelayBlockNumber = u32;
+
 pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
     relay_id: String,
     as_of: Option<&str>,
+    para_id: Option<NonZeroU32>,
+    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>
 ) -> Result<(), Box<dyn std::error::Error>> {
     // use core::slice::SlicePattern;
     // use scale_info::form::PortableForm;
@@ -465,7 +478,7 @@ pub async fn watch_blocks(
 
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
-    let para_id = get_parachain_id(&client, &url).await;
+    
     let mut api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
     let parachain_name = get_parachain_name(&api, &url).await.unwrap();
@@ -511,79 +524,163 @@ pub async fn watch_blocks(
     // For non-finalised blocks use `.subscribe_finalized_blocks()`
 
     if let Some(as_of) = as_of {
-        let as_of: u32 = as_of.parse().unwrap();
-        for block_number in as_of..(as_of + 10) {
-            let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
+        // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
+        if para_id.is_some() {
+            // Parachain (listening for relay blocks' para include candidate included events.)
+            while let Ok((block_number, block_hash)) = recieve_channel.recv() {
+                println!("block hash recieved from relay chain num {}", block_number);
+                let as_of: u32 = as_of.parse().unwrap();
+             
+                // let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
 
-            let extrinsics = get_extrinsics( block_number, &url, &api, block_hash).await;
+                let extrinsics = get_extrinsics( block_number, &url, &api, block_hash).await;
 
 
-            let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
-            let metad =
-                async_std::task::block_on(get_desub_metadata(&url, Some((version.unwrap(), block_hash))));
+                let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
+                let metad =
+                    async_std::task::block_on(get_desub_metadata(&url, Some((version.unwrap(), block_hash))));
 
 
-            // let block_num = blocknum;
-            // let block_hash = blockhash;
-            // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
-            //TODO decode block
-            // if let Ok(extrinsics) =
-            //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
-            {
-                //AllExtrinsicBytes::new(&bytes).unwrap();
-                // for extrinsics in all {
-                // for extrinsic in extrinsics {
-                //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
-                let mut exts = vec![];
-                for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
-                    // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-                    let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                    .unwrap()
-                    .0;
-
-                    // let ex_slice = &ext_bytes.0;
-                    if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                    {
-                        
-                        // let ext_bytes = ext_bytes.encode();
-                        let entity = process_extrisic(
-                            &relay_id,
-                            // &metad,
-                            para_id,
-                            block_number,
-                            // block_hash,
-                            (ex_slice).clone(),
-                            &extrinsic,
-                            i as u32,
-                        )
-                        .await;
-                        if let Some(entity) = entity {
-                            exts.push(entity);
-                        }
-                    } else { println!("can't decode block ext {}-{} {}", block_number, i, &url);}
-                }
-                let ext_clone = exts.clone();
-                let mut handle = tx.lock().unwrap();
-                let current = handle
-                    .0
-                    .entry(hex::encode(block_hash.as_bytes()))
-                    .or_insert(PolkaBlock {
-                        blocknum: block_number,
-                        blockhash: block_hash,
-                        extrinsics: exts,
-                        events: vec![],
-                    });
-                    println!("got block oh yeeet, we yoloing!!! {} {}", ext_clone.len(), hex::encode(block_hash.as_bytes()));
-
-                if !current.events.is_empty()
-                //- blocks sometimes have no events in them.
+                // let block_num = blocknum;
+                // let block_hash = blockhash;
+                // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
+                //TODO decode block
+                // if let Ok(extrinsics) =
+                //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
                 {
-                    let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
-                    current.extrinsics = ext_clone;
-                    handle.1.push(current);
+                    //AllExtrinsicBytes::new(&bytes).unwrap();
+                    // for extrinsics in all {
+                    // for extrinsic in extrinsics {
+                    //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
+                    let mut exts = vec![];
+                    for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+                        // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
+                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                        .unwrap()
+                        .0;
+
+                        // let ex_slice = &ext_bytes.0;
+                        if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+                        {
+                            
+                            // let ext_bytes = ext_bytes.encode();
+                            let entity = process_extrisic(
+                                &relay_id,
+                                // &metad,
+                                para_id,
+                                block_number,
+                                // block_hash,
+                                (ex_slice).clone(),
+                                &extrinsic,
+                                i as u32,
+                            )
+                            .await;
+                            if let Some(entity) = entity {
+                                exts.push(entity);
+                            }
+                        } else { println!("can't decode block ext {}-{} {}", block_number, i, &url);}
+                    }
+                    let ext_clone = exts.clone();
+                    let mut handle = tx.lock().unwrap();
+                    let current = handle
+                        .0
+                        .entry(hex::encode(block_hash.as_bytes()))
+                        .or_insert(PolkaBlock {
+                            blocknum: block_number,
+                            blockhash: block_hash,
+                            extrinsics: exts,
+                            events: vec![],
+                        });
+                        println!("got block oh yeeet, we yoloing!!! {} {}", ext_clone.len(), hex::encode(block_hash.as_bytes()));
+
+                    if !current.events.is_empty()
+                    //- blocks sometimes have no events in them.
+                    {
+                        let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
+                        current.extrinsics = ext_clone;
+                        handle.1.push(current);
+                    }
+        
+                    // 
                 }
-            } 
-            // 
+            }
+        } else {
+            // Relay chain
+
+            let as_of: u32 = as_of.parse().unwrap();
+            for block_number in as_of..(as_of + 100) {
+                let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
+
+                let extrinsics = get_extrinsics( block_number, &url, &api, block_hash).await;
+
+
+                let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
+                let metad =
+                    async_std::task::block_on(get_desub_metadata(&url, Some((version.unwrap(), block_hash))));
+
+
+                // let block_num = blocknum;
+                // let block_hash = blockhash;
+                // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
+                //TODO decode block
+                // if let Ok(extrinsics) =
+                //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
+                {
+                    //AllExtrinsicBytes::new(&bytes).unwrap();
+                    // for extrinsics in all {
+                    // for extrinsic in extrinsics {
+                    //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
+                    let mut exts = vec![];
+                    for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+                        // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
+                        let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                        .unwrap()
+                        .0;
+
+                        // let ex_slice = &ext_bytes.0;
+                        if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+                        {
+                            
+                            // let ext_bytes = ext_bytes.encode();
+                            let entity = process_extrisic(
+                                &relay_id,
+                                // &metad,
+                                para_id,
+                                block_number,
+                                // block_hash,
+                                (ex_slice).clone(),
+                                &extrinsic,
+                                i as u32,
+                            )
+                            .await;
+                            if let Some(entity) = entity {
+                                exts.push(entity);
+                            }
+                        } else { println!("can't decode block ext {}-{} {}", block_number, i, &url);}
+                    }
+                    let ext_clone = exts.clone();
+                    let mut handle = tx.lock().unwrap();
+                    let current = handle
+                        .0
+                        .entry(hex::encode(block_hash.as_bytes()))
+                        .or_insert(PolkaBlock {
+                            blocknum: block_number,
+                            blockhash: block_hash,
+                            extrinsics: exts,
+                            events: vec![],
+                        });
+                        println!("got block oh yeeet, we yoloing!!! {} {}", ext_clone.len(), hex::encode(block_hash.as_bytes()));
+
+                    if !current.events.is_empty()
+                    //- blocks sometimes have no events in them.
+                    {
+                        let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
+                        current.extrinsics = ext_clone;
+                        handle.1.push(current);
+                    }
+                } 
+                // 
+            }
         }
     } else {
         // TODO this could get out of date too...
@@ -1329,19 +1426,20 @@ pub async fn watch_events(
     tx: ABlocks,
     url: &str,
     as_of: Option<&str>,
+    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
 ) -> Result<(), Box<dyn std::error::Error>> {
     
     let urlhash = please_hash(&url);
     let events_path = format!("target/{urlhash}.metadata.scale.events");
     let _ = std::fs::create_dir(&events_path);
 
-    let client = ClientBuilder::new().set_url(url).build().await?;
+    let client : subxt::Client<subxt::DefaultConfig> = ClientBuilder::new().set_url(url).build().await?;
     let api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
     // system.events query is 0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7
     if let Some(as_of) = as_of {
         let mut as_of: u32 = as_of.parse().unwrap();
-        for blocknum in as_of..(as_of + 10) {
+        for blocknum in as_of..(as_of + 100) {
             let blockhash: sp_core::H256 = get_block_hash(&api, &url, blocknum).await.unwrap();
 
             let version = get_metadata_version(&api.client, &url, blockhash, blocknum).await;
@@ -1430,6 +1528,7 @@ pub async fn watch_events(
                 ) {
                     if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
                         let mut data_events = vec![];
+                        let mut inclusions = vec![];
                         for event in &events {
                             let start_link = vec![];
                             let end_link = vec![];
@@ -1470,8 +1569,70 @@ pub async fn watch_events(
                                                     {
                                                         details.variant = variant.name.clone();
                                                         //  println!("event data!!!!!! variant = {}", &details.variant);
+
+                                                        if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
+                                                            
+                                                            if let Composite::Unnamed(vals) = &variant.values{
+                                                                for val in vals {
+                                                                    if let ValueDef::Composite(Composite::Named(ref named)) = &val.value {
+                                                                        for (name, val) in named {
+                                                                            if name == "descriptor" {
+                                                                                if let ValueDef::Composite(Composite::Named(named)) = &val.value {
+                                                                                    let mut para_head = None;
+                                                                                    let mut para_id = None;
+                                                                                    for (name, val) in named {
+                                                                                        if name == "para_head" {
+                                                                                            let mut para_head_vec : Vec<u8>= vec![];
+                                                                                            if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &val.value {
+                                                                                                for n in unnamed {
+                                                                                                    if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &n.value {
+                                                                                                        for m in unnamed {
+                                                                                                            if let ValueDef::Primitive(Primitive::U8(byte)) = &m.value{
+                                                                                                                para_head_vec.push(*byte);
+                                                                                                                // println!("{}", byte);
+                                                                                                            } 
+                                                                                                            // print_val(&m.value);
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                            para_head = Some(para_head_vec);
+                                                                                            // println!("para_head 0x{}", hex::encode(&para_head.as_slice()));
+                                                                                            
+                                                                                        }  
+                                                                                        if name == "para_id" {
+                                                                                            if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &val.value {
+                                                                                                for m in unnamed {
+                                                                                                    if let ValueDef::Primitive(Primitive::U32(parachain_id)) = &m.value {
+                                                                                                        // println!("para id {}", para_id);
+                                                                                                        para_id = Some(NonZeroU32::try_from(*parachain_id).unwrap());
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        } 
+                                                                                        
+                                                                                        // println!("{}", &name);
+                                                                                    }
+                                                                                    if let (Some(para_id),Some(hash)) = (para_id, para_head) {
+                                                                                        inclusions.push((para_id, hash));
+                                                                                    }
+                                                                                    // println!("ggogogoogogogogog");
+                                                                                }
+                                                                               
+                                                                            }
+                                                                        }
+                                                                      
+                                                                    }
+                                                                }
+                                                            }
+
+                                                        
+                                                        
+                                                        }
+
+
                                                     }
-                                                    // print_val(&val.value);
+                                                    // 
                                                 }
                                             }
                                         }
@@ -1532,6 +1693,20 @@ pub async fn watch_events(
                                 details,
                             })
                         }
+
+                        if !inclusions.is_empty() {
+                            let sender2 = sender.as_ref().unwrap();
+                            for (para_id, hash) in inclusions {
+                                let mailbox = sender2.get(&para_id);
+                                if let Some(mailbox) = mailbox {
+                                    let hash = H256::from_slice(hash.as_slice());
+                                    mailbox.send((blocknum, hash));
+                                    println!("block hash sent at {} ", blocknum);
+                                }
+                            }
+                        }
+
+
                         // println!("events count {}!", events.len());
                         println!("got event oh yeeet, wee yoloing!!! {}" , hex::encode(blockhash.as_bytes()));
 

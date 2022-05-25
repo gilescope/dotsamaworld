@@ -22,6 +22,7 @@ wasm-bindgen = "*"
 futures = "0.3.13"
 jsonrpsee-types = "*"
 
+crossbeam-channel = "*"
 
 #wasm-bindgen-rayon = "1.0"
 #[target.'cfg(target_os = "linux")'.dependencies]

@@ -489,6 +489,7 @@ dependencies = [
  "bevy_polyline",
  "bevy_spacemouse",
  "bevy_webgl2",
+ "crossbeam-channel 0.4.4",
  "desub",
  "desub-current",
  "egui",

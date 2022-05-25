@@ -27,6 +27,7 @@ use bevy_inspector_egui::RegisterInspectable;
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
 use std::convert::AsRef;
+use subxt::ClientBuilder;
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -68,6 +69,7 @@ type ABlocks = Arc<
         ChainInfo,
     )>,
 >;
+use crossbeam_channel::unbounded;
 
 mod networks;
 use networks::Env;
@@ -78,10 +80,10 @@ mod details;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-    let mut as_of = Some("0");
+    let mut as_of = Some("10000000");
 
     if let Env::Local = selected_env {
-        as_of = Some("0"); // If local show from the first block...
+        // as_of = Some("10000000"); // If local show from the first block...
     }
 
     let relays = networks::get_network(&selected_env);
@@ -172,60 +174,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
     for (relay_id, relay) in relays.into_iter().enumerate() {
-        for (arc, mut chain_name) in relay {
-            let lock_clone = arc.clone();
-            if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
-                chain_name = format!("wss://{}", chain_name);
+        let mut relay2 : Vec<_> = vec![];
+        let mut send_map : HashMap<NonZeroU32, crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>> = Default::default();
+        for (arc, chain_name) in relay {
+            let url = chain_name_to_url(&chain_name);
+            // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+            let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).await;
+            let (tx, rc) = unbounded();
+            relay2.push((arc, chain_name, para_id, rc));
+            if let Some(para_id) = para_id {
+                send_map.insert(para_id, tx);
             }
+        }
 
-            let url = if chain_name[5..].contains(':') {
-                format!("{chain_name}")
-            } else {
-                format!("{chain_name}:443")
-            };
+        let relay = relay2;
+        let mut send_map = Some(send_map); // take by only one.
+
+        for (arc, chain_name, para_id, rc) in relay {
+            let lock_clone = arc.clone();
+            let url = chain_name_to_url(&chain_name);
             println!("url attaching to {}", url);
 
             // let chain_name_clone = chain_name.clone();
             let url_clone = url.clone();
+            let maybe_sender = if para_id.is_none() { send_map.take() } else { None };
             std::thread::spawn(move || {
-                let mut reconnects = 0;
+                // let mut reconnects = 0;
 
-                while reconnects < 20 {
+                // while reconnects < 20 {
                     println!("Connecting to {}", &url);
                     let res = async_std::task::block_on(datasource::watch_events(
                         lock_clone.clone(),
                         &url,
                         as_of,
+                        maybe_sender
                     ));
-                    if res.is_ok() { break; }
-                    println!("Problem with {} events (retrys left {})", &url, reconnects);
-                    std::thread::sleep(std::time::Duration::from_secs(20));
-                    reconnects += 1;
-                }
+                    // if res.is_ok() { break; }
+                    // println!("Problem with {} events (retrys left {})", &url, reconnects);
+                    // std::thread::sleep(std::time::Duration::from_secs(20));
+                    // reconnects += 1;
+                // }
                 println!("giving up on {} events", url);
             });
 
             // let chain_name = chain_name_clone;
             let lock_clone = arc.clone();
             std::thread::spawn(move || {
-                let mut reconnects = 0;
+                // let mut reconnects = 0;
 
-                while reconnects < 20 {
+                // while reconnects < 20 {
                     println!("Connecting to {}", &url_clone);
                     let res = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
                         url_clone.clone(),
                         relay_id.to_string(),
                         as_of,
+                        para_id, rc
                     ));
-                    if res.is_ok() { break; }
-                    println!(
-                        "Problem with {} blocks (retries left {})",
-                        &url_clone, reconnects
-                    );
-                    std::thread::sleep(std::time::Duration::from_secs(20));
-                    reconnects += 1;
-                }
+                    // if res.is_ok() { break; }
+                    // println!(
+                    //     "Problem with {} blocks (retries left {})",
+                    //     &url_clone, reconnects
+                    // );
+                    // std::thread::sleep(std::time::Duration::from_secs(20));
+                    // reconnects += 1;
+                // }
                 println!("giving up on {} blocks", url_clone);
             });
         }
@@ -236,6 +249,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // .add_startup_system(add_people)
     // .add_system(greet_people);
     Ok(())
+}
+
+fn chain_name_to_url(chain_name: &str) -> String {
+    let mut chain_name = chain_name.to_string();
+    if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
+        chain_name = format!("wss://{}", chain_name);
+    }
+
+    if chain_name[5..].contains(':') {
+        format!("{chain_name}")
+    } else {
+        format!("{chain_name}:443")
+    }
 }
 
 // use bevy_hanabi::AccelModifier;
