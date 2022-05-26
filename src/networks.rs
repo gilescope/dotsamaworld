@@ -75,7 +75,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "eden-rpc.dwellir.com", //noodle
                     "rpc.parallel.fi",
                     "wss://api.phala.network:443/ws",
-                    "mainnet.polkadex.trade",
+                    // "mainnet.polkadex.trade",
                     "ws.unique.network",
                     "k-ui.kapex.network",
                    

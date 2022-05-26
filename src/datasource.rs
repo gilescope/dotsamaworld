@@ -502,7 +502,8 @@ pub async fn watch_blocks(
     relay_id: String,
     as_of: Option<&str>,
     para_id: Option<NonZeroU32>,
-    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>
+    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
+    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
 ) -> Result<(), Box<dyn std::error::Error>> {
     // use core::slice::SlicePattern;
     // use scale_info::form::PortableForm;
@@ -642,7 +643,7 @@ pub async fn watch_blocks(
             // Relay chain
 
             let as_of: u32 = as_of.parse().unwrap();
-            for block_number in as_of..(as_of + 10) {
+            for block_number in as_of.. {
                 let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.expect(&format!("should be able to get hash for block num {} of url {}", block_number, &url));
 
                 let extrinsics = get_extrinsics( block_number, &url, &api, block_hash).await;
@@ -705,7 +706,9 @@ pub async fn watch_blocks(
                         });
                         println!("got block oh yeeet, we yoloing!!! {} {}", ext_clone.len(), hex::encode(block_hash.as_bytes()));
 
-                    if !current.events.is_empty()
+                    current.events = get_events_for_block(&api, &url, block_hash, block_number, &sender).await?;
+
+                    // if !current.events.is_empty()
                     //- blocks sometimes have no events in them.
                     {
                         let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
@@ -713,7 +716,7 @@ pub async fn watch_blocks(
                         handle.1.push(current);
                     }
                 } 
-                // 
+                std::thread::sleep(std::time::Duration::from_secs(6));
             }
         }
     } else {
@@ -1769,8 +1772,8 @@ async fn get_events_for_block(api: &polkadot::RuntimeApi<DefaultConfig, DefaultE
 pub async fn watch_events(
     tx: ABlocks,
     url: &str,
-    as_of: Option<&str>,
-    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
+    as_of: Option<&str>
+   
 ) -> Result<(), Box<dyn std::error::Error>> {
     
     let urlhash = please_hash(&url);
@@ -1782,53 +1785,53 @@ pub async fn watch_events(
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
     // system.events query is 0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7
     if let Some(as_of) = as_of {
-        if sender.is_some() { // skip events for parachains as these are driven off relay chain blocks
-            let mut as_of: u32 = as_of.parse().unwrap();
-            for blocknum in as_of..(as_of + 10) {
-                let blockhash: sp_core::H256 = get_block_hash(&api, &url, blocknum).await.unwrap();
-                let data_events = get_events_for_block(&api, url, blockhash, blocknum, &sender).await?;
+        // if sender.is_some() { // skip events for parachains as these are driven off relay chain blocks
+            // let mut as_of: u32 = as_of.parse().unwrap();
+            // for blocknum in as_of..(as_of + 10) {
+            //     let blockhash: sp_core::H256 = get_block_hash(&api, &url, blocknum).await.unwrap();
+            //     let data_events = get_events_for_block(&api, url, blockhash, blocknum, &sender).await?;
 
-                let mut handle = tx.lock().unwrap();
-                let current = handle.0.entry(
-                    hex::encode(blockhash.as_bytes())).or_insert(
-                    PolkaBlock {
-                        blocknum,
-                        blockhash,
-                        extrinsics: vec![],
-                        events: data_events.clone(),
-                    },
-                );
+            //     let mut handle = tx.lock().unwrap();
+            //     let current = handle.0.entry(
+            //         hex::encode(blockhash.as_bytes())).or_insert(
+            //         PolkaBlock {
+            //             blocknum,
+            //             blockhash,
+            //             extrinsics: vec![],
+            //             events: data_events.clone(),
+            //         },
+            //     );
 
-                if !current.extrinsics.is_empty()
-                //- blocks sometimes have no events in them.
-                {
-                    let mut current = handle.0.remove(&hex::encode(blockhash.as_bytes())).unwrap();
-                    current.events = data_events;
-                    handle.1.push(current);
-                }
+            //     if !current.extrinsics.is_empty()
+            //     //- blocks sometimes have no events in them.
+            //     {
+            //         let mut current = handle.0.remove(&hex::encode(blockhash.as_bytes())).unwrap();
+            //         current.events = data_events;
+            //         handle.1.push(current);
+            //     }
 
 
-                // Slow things down to reality
-                // std::thread::sleep(std::time::Duration::from_secs(12));
+            //     // Slow things down to reality
+            //     // std::thread::sleep(std::time::Duration::from_secs(12));
 
-                // println!("got heree as of ");
-                // let hash = api.client.rpc().block_hash(Some(as_of.into())).await.unwrap();
-                // println!("got block hash as of ");
+            //     // println!("got heree as of ");
+            //     // let hash = api.client.rpc().block_hash(Some(as_of.into())).await.unwrap();
+            //     // println!("got block hash as of ");
 
-                // let res = api.storage().system().events(hash).await;
-                // if let Ok(events) = res {
-                //     println!("got events as of {} ", events.iter().count());
-                //     for event in events {
-                //         // let event_d = event.encode();
-                //         println!("{:?}", event.event);
-                //         // event.event;
-                //     }
-                // } else {
-                //     println!("could not get event {:?}", res);
-                // }
-                as_of += 1;
-            }
-        }
+            //     // let res = api.storage().system().events(hash).await;
+            //     // if let Ok(events) = res {
+            //     //     println!("got events as of {} ", events.iter().count());
+            //     //     for event in events {
+            //     //         // let event_d = event.encode();
+            //     //         println!("{:?}", event.event);
+            //     //         // event.event;
+            //     //     }
+            //     // } else {
+            //     //     println!("could not get event {:?}", res);
+            //     // }
+            //     as_of += 1;
+            // }
+        // }
     } else {
         // let api = client
         //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();

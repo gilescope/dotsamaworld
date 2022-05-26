@@ -76,6 +76,11 @@ use networks::Env;
 
 mod details;
 use color_eyre::eyre::Result;
+
+pub struct DataSourceChangedEvent {
+    source: String
+}
+
 #[async_std::main]
 async fn main() -> color_eyre::eyre::Result<()> {
     color_eyre::install()?;
@@ -105,7 +110,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
     //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-
+    app.add_event::<DataSourceChangedEvent>();
     app.insert_resource(MovementSettings {
         sensitivity: 0.00020, // default: 0.00012
         speed: 12.0,          // default: 12.0
@@ -208,14 +213,14 @@ async fn main() -> color_eyre::eyre::Result<()> {
                         lock_clone.clone(),
                         &url,
                         as_of,
-                        maybe_sender
+                        // /aybe_sender
                     ));
                     // if res.is_ok() { break; }
                     // println!("Problem with {} events (retrys left {})", &url, reconnects);
                     // std::thread::sleep(std::time::Duration::from_secs(20));
                     // reconnects += 1;
                 // }
-                println!("giving up on {} events", url);
+                println!("giving up on {} for live events", url);
             });
 
             // let chain_name = chain_name_clone;
@@ -230,7 +235,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
                         url_clone.clone(),
                         relay_id.to_string(),
                         as_of,
-                        para_id, rc
+                        para_id, rc, maybe_sender
                     ));
                     // if res.is_ok() { break; }
                     // println!(
@@ -1030,8 +1035,14 @@ pub fn print_events(
     mut events: EventReader<PickingEvent>,
     mut query2: Query<(Entity, &Details)>,
     mut inspector: ResMut<Inspector>,
+    mut custom: EventWriter<DataSourceChangedEvent>,
     //  mut inspector_windows: Res<InspectorWindows>,
 ) {
+    if inspector.start_location.changed {
+        inspector.start_location.changed = false;
+
+        custom.send(DataSourceChangedEvent { source: inspector.start_location.location.clone() });
+    }
     for event in events.iter() {
         match event {
             PickingEvent::Selection(selection) => {
@@ -1198,8 +1209,82 @@ fn setup(
 
 #[derive(Inspectable, Default)]
 pub struct Inspector {
+    // #[inspectable(deletable = false)]
+    start_location: UrlBar,
     #[inspectable(deletable = false)]
     selected: Option<Details>,
+}
+
+impl Default for UrlBar {
+    fn default()  -> Self {
+        Self { location: "dot:/1/100".to_string(), changed: false }
+    }
+}
+
+struct UrlBar {
+    changed: bool,
+    location: String
+}
+use bevy_inspector_egui::Context;
+use egui::Grid;
+use bevy_inspector_egui::options::StringAttributes;
+impl Inspectable for UrlBar {
+    type Attributes = ();
+
+    fn ui(
+        &mut self,
+        ui: &mut bevy_egui::egui::Ui,
+        _options: Self::Attributes,
+        context: &mut Context,
+    ) -> bool {
+        let mut changed = false;
+        ui.vertical_centered(|ui| {
+            Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
+                // ui.label("Pallet");
+                changed |= self
+                    .location
+                    .ui(ui, StringAttributes { multiline: false }, context);
+               
+                ui.end_row();
+                
+                if ui.button("Teleport").clicked() {
+                    self.changed = true;
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                // ui.label("Method");
+                // changed |= self
+                //     .variant
+                //     .ui(ui, StringAttributes { multiline: false }, context);
+                // ui.end_row();
+                // changed |= self
+                //     .parent.unwrap_or_default()
+                //     .ui(ui, NumberAttributes::default(), context);
+                // ui.end_row();
+                // changed |= self
+                //     .hover
+                //     .ui(ui, StringAttributes { multiline: true }, context);
+                // ui.end_row();
+                // changed |= self
+                //     .flattern
+                //     .ui(ui, StringAttributes { multiline: true }, context);
+                // ui.end_row();
+                // ui.label("Rotation");
+                // changed |= self.rotation.ui(ui, Default::default(), context);
+                // self.rotation = self.rotation.normalize();
+                // ui.end_row();
+
+                // ui.label("Scale");
+                // let scale_attributes = NumberAttributes {
+                //     min: Some(Vec3::splat(0.0)),
+                //     ..Default::default()
+                // };
+                // changed |= self.scale.ui(ui, scale_attributes, context);
+                // ui.end_row();
+            });
+        });
+        changed
+    }
 }
 
 #[derive(Component)]
