@@ -75,9 +75,10 @@ mod networks;
 use networks::Env;
 
 mod details;
-
+use color_eyre::eyre::Result;
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> color_eyre::eyre::Result<()> {
+    color_eyre::install()?;
     let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
     let mut as_of = Some("10000000");
@@ -1051,7 +1052,7 @@ pub fn print_events(
                     //     print!("deselected current selection");
                     //     inspector.active = None;
                     // } else {
-                    inspector.active = Some(details.clone());
+                    inspector.selected = Some(details.clone());
                     // }
 
                     // info!("{}", details.hover.as_str());
@@ -1198,7 +1199,7 @@ fn setup(
 #[derive(Inspectable, Default)]
 pub struct Inspector {
     #[inspectable(deletable = false)]
-    active: Option<Details>,
+    selected: Option<Details>,
 }
 
 #[derive(Component)]

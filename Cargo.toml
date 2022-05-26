@@ -49,6 +49,7 @@ bevy_egui = "*"
 egui = "*"
 open = "1"
 url = "*"
+color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
 lazy_static = "*"
 # bevy_hanabi = "0.2"
@@ -108,3 +109,7 @@ opt-level = 1
 
 # lto = true
 # opt-level = 's'
+
+
+[profile.dev.package.backtrace]
+opt-level = 3

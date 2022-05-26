@@ -61,9 +61,9 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
         }
         Env::Prod => {
             vec![
-                vec![
-                    "rpc.polkadot.io",
-                    "statemint-rpc.polkadot.io",
+                 vec![
+                     "rpc.polkadot.io",
+                      "statemint-rpc.polkadot.io",
                     "acala.polkawallet.io",
                     "astar-rpc.dwellir.com",
                     "fullnode.parachain.centrifuge.io",
@@ -78,11 +78,11 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "mainnet.polkadex.trade",
                     "ws.unique.network",
                     "k-ui.kapex.network",
-                    "wss.odyssey.aresprotocol.io",
-                ],
+                   
+                 ],
                 vec![
                     "kusama-rpc.polkadot.io",
-                    "statemine-rpc.dwellir.com",
+                     "statemine-rpc.dwellir.com",
                     "wss.api.moonriver.moonbeam.network",
                     "bifrost-rpc.dwellir.com",
                     "khala-rpc.dwellir.com",
