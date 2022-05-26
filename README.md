@@ -1,5 +1,7 @@
 # Dotsama Town
 
+!\[code quality\](https://badgen.net/badge/code%20quality/yolo/green?icon=awesome)
+
 Dotsama town is one vision of what's happening in the polkadot ecosystem.
 It's an experiment to see what we can see and I look forward to evolving it
 and seeing where it leads to.
@@ -52,6 +54,11 @@ Note: spacemouse is on by default at the moment.
 
 | Feature    | Description                       |
 | spacemouse | n-degees of freedom mouse support |
+
+## Donations
+
+If you like this project please consider participating in the gitcoin grant's round 14 
+where you can help projects get considerable matched funding or to https://www.mriyaaid.org/ .
 
 ## License
 
