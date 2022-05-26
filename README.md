@@ -1,6 +1,6 @@
 # Dotsama Town
 
-!\[code quality\](https://badgen.net/badge/code%20quality/yolo/green?icon=awesome)
+![code quality](https://badgen.net/badge/code%20quality:/yolo/green?icon=awesome)
 
 Dotsama town is one vision of what's happening in the polkadot ecosystem.
 It's an experiment to see what we can see and I look forward to evolving it
