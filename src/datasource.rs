@@ -1592,8 +1592,7 @@ async fn get_events_for_block(api: &polkadot::RuntimeApi<DefaultConfig, DefaultE
                                                 details.variant = variant.name.clone();
                                                 //  println!("event data!!!!!! variant = {}", &details.variant);
 
-                                                if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
-                                                    
+                                                if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {                                                    
                                                     if let Composite::Unnamed(vals) = &variant.values{
                                                         for val in vals {
                                                             if let ValueDef::Composite(Composite::Named(ref named)) = &val.value {
