@@ -78,7 +78,7 @@ mod details;
 use color_eyre::eyre::Result;
 
 pub struct DataSourceChangedEvent {
-    source: String
+    source: String,
 }
 
 #[async_std::main]
@@ -95,7 +95,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         speed: 12.0,          // default: 12.0
     });
 
-    app.insert_resource(Sovereigns{relays:vec![]});
+    app.insert_resource(Sovereigns { relays: vec![] });
 
     #[cfg(feature = "normalmouse")]
     app.add_plugin(NoCameraPlayerPlugin);
@@ -137,31 +137,30 @@ async fn main() -> color_eyre::eyre::Result<()> {
             dynamic: false, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
-        .add_system(render_new_events
-            // move |commands: Commands,
-            //       meshes: ResMut<Assets<Mesh>>,
-            //       materials: ResMut<Assets<StandardMaterial>>,
-            //       asset_server: Res<AssetServer>,
-            //       links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-            //       polyline_materials: ResMut<Assets<PolylineMaterial>>,
-            //       polylines: ResMut<Assets<Polyline>>| {
-            //     // let clone_chains = clone_chains.clone();
-            //     render_new_events(
-            //         commands,
-            //         meshes,
-            //         materials,
-            //         clone_chains,
-            //         asset_server,
-            //         is_self_sovereign,
-            //         links,
-            //         polyline_materials,
-            //         polylines,
-            //     )
-            // },
+        .add_system(
+            render_new_events, // move |commands: Commands,
+                               //       meshes: ResMut<Assets<Mesh>>,
+                               //       materials: ResMut<Assets<StandardMaterial>>,
+                               //       asset_server: Res<AssetServer>,
+                               //       links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+                               //       polyline_materials: ResMut<Assets<PolylineMaterial>>,
+                               //       polylines: ResMut<Assets<Polyline>>| {
+                               //     // let clone_chains = clone_chains.clone();
+                               //     render_new_events(
+                               //         commands,
+                               //         meshes,
+                               //         materials,
+                               //         clone_chains,
+                               //         asset_server,
+                               //         is_self_sovereign,
+                               //         links,
+                               //         polyline_materials,
+                               //         polylines,
+                               //     )
+                               // },
         )
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
-    
     app.run();
 
     // app.insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
@@ -183,29 +182,30 @@ fn chain_name_to_url(chain_name: &str) -> String {
     }
 }
 
-fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
+fn source_data(
+    mut datasouce_events: EventReader<DataSourceChangedEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut sovereigns: ResMut<Sovereigns>
+    mut sovereigns: ResMut<Sovereigns>,
 ) {
-
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
         let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-
         if let Ok(dot_url) = DotUrl::parse(&event.source) {
+            println!("dot url {:?}", &dot_url);
             let mut as_of = dot_url.block_number;
+            println!("Block number selected for relay chains: {:?}", as_of);
             // let mut as_of = Some("10000000");
-        
+
             if let Env::Local = selected_env {
                 // as_of = Some("10000000"); // If local show from the first block...
             }
-        
+
             let relays = networks::get_network(&selected_env);
-            let is_self_sovereign = selected_env.is_self_sovereign();
+            // let is_self_sovereign = selected_env.is_self_sovereign();
             let relays = relays
                 .into_iter()
                 .map(|relay| {
@@ -215,7 +215,7 @@ fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-        
+
             let clone_chains = relays.clone();
             let clone_chains_for_lanes = relays.clone();
 
@@ -223,7 +223,7 @@ fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
 
             for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
                 let rfip = if rcount == 1 { -1. } else { 1. };
-        
+
                 for (chain, _chain) in chains.iter().enumerate() {
                     commands.spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
@@ -238,17 +238,19 @@ fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
                             0.,
-                            (0.5 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
+                            ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
                         )),
                         ..Default::default()
                     });
                 }
             }
 
-
             for (relay_id, relay) in relays.into_iter().enumerate() {
-                let mut relay2 : Vec<_> = vec![];
-                let mut send_map : HashMap<NonZeroU32, crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>> = Default::default();
+                let mut relay2: Vec<_> = vec![];
+                let mut send_map: HashMap<
+                    NonZeroU32,
+                    crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
+                > = Default::default();
                 for (arc, chain_name) in relay {
                     let url = chain_name_to_url(&chain_name);
                     // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
@@ -259,62 +261,68 @@ fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
                         send_map.insert(para_id, tx);
                     }
                 }
-        
+
                 let relay = relay2;
                 let mut send_map = Some(send_map); // take by only one.
-        
+
                 for (arc, chain_name, para_id, rc) in relay {
                     let lock_clone = arc.clone();
                     let url = chain_name_to_url(&chain_name);
                     println!("url attaching to {}", url);
-        
+
                     // let chain_name_clone = chain_name.clone();
                     let url_clone = url.clone();
-                    let maybe_sender = if para_id.is_none() { send_map.take() } else { None };
+                    let maybe_sender = if para_id.is_none() {
+                        send_map.take()
+                    } else {
+                        None
+                    };
 
                     // events are requested with blocks if not live.
                     if as_of.is_none() {
                         std::thread::spawn(move || {
                             // let mut reconnects = 0;
-            
+
                             // while reconnects < 20 {
-                                println!("Connecting to {}", &url);
-                                let res = async_std::task::block_on(datasource::watch_events(
-                                    lock_clone.clone(),
-                                    &url,
-                                    as_of,
-                                    // /aybe_sender
-                                ));
-                                // if res.is_ok() { break; }
-                                // println!("Problem with {} events (retrys left {})", &url, reconnects);
-                                // std::thread::sleep(std::time::Duration::from_secs(20));
-                                // reconnects += 1;
+                            println!("Connecting to {}", &url);
+                            let res = async_std::task::block_on(datasource::watch_events(
+                                lock_clone.clone(),
+                                &url,
+                                as_of,
+                                // /aybe_sender
+                            ));
+                            // if res.is_ok() { break; }
+                            // println!("Problem with {} events (retrys left {})", &url, reconnects);
+                            // std::thread::sleep(std::time::Duration::from_secs(20));
+                            // reconnects += 1;
                             // }
                             println!("giving up on {} for live events", url);
                         });
                     }
-        
+
                     // let chain_name = chain_name_clone;
                     let lock_clone = arc.clone();
                     std::thread::spawn(move || {
                         // let mut reconnects = 0;
-        
+
                         // while reconnects < 20 {
-                            println!("Connecting to {}", &url_clone);
-                            let res = async_std::task::block_on(datasource::watch_blocks(
-                                lock_clone.clone(),
-                                url_clone.clone(),
-                                relay_id.to_string(),
-                                as_of,
-                                para_id, rc, maybe_sender
-                            ));
-                            // if res.is_ok() { break; }
-                            // println!(
-                            //     "Problem with {} blocks (retries left {})",
-                            //     &url_clone, reconnects
-                            // );
-                            // std::thread::sleep(std::time::Duration::from_secs(20));
-                            // reconnects += 1;
+                        println!("Connecting to {}", &url_clone);
+                        let res = async_std::task::block_on(datasource::watch_blocks(
+                            lock_clone.clone(),
+                            url_clone.clone(),
+                            relay_id.to_string(),
+                            as_of,
+                            para_id,
+                            rc,
+                            maybe_sender,
+                        ));
+                        // if res.is_ok() { break; }
+                        // println!(
+                        //     "Problem with {} blocks (retries left {})",
+                        //     &url_clone, reconnects
+                        // );
+                        // std::thread::sleep(std::time::Duration::from_secs(20));
+                        // reconnects += 1;
                         // }
                         println!("giving up on {} blocks", url_clone);
                     });
@@ -504,12 +512,11 @@ static EMPTY_VEC: Vec<String> = vec![];
 
 const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
-
+const RELAY_CHAIN_CHASM_WIDTH: f32 = 25.;
 
 struct Sovereigns {
     pub relays: Vec<Vec<(ABlocks, String)>>,
 }
-
 
 fn render_new_events(
     mut commands: Commands,
@@ -566,7 +573,7 @@ fn render_new_events(
                         transform: Transform::from_translation(Vec3::new(
                             0. + (BLOCK_AND_SPACER * block_num as f32),
                             0.,
-                            (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                            (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                         )),
                         ..Default::default()
                     });
@@ -592,7 +599,7 @@ fn render_new_events(
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
                             alpha_mode: AlphaMode::Blend,
-                            unlit: !block_events.2.inserted_pic,
+                            unlit: true, // !block_events.2.inserted_pic,
                             ..default()
                         });
 
@@ -604,7 +611,7 @@ fn render_new_events(
                             translation: Vec3::new(
                                 -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
-                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
                             rotation: rot,
                             ..default()
@@ -630,7 +637,7 @@ fn render_new_events(
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
                             alpha_mode: AlphaMode::Blend,
-                            unlit: !block_events.2.inserted_pic,
+                            unlit: true, // !block_events.2.inserted_pic,
                             ..default()
                         });
 
@@ -641,7 +648,7 @@ fn render_new_events(
                             translation: Vec3::new(
                                 -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
-                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
                             rotation: rot,
                             ..default()
@@ -760,7 +767,7 @@ fn add_blocks<'a>(
     let (base_x, base_y, base_z) = (
         0. + (BLOCK_AND_SPACER * block_num as f32) - 4.,
         0.5,
-        5.5 + BLOCK_AND_SPACER * chain as f32 - 4.,
+        RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
 
     const DOT_HEIGHT: f32 = 1.;
@@ -1101,7 +1108,9 @@ pub fn print_events(
     if inspector.start_location.changed {
         inspector.start_location.changed = false;
 
-        custom.send(DataSourceChangedEvent { source: inspector.start_location.location.clone() });
+        custom.send(DataSourceChangedEvent {
+            source: inspector.start_location.location.clone(),
+        });
     }
     for event in events.iter() {
         match event {
@@ -1173,7 +1182,6 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-   
     // asset_server: Res<AssetServer>,
 ) {
     // add entities to the world
@@ -1191,7 +1199,6 @@ fn setup(
         ),
         ..Default::default()
     });
-
 
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
@@ -1253,18 +1260,21 @@ pub struct Inspector {
 }
 
 impl Default for UrlBar {
-    fn default()  -> Self {
-        Self { location: "dot:/1/10000000".to_string(), changed: false }
+    fn default() -> Self {
+        Self {
+            location: "dot:/1//10000000".to_string(),
+            changed: false,
+        }
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct DotUrl {
     sovereign: Option<u32>,
     para_id: Option<u32>,
     block_number: Option<u32>,
     extrinsic: Option<u32>,
-    event: Option<u32>
+    event: Option<u32>,
 }
 
 impl DotUrl {
@@ -1272,6 +1282,7 @@ impl DotUrl {
         let (protocol, rest) = url.split_once(':').ok_or(())?;
         let mut parts = rest.split('/');
         let mut result = DotUrl::default();
+        parts.next(); // There should be nothing before the first slash as that would be something relative.
         if let Some(sovereign) = parts.next() {
             result.sovereign = sovereign.parse().ok();
             if let Some(para_id) = parts.next() {
@@ -1291,14 +1302,13 @@ impl DotUrl {
     }
 }
 
-
 struct UrlBar {
     changed: bool,
-    location: String
+    location: String,
 }
+use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
 use egui::Grid;
-use bevy_inspector_egui::options::StringAttributes;
 impl Inspectable for UrlBar {
     type Attributes = ();
 
@@ -1315,11 +1325,17 @@ impl Inspectable for UrlBar {
                 changed |= self
                     .location
                     .ui(ui, StringAttributes { multiline: false }, context);
-               
+
                 ui.end_row();
-                
-                if ui.button("Teleport").clicked() {
+
+                if ui.button("Time travel").clicked() {
                     self.changed = true;
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Live").clicked() {
+                    self.changed = true;
+                    self.location = "///".into();
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();
