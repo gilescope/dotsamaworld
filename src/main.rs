@@ -95,6 +95,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
         speed: 12.0,          // default: 12.0
     });
 
+    app.insert_resource(Sovereigns{relays:vec![]});
+
     #[cfg(feature = "normalmouse")]
     app.add_plugin(NoCameraPlayerPlugin);
     app.insert_resource(movement::MouseCapture::default());
@@ -135,27 +137,27 @@ async fn main() -> color_eyre::eyre::Result<()> {
             dynamic: false, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
-        .add_system(
-            move |commands: Commands,
-                  meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>,
-                  asset_server: Res<AssetServer>,
-                  links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-                  polyline_materials: ResMut<Assets<PolylineMaterial>>,
-                  polylines: ResMut<Assets<Polyline>>| {
-                let clone_chains = clone_chains.clone();
-                render_new_events(
-                    commands,
-                    meshes,
-                    materials,
-                    clone_chains,
-                    asset_server,
-                    is_self_sovereign,
-                    links,
-                    polyline_materials,
-                    polylines,
-                )
-            },
+        .add_system(render_new_events
+            // move |commands: Commands,
+            //       meshes: ResMut<Assets<Mesh>>,
+            //       materials: ResMut<Assets<StandardMaterial>>,
+            //       asset_server: Res<AssetServer>,
+            //       links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+            //       polyline_materials: ResMut<Assets<PolylineMaterial>>,
+            //       polylines: ResMut<Assets<Polyline>>| {
+            //     // let clone_chains = clone_chains.clone();
+            //     render_new_events(
+            //         commands,
+            //         meshes,
+            //         materials,
+            //         clone_chains,
+            //         asset_server,
+            //         is_self_sovereign,
+            //         links,
+            //         polyline_materials,
+            //         polylines,
+            //     )
+            // },
         )
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
@@ -184,129 +186,139 @@ fn chain_name_to_url(chain_name: &str) -> String {
 fn source_data(mut datasouce_events: EventReader<DataSourceChangedEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>) {
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut sovereigns: ResMut<Sovereigns>
+) {
 
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
         let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-        let mut as_of = Some("10000000");
-    
-        if let Env::Local = selected_env {
-            // as_of = Some("10000000"); // If local show from the first block...
-        }
-    
-        let relays = networks::get_network(&selected_env);
-        let is_self_sovereign = selected_env.is_self_sovereign();
-        let relays = relays
-            .into_iter()
-            .map(|relay| {
-                relay
-                    .iter()
-                    .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-    
-        let clone_chains = relays.clone();
-        let clone_chains_for_lanes = relays.clone();
 
-
-
-        for (rcount, chains) in relays.iter().enumerate() {
-            let rfip = if rcount == 1 { -1. } else { 1. };
-    
-            for (chain, _chain) in chains.iter().enumerate() {
-                commands.spawn_bundle(PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                    material: materials.add(
-                        StandardMaterial {
-                            base_color: Color::rgba(0., 0., 0., 0.4),
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: 0.08,
-                            ..default()
-                        }, //    Color::rgb(0.5, 0.5, 0.5).into()
-                    ),
-                    transform: Transform::from_translation(Vec3::new(
-                        (10000. / 2.) - 5.,
-                        0.,
-                        (0.5 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
-                    )),
-                    ..Default::default()
-                });
+        if let Ok(dot_url) = DotUrl::parse(&event.source) {
+            let mut as_of = dot_url.block_number;
+            // let mut as_of = Some("10000000");
+        
+            if let Env::Local = selected_env {
+                // as_of = Some("10000000"); // If local show from the first block...
             }
-        }
+        
+            let relays = networks::get_network(&selected_env);
+            let is_self_sovereign = selected_env.is_self_sovereign();
+            let relays = relays
+                .into_iter()
+                .map(|relay| {
+                    relay
+                        .iter()
+                        .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+        
+            let clone_chains = relays.clone();
+            let clone_chains_for_lanes = relays.clone();
 
+            sovereigns.relays = clone_chains;
 
-        for (relay_id, relay) in relays.into_iter().enumerate() {
-            let mut relay2 : Vec<_> = vec![];
-            let mut send_map : HashMap<NonZeroU32, crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>> = Default::default();
-            for (arc, chain_name) in relay {
-                let url = chain_name_to_url(&chain_name);
-                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).await;
-                let (tx, rc) = unbounded();
-                relay2.push((arc, chain_name, para_id, rc));
-                if let Some(para_id) = para_id {
-                    send_map.insert(para_id, tx);
+            for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
+                let rfip = if rcount == 1 { -1. } else { 1. };
+        
+                for (chain, _chain) in chains.iter().enumerate() {
+                    commands.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+                        material: materials.add(
+                            StandardMaterial {
+                                base_color: Color::rgba(0., 0., 0., 0.4),
+                                alpha_mode: AlphaMode::Blend,
+                                perceptual_roughness: 0.08,
+                                ..default()
+                            }, //    Color::rgb(0.5, 0.5, 0.5).into()
+                        ),
+                        transform: Transform::from_translation(Vec3::new(
+                            (10000. / 2.) - 5.,
+                            0.,
+                            (0.5 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
+                        )),
+                        ..Default::default()
+                    });
                 }
             }
-    
-            let relay = relay2;
-            let mut send_map = Some(send_map); // take by only one.
-    
-            for (arc, chain_name, para_id, rc) in relay {
-                let lock_clone = arc.clone();
-                let url = chain_name_to_url(&chain_name);
-                println!("url attaching to {}", url);
-    
-                // let chain_name_clone = chain_name.clone();
-                let url_clone = url.clone();
-                let maybe_sender = if para_id.is_none() { send_map.take() } else { None };
-                std::thread::spawn(move || {
-                    // let mut reconnects = 0;
-    
-                    // while reconnects < 20 {
-                        println!("Connecting to {}", &url);
-                        let res = async_std::task::block_on(datasource::watch_events(
-                            lock_clone.clone(),
-                            &url,
-                            as_of,
-                            // /aybe_sender
-                        ));
-                        // if res.is_ok() { break; }
-                        // println!("Problem with {} events (retrys left {})", &url, reconnects);
-                        // std::thread::sleep(std::time::Duration::from_secs(20));
-                        // reconnects += 1;
-                    // }
-                    println!("giving up on {} for live events", url);
-                });
-    
-                // let chain_name = chain_name_clone;
-                let lock_clone = arc.clone();
-                std::thread::spawn(move || {
-                    // let mut reconnects = 0;
-    
-                    // while reconnects < 20 {
-                        println!("Connecting to {}", &url_clone);
-                        let res = async_std::task::block_on(datasource::watch_blocks(
-                            lock_clone.clone(),
-                            url_clone.clone(),
-                            relay_id.to_string(),
-                            as_of,
-                            para_id, rc, maybe_sender
-                        ));
-                        // if res.is_ok() { break; }
-                        // println!(
-                        //     "Problem with {} blocks (retries left {})",
-                        //     &url_clone, reconnects
-                        // );
-                        // std::thread::sleep(std::time::Duration::from_secs(20));
-                        // reconnects += 1;
-                    // }
-                    println!("giving up on {} blocks", url_clone);
-                });
+
+
+            for (relay_id, relay) in relays.into_iter().enumerate() {
+                let mut relay2 : Vec<_> = vec![];
+                let mut send_map : HashMap<NonZeroU32, crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>> = Default::default();
+                for (arc, chain_name) in relay {
+                    let url = chain_name_to_url(&chain_name);
+                    // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+                    let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                    let (tx, rc) = unbounded();
+                    relay2.push((arc, chain_name, para_id, rc));
+                    if let Some(para_id) = para_id {
+                        send_map.insert(para_id, tx);
+                    }
+                }
+        
+                let relay = relay2;
+                let mut send_map = Some(send_map); // take by only one.
+        
+                for (arc, chain_name, para_id, rc) in relay {
+                    let lock_clone = arc.clone();
+                    let url = chain_name_to_url(&chain_name);
+                    println!("url attaching to {}", url);
+        
+                    // let chain_name_clone = chain_name.clone();
+                    let url_clone = url.clone();
+                    let maybe_sender = if para_id.is_none() { send_map.take() } else { None };
+
+                    // events are requested with blocks if not live.
+                    if as_of.is_none() {
+                        std::thread::spawn(move || {
+                            // let mut reconnects = 0;
+            
+                            // while reconnects < 20 {
+                                println!("Connecting to {}", &url);
+                                let res = async_std::task::block_on(datasource::watch_events(
+                                    lock_clone.clone(),
+                                    &url,
+                                    as_of,
+                                    // /aybe_sender
+                                ));
+                                // if res.is_ok() { break; }
+                                // println!("Problem with {} events (retrys left {})", &url, reconnects);
+                                // std::thread::sleep(std::time::Duration::from_secs(20));
+                                // reconnects += 1;
+                            // }
+                            println!("giving up on {} for live events", url);
+                        });
+                    }
+        
+                    // let chain_name = chain_name_clone;
+                    let lock_clone = arc.clone();
+                    std::thread::spawn(move || {
+                        // let mut reconnects = 0;
+        
+                        // while reconnects < 20 {
+                            println!("Connecting to {}", &url_clone);
+                            let res = async_std::task::block_on(datasource::watch_blocks(
+                                lock_clone.clone(),
+                                url_clone.clone(),
+                                relay_id.to_string(),
+                                as_of,
+                                para_id, rc, maybe_sender
+                            ));
+                            // if res.is_ok() { break; }
+                            // println!(
+                            //     "Problem with {} blocks (retries left {})",
+                            //     &url_clone, reconnects
+                            // );
+                            // std::thread::sleep(std::time::Duration::from_secs(20));
+                            // reconnects += 1;
+                        // }
+                        println!("giving up on {} blocks", url_clone);
+                    });
+                }
             }
         }
     }
@@ -493,20 +505,26 @@ static EMPTY_VEC: Vec<String> = vec![];
 const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 
+
+struct Sovereigns {
+    pub relays: Vec<Vec<(ABlocks, String)>>,
+}
+
+
 fn render_new_events(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     // asset_server: Res<AssetServer>,
-    relays: Vec<Vec<(ABlocks, String)>>,
+    relays: Res<Sovereigns>,
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
-    is_self_sovereign: bool,
     links: Query<(Entity, &MessageSource, &GlobalTransform)>,
     mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
     mut polylines: ResMut<Assets<Polyline>>,
 ) {
-    for (rcount, relay) in relays.iter().enumerate() {
+    let is_self_sovereign = false; //TODO!
+    for (rcount, relay) in relays.relays.iter().enumerate() {
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
@@ -1236,9 +1254,43 @@ pub struct Inspector {
 
 impl Default for UrlBar {
     fn default()  -> Self {
-        Self { location: "dot:/1/100".to_string(), changed: false }
+        Self { location: "dot:/1/10000000".to_string(), changed: false }
     }
 }
+
+#[derive(Default)]
+struct DotUrl {
+    sovereign: Option<u32>,
+    para_id: Option<u32>,
+    block_number: Option<u32>,
+    extrinsic: Option<u32>,
+    event: Option<u32>
+}
+
+impl DotUrl {
+    fn parse(url: &str) -> Result<Self, ()> {
+        let (protocol, rest) = url.split_once(':').ok_or(())?;
+        let mut parts = rest.split('/');
+        let mut result = DotUrl::default();
+        if let Some(sovereign) = parts.next() {
+            result.sovereign = sovereign.parse().ok();
+            if let Some(para_id) = parts.next() {
+                result.para_id = para_id.parse().ok();
+                if let Some(block_number) = parts.next() {
+                    result.block_number = block_number.parse().ok();
+                    if let Some(extrinsic) = parts.next() {
+                        result.extrinsic = extrinsic.parse().ok();
+                        if let Some(event) = parts.next() {
+                            result.event = event.parse().ok();
+                        }
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+}
+
 
 struct UrlBar {
     changed: bool,

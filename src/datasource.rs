@@ -299,7 +299,7 @@ pub async fn get_parachain_id<T: subxt::Config>(
     client: &subxt::Client<T>,
     url: &str,
 ) -> Option<NonZeroU32> {
-    if let Some(cached) = get_cached_parachain_id(url).await {
+    if let Some(cached) = get_cached_parachain_id(url) {
         return Some(cached);
     }
     let urlhash = please_hash(&url);
@@ -348,7 +348,7 @@ pub async fn fetch_parachain_id<T: subxt::Config>(
     }
 }
 
-pub async fn get_cached_parachain_id(
+pub fn get_cached_parachain_id(
     url: &str,
 ) -> Option<NonZeroU32> {
     let urlhash = please_hash(&url);
@@ -369,15 +369,15 @@ pub async fn get_cached_parachain_id(
     }
 }
 
-pub async fn get_parachain_id_from_url(
+pub fn get_parachain_id_from_url(
     url: &str,
 ) -> Option<NonZeroU32> {
-    if let Some(cached_id) = get_cached_parachain_id(url).await {
+    if let Some(cached_id) = get_cached_parachain_id(url) {
         return Some(cached_id);
     }
-    let result : Result<subxt::Client<subxt::DefaultConfig>, _>= ClientBuilder::new().set_url(url).build().await;
+    let result : Result<subxt::Client<subxt::DefaultConfig>, _>= async_std::task::block_on(ClientBuilder::new().set_url(url).build());
     if let Ok(client) = result {
-        let para_id: Option<NonZeroU32> = get_parachain_id(&client, &url).await;
+        let para_id: Option<NonZeroU32> = async_std::task::block_on(get_parachain_id(&client, &url));
         para_id
     } else {
         panic!("COULD NOT GET CLIENT FOR URL {}", url);
@@ -500,7 +500,7 @@ pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
     relay_id: String,
-    as_of: Option<&str>,
+    as_of: Option<u32>,
     para_id: Option<NonZeroU32>,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
@@ -565,7 +565,7 @@ pub async fn watch_blocks(
             // Parachain (listening for relay blocks' para include candidate included events.)
             while let Ok((block_number, block_hash)) = recieve_channel.recv() {
                 println!("block hash recieved from relay chain num {}", block_number);
-                let as_of: u32 = as_of.parse().unwrap();
+                // let as_of: u32 = as_of.parse().unwrap();
              
                 // let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
 
@@ -642,7 +642,7 @@ pub async fn watch_blocks(
         } else {
             // Relay chain
 
-            let as_of: u32 = as_of.parse().unwrap();
+            //let as_of: u32 = as_of.parse().unwrap();
             for block_number in as_of.. {
                 let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.expect(&format!("should be able to get hash for block num {} of url {}", block_number, &url));
 
@@ -1771,7 +1771,7 @@ async fn get_events_for_block(api: &polkadot::RuntimeApi<DefaultConfig, DefaultE
 pub async fn watch_events(
     tx: ABlocks,
     url: &str,
-    as_of: Option<&str>
+    as_of: Option<u32>
    
 ) -> Result<(), Box<dyn std::error::Error>> {
     
