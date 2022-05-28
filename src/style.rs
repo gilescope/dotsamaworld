@@ -1,7 +1,7 @@
 use crate::DataEvent;
 
 use super::DataEntity;
-use crate::details::Success;
+use crate::ui::details::Success;
 use bevy::render::color::Color;
 
 #[derive(Clone)]

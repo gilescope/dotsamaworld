@@ -12,6 +12,7 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
+use color_eyre::owo_colors::OwoColorize;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -21,13 +22,13 @@ mod content;
 mod datasource;
 mod movement;
 mod style;
-use crate::details::Details;
+mod ui;
+use crate::ui::{Details, DotUrl};
 use bevy_inspector_egui::RegisterInspectable;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
 use std::convert::AsRef;
-use subxt::ClientBuilder;
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -72,10 +73,8 @@ type ABlocks = Arc<
 use crossbeam_channel::unbounded;
 
 mod networks;
-use networks::Env;
-
-mod details;
 use color_eyre::eyre::Result;
+use networks::Env;
 
 pub struct DataSourceChangedEvent {
     source: String,
@@ -131,10 +130,10 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_system(rain)
         .add_system(source_data)
         .add_system(right_click_system)
-        .add_startup_system(details::configure_visuals)
+        .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
-            dynamic: false, // Set to false since we aren't changing the sky's appearance
+            dynamic: true, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
         .add_system(
@@ -188,22 +187,32 @@ fn source_data(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut sovereigns: ResMut<Sovereigns>,
+    details: Query<Entity, With<Details>>,
 ) {
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
+        // Clear
 
-     
+        // 1. Stop existing event threads!
+        // 2. remove all entities.
+        for detail in details.iter() {
+            commands.entity(detail).despawn();
+            // detail.despawn();
+        }
 
-        let dot_url= DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
-        let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod}; 
+        if event.source == "" {
+            return;
+        }
+        let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
+        let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
         println!("dot url {:?}", &dot_url);
-        let mut as_of = dot_url.block_number;
+        let as_of = dot_url.block_number;
         println!("Block number selected for relay chains: {:?}", as_of);
         // let mut as_of = Some("10000000");
 
         // if let Env::Local = selected_env {
-            // as_of = Some("10000000"); // If local show from the first block...
+        // as_of = Some("10000000"); // If local show from the first block...
         // }
 
         let relays = networks::get_network(&selected_env);
@@ -240,7 +249,9 @@ fn source_data(
                     transform: Transform::from_translation(Vec3::new(
                         (10000. / 2.) - 5.,
                         0.,
-                        ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
+                        ((RELAY_CHAIN_CHASM_WIDTH - 5.)
+                            + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
+                            * rfip,
                     )),
                     ..Default::default()
                 });
@@ -248,6 +259,10 @@ fn source_data(
         }
 
         for (relay_id, relay) in relays.into_iter().enumerate() {
+            let relay_url = DotUrl {
+                sovereign: Some(relay_id as u32),
+                ..dot_url.clone()
+            };
             let mut relay2: Vec<_> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
@@ -282,6 +297,7 @@ fn source_data(
 
                 // events are requested with blocks if not live.
                 if as_of.is_none() {
+                    let relay_url_clone = relay_url.clone();
                     std::thread::spawn(move || {
                         // let mut reconnects = 0;
 
@@ -291,6 +307,10 @@ fn source_data(
                             lock_clone.clone(),
                             &url,
                             as_of,
+                            DotUrl {
+                                para_id,
+                                ..relay_url_clone
+                            },
                             // /aybe_sender
                         ));
                         // if res.is_ok() { break; }
@@ -304,6 +324,7 @@ fn source_data(
 
                 // let chain_name = chain_name_clone;
                 let lock_clone = arc.clone();
+                let relay_url_clone = relay_url.clone();
                 std::thread::spawn(move || {
                     // let mut reconnects = 0;
 
@@ -312,9 +333,11 @@ fn source_data(
                     let res = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
                         url_clone.clone(),
-                        relay_id.to_string(),
                         as_of,
-                        para_id,
+                        DotUrl {
+                            para_id,
+                            ..relay_url_clone
+                        },
                         rc,
                         maybe_sender,
                     ));
@@ -398,7 +421,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
             format!("{:#?}", details)
         }
         DataEntity::Extrinsic {
-            id: _,
+            // id: _,
             args,
             contains,
             details,
@@ -427,7 +450,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 pub enum DataEntity {
     Event(DataEvent),
     Extrinsic {
-        id: (u32, u32),
+        // id: (u32, u32),
         // pallet: String,
         // variant: String,
         args: Vec<String>,
@@ -472,6 +495,12 @@ impl DataEntity {
         match self {
             Self::Event(DataEvent { details, .. }) => details.pallet.as_ref(),
             Self::Extrinsic { details, .. } => &details.pallet,
+        }
+    }
+    pub fn dot(&self) -> &DotUrl {
+        match self {
+            Self::Event(DataEvent { details, .. }) => &details.doturl,
+            Self::Extrinsic { details, .. } => &details.doturl,
         }
     }
     pub fn variant(&self) -> &str {
@@ -882,13 +911,14 @@ fn add_blocks<'a>(
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+                        doturl: block.dot().clone(),
                         flattern: block.details().flattern.clone(),
                         url: format!(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
                             &encoded, &call_data
                         ),
                         parent: None,
-                        success: details::Success::Happy,
+                        success: ui::details::Success::Happy,
                         pallet: block.pallet().to_string(),
                         variant: block.variant().to_string(),
                     })
@@ -1269,51 +1299,6 @@ impl Default for UrlBar {
     }
 }
 
-#[derive(Default, Debug)]
-struct DotUrl {
-    env: Env, 
-    sovereign: Option<u32>,
-    para_id: Option<u32>,
-    block_number: Option<u32>,
-    extrinsic: Option<u32>,
-    event: Option<u32>,
-}
-
-impl DotUrl {
-    fn parse(url: &str) -> Result<Self, ()> {
-        let (protocol, rest) = url.split_once(':').ok_or(())?;
-        let mut result = DotUrl::default();
-        result.env = match protocol {
-            "independents" => Env::SelfSovereign,
-            "independentstest" => Env::SelfSovereignTest,
-            "test"  => Env::Test,
-            "nfts"  =>  Env::NFTs,
-            "local" => Env::Local,
-            "dotsama" | _ => Env::Prod,            
-        };
-
-        let mut parts = rest.split('/');
-       
-        parts.next(); // There should be nothing before the first slash as that would be something relative.
-        if let Some(sovereign) = parts.next() {
-            result.sovereign = sovereign.parse().ok();
-            if let Some(para_id) = parts.next() {
-                result.para_id = para_id.parse().ok();
-                if let Some(block_number) = parts.next() {
-                    result.block_number = block_number.parse().ok();
-                    if let Some(extrinsic) = parts.next() {
-                        result.extrinsic = extrinsic.parse().ok();
-                        if let Some(event) = parts.next() {
-                            result.event = event.parse().ok();
-                        }
-                    }
-                }
-            }
-        }
-        Ok(result)
-    }
-}
-
 struct UrlBar {
     changed: bool,
     location: String,
@@ -1348,6 +1333,12 @@ impl Inspectable for UrlBar {
                 if ui.button("Live").clicked() {
                     self.changed = true;
                     self.location = "///".into();
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Clear").clicked() {
+                    self.changed = true;
+                    self.location = "".into();
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();

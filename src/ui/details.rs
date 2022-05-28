@@ -1,4 +1,5 @@
 //! This mod contains all the egui code for 2d that powers the details screen.
+use super::DotUrl;
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
@@ -19,6 +20,7 @@ pub enum Success {
 #[derive(Component, Default, Clone, Debug)]
 pub struct Details {
     pub pallet: String,
+    pub doturl: DotUrl,
     pub parent: Option<u32>,
     pub variant: String,
     pub success: Success,
@@ -41,6 +43,11 @@ impl Inspectable for Details {
         ui.vertical_centered(|ui| {
             Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
                 // ui.label("Pallet");
+                changed |=
+                    self.doturl
+                        .to_string()
+                        .ui(ui, StringAttributes { multiline: false }, context);
+                ui.end_row();
                 changed |= self
                     .pallet
                     .ui(ui, StringAttributes { multiline: false }, context);
