@@ -1,7 +1,9 @@
 #[allow(dead_code)]
+#[derive(Default, Debug)]
 pub enum Env {
     Local,
     Test,
+    #[default]
     Prod,
     SelfSovereign,
     SelfSovereignTest,

@@ -192,141 +192,142 @@ fn source_data(
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
-        let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
 
-        if let Ok(dot_url) = DotUrl::parse(&event.source) {
-            println!("dot url {:?}", &dot_url);
-            let mut as_of = dot_url.block_number;
-            println!("Block number selected for relay chains: {:?}", as_of);
-            // let mut as_of = Some("10000000");
+     
 
-            if let Env::Local = selected_env {
-                // as_of = Some("10000000"); // If local show from the first block...
+        let dot_url= DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
+        let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod}; 
+        println!("dot url {:?}", &dot_url);
+        let mut as_of = dot_url.block_number;
+        println!("Block number selected for relay chains: {:?}", as_of);
+        // let mut as_of = Some("10000000");
+
+        // if let Env::Local = selected_env {
+            // as_of = Some("10000000"); // If local show from the first block...
+        // }
+
+        let relays = networks::get_network(&selected_env);
+        // let is_self_sovereign = selected_env.is_self_sovereign();
+        let relays = relays
+            .into_iter()
+            .map(|relay| {
+                relay
+                    .iter()
+                    .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let clone_chains = relays.clone();
+        let clone_chains_for_lanes = relays.clone();
+
+        sovereigns.relays = clone_chains;
+
+        for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
+            let rfip = if rcount == 1 { -1. } else { 1. };
+
+            for (chain, _chain) in chains.iter().enumerate() {
+                commands.spawn_bundle(PbrBundle {
+                    mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+                    material: materials.add(
+                        StandardMaterial {
+                            base_color: Color::rgba(0., 0., 0., 0.4),
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: 0.08,
+                            ..default()
+                        }, //    Color::rgb(0.5, 0.5, 0.5).into()
+                    ),
+                    transform: Transform::from_translation(Vec3::new(
+                        (10000. / 2.) - 5.,
+                        0.,
+                        ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
+                    )),
+                    ..Default::default()
+                });
             }
+        }
 
-            let relays = networks::get_network(&selected_env);
-            // let is_self_sovereign = selected_env.is_self_sovereign();
-            let relays = relays
-                .into_iter()
-                .map(|relay| {
-                    relay
-                        .iter()
-                        .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
-
-            let clone_chains = relays.clone();
-            let clone_chains_for_lanes = relays.clone();
-
-            sovereigns.relays = clone_chains;
-
-            for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
-                let rfip = if rcount == 1 { -1. } else { 1. };
-
-                for (chain, _chain) in chains.iter().enumerate() {
-                    commands.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                        material: materials.add(
-                            StandardMaterial {
-                                base_color: Color::rgba(0., 0., 0., 0.4),
-                                alpha_mode: AlphaMode::Blend,
-                                perceptual_roughness: 0.08,
-                                ..default()
-                            }, //    Color::rgb(0.5, 0.5, 0.5).into()
-                        ),
-                        transform: Transform::from_translation(Vec3::new(
-                            (10000. / 2.) - 5.,
-                            0.,
-                            ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
-                        )),
-                        ..Default::default()
-                    });
+        for (relay_id, relay) in relays.into_iter().enumerate() {
+            let mut relay2: Vec<_> = vec![];
+            let mut send_map: HashMap<
+                NonZeroU32,
+                crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
+            > = Default::default();
+            for (arc, chain_name) in relay {
+                let url = chain_name_to_url(&chain_name);
+                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                let (tx, rc) = unbounded();
+                relay2.push((arc, chain_name, para_id, rc));
+                if let Some(para_id) = para_id {
+                    send_map.insert(para_id, tx);
                 }
             }
 
-            for (relay_id, relay) in relays.into_iter().enumerate() {
-                let mut relay2: Vec<_> = vec![];
-                let mut send_map: HashMap<
-                    NonZeroU32,
-                    crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
-                > = Default::default();
-                for (arc, chain_name) in relay {
-                    let url = chain_name_to_url(&chain_name);
-                    // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                    let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
-                    let (tx, rc) = unbounded();
-                    relay2.push((arc, chain_name, para_id, rc));
-                    if let Some(para_id) = para_id {
-                        send_map.insert(para_id, tx);
-                    }
-                }
+            let relay = relay2;
+            let mut send_map = Some(send_map); // take by only one.
 
-                let relay = relay2;
-                let mut send_map = Some(send_map); // take by only one.
+            for (arc, chain_name, para_id, rc) in relay {
+                let lock_clone = arc.clone();
+                let url = chain_name_to_url(&chain_name);
+                println!("url attaching to {}", url);
 
-                for (arc, chain_name, para_id, rc) in relay {
-                    let lock_clone = arc.clone();
-                    let url = chain_name_to_url(&chain_name);
-                    println!("url attaching to {}", url);
+                // let chain_name_clone = chain_name.clone();
+                let url_clone = url.clone();
+                let maybe_sender = if para_id.is_none() {
+                    send_map.take()
+                } else {
+                    None
+                };
 
-                    // let chain_name_clone = chain_name.clone();
-                    let url_clone = url.clone();
-                    let maybe_sender = if para_id.is_none() {
-                        send_map.take()
-                    } else {
-                        None
-                    };
-
-                    // events are requested with blocks if not live.
-                    if as_of.is_none() {
-                        std::thread::spawn(move || {
-                            // let mut reconnects = 0;
-
-                            // while reconnects < 20 {
-                            println!("Connecting to {}", &url);
-                            let res = async_std::task::block_on(datasource::watch_events(
-                                lock_clone.clone(),
-                                &url,
-                                as_of,
-                                // /aybe_sender
-                            ));
-                            // if res.is_ok() { break; }
-                            // println!("Problem with {} events (retrys left {})", &url, reconnects);
-                            // std::thread::sleep(std::time::Duration::from_secs(20));
-                            // reconnects += 1;
-                            // }
-                            println!("giving up on {} for live events", url);
-                        });
-                    }
-
-                    // let chain_name = chain_name_clone;
-                    let lock_clone = arc.clone();
+                // events are requested with blocks if not live.
+                if as_of.is_none() {
                     std::thread::spawn(move || {
                         // let mut reconnects = 0;
 
                         // while reconnects < 20 {
-                        println!("Connecting to {}", &url_clone);
-                        let res = async_std::task::block_on(datasource::watch_blocks(
+                        println!("Connecting to {}", &url);
+                        let res = async_std::task::block_on(datasource::watch_events(
                             lock_clone.clone(),
-                            url_clone.clone(),
-                            relay_id.to_string(),
+                            &url,
                             as_of,
-                            para_id,
-                            rc,
-                            maybe_sender,
+                            // /aybe_sender
                         ));
                         // if res.is_ok() { break; }
-                        // println!(
-                        //     "Problem with {} blocks (retries left {})",
-                        //     &url_clone, reconnects
-                        // );
+                        // println!("Problem with {} events (retrys left {})", &url, reconnects);
                         // std::thread::sleep(std::time::Duration::from_secs(20));
                         // reconnects += 1;
                         // }
-                        println!("giving up on {} blocks", url_clone);
+                        println!("giving up on {} for live events", url);
                     });
                 }
+
+                // let chain_name = chain_name_clone;
+                let lock_clone = arc.clone();
+                std::thread::spawn(move || {
+                    // let mut reconnects = 0;
+
+                    // while reconnects < 20 {
+                    println!("Connecting to {}", &url_clone);
+                    let res = async_std::task::block_on(datasource::watch_blocks(
+                        lock_clone.clone(),
+                        url_clone.clone(),
+                        relay_id.to_string(),
+                        as_of,
+                        para_id,
+                        rc,
+                        maybe_sender,
+                    ));
+                    // if res.is_ok() { break; }
+                    // println!(
+                    //     "Problem with {} blocks (retries left {})",
+                    //     &url_clone, reconnects
+                    // );
+                    // std::thread::sleep(std::time::Duration::from_secs(20));
+                    // reconnects += 1;
+                    // }
+                    println!("giving up on {} blocks", url_clone);
+                });
             }
         }
     }
@@ -1262,7 +1263,7 @@ pub struct Inspector {
 impl Default for UrlBar {
     fn default() -> Self {
         Self {
-            location: "dot:/1//10000000".to_string(),
+            location: "dotsama:/1//10000000".to_string(),
             changed: false,
         }
     }
@@ -1270,6 +1271,7 @@ impl Default for UrlBar {
 
 #[derive(Default, Debug)]
 struct DotUrl {
+    env: Env, 
     sovereign: Option<u32>,
     para_id: Option<u32>,
     block_number: Option<u32>,
@@ -1280,8 +1282,18 @@ struct DotUrl {
 impl DotUrl {
     fn parse(url: &str) -> Result<Self, ()> {
         let (protocol, rest) = url.split_once(':').ok_or(())?;
-        let mut parts = rest.split('/');
         let mut result = DotUrl::default();
+        result.env = match protocol {
+            "independents" => Env::SelfSovereign,
+            "independentstest" => Env::SelfSovereignTest,
+            "test"  => Env::Test,
+            "nfts"  =>  Env::NFTs,
+            "local" => Env::Local,
+            "dotsama" | _ => Env::Prod,            
+        };
+
+        let mut parts = rest.split('/');
+       
         parts.next(); // There should be nothing before the first slash as that would be something relative.
         if let Some(sovereign) = parts.next() {
             result.sovereign = sovereign.parse().ok();
