@@ -222,7 +222,7 @@ fn source_data(
                 let encoded: String = url::form_urlencoded::Serializer::new(String::new())
                     .append_pair("rpc", &url)
                     .finish();
-                
+
                 // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
                 let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
                 commands
@@ -248,13 +248,15 @@ fn source_data(
                     .insert(Details {
                         doturl: DotUrl {
                             para_id,
-                            block_number: None, 
+                            block_number: None,
                             ..relay_url.clone()
                         },
                         flattern: chain_deets.1.clone(),
                         url: format!("https://polkadot.js.org/apps/?{}", &encoded),
                         ..default()
-                    }).insert(Name::new("Blockchain")).insert_bundle(PickableBundle::default());
+                    })
+                    .insert(Name::new("Blockchain"))
+                    .insert_bundle(PickableBundle::default());
             }
         }
 
@@ -593,124 +595,137 @@ fn render_block(
                     let encoded: String = url::form_urlencoded::Serializer::new(String::new())
                         .append_pair("rpc", &block_events.2.chain_ws)
                         .finish();
-                        
-                    // Add the new block as a large rectangle on the ground:
-                    commands.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
-                        material: materials.add(StandardMaterial {
-                            base_color: Color::rgba(0., 0., 0., 0.7),
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: 0.08,
-                            ..default()
-                        }),
-                        transform: Transform::from_translation(Vec3::new(
-                            0. + (BLOCK_AND_SPACER * block_num as f32),
-                            0.,
-                            (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
-                        )),
-                        ..Default::default()
-                    }).insert(Details {
+
+                    let details = Details {
                         doturl: DotUrl {
                             extrinsic: None,
                             event: None,
                             ..block.events.first().unwrap().details.doturl.clone()
                         },
-                      
-                        url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/0x{}", &encoded, hex::encode(block.blockhash)),
+
+                        url: format!(
+                            "https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+                            &encoded,
+                            hex::encode(block.blockhash)
+                        ),
                         ..default()
-                    }).insert(Name::new("Block")).insert_bundle(PickableBundle::default());
+                    };
 
-                    // if !block_events.2.inserted_pic
-                    {
-                        let name = (*block_events)
-                            .2
-                            .chain_name
-                            .replace(" ", "-")
-                            .replace("-Testnet", "");
-                        let texture_handle = asset_server.load(&format!("branding/{}.jpeg", name));
-                        let aspect = 1. / 3.;
-
-                        // create a new quad mesh. this is what we will apply the texture to
-                        let quad_width = BLOCK;
-                        let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-                            quad_width,
-                            quad_width * aspect,
-                        ))));
-
-                        // this material renders the texture normally
-                        let material_handle = materials.add(StandardMaterial {
-                            base_color_texture: Some(texture_handle.clone()),
-                            alpha_mode: AlphaMode::Blend,
-                            unlit: true, // !block_events.2.inserted_pic,
-                            ..default()
-                        });
-
-                        use std::f32::consts::PI;
-                        // textured quad - normal
-                        let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
-                                                                                           // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
-                        let transform = Transform {
-                            translation: Vec3::new(
-                                -7. + (BLOCK_AND_SPACER * block_num as f32),
-                                0.1, //1.5
-                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
-                            ),
-                            rotation: rot,
-                            ..default()
-                        };
-
-                        commands
-                            .spawn_bundle(PbrBundle {
-                                mesh: quad_handle.clone(),
-                                material: material_handle.clone(),
-                                transform,
+                    // Add the new block as a large rectangle on the ground:
+                    commands
+                        .spawn_bundle(PbrBundle {
+                            mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
+                            material: materials.add(StandardMaterial {
+                                base_color: Color::rgba(0., 0., 0., 0.7),
+                                alpha_mode: AlphaMode::Blend,
+                                perceptual_roughness: 0.08,
                                 ..default()
-                            })
-                            .insert(Name::new("BillboardDown"));
-
-                        // create a new quad mesh. this is what we will apply the texture to
-                        let quad_width = BLOCK;
-                        let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-                            quad_width,
-                            quad_width * aspect,
-                        ))));
-
-                        // this material renders the texture normally
-                        let material_handle = materials.add(StandardMaterial {
-                            base_color_texture: Some(texture_handle.clone()),
-                            alpha_mode: AlphaMode::Blend,
-                            unlit: true, // !block_events.2.inserted_pic,
-                            ..default()
-                        });
-
-                        // textured quad - normal
-                        let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-                                                                                           // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
-                        let transform = Transform {
-                            translation: Vec3::new(
-                                -7. + (BLOCK_AND_SPACER * block_num as f32),
-                                0.1, //1.5
+                            }),
+                            transform: Transform::from_translation(Vec3::new(
+                                0. + (BLOCK_AND_SPACER * block_num as f32),
+                                0.,
                                 (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
-                            ),
-                            rotation: rot,
-                            ..default()
-                        };
+                            )),
+                            ..Default::default()
+                        })
+                        .insert(details.clone())
+                        .insert(Name::new("Block"))
+                        .with_children(|parent| {
+                            let name = (*block_events)
+                                .2
+                                .chain_name
+                                .replace(" ", "-")
+                                .replace("-Testnet", "");
+                            let texture_handle =
+                                asset_server.load(&format!("branding/{}.jpeg", name));
+                            let aspect = 1. / 3.;
 
-                        commands
-                            .spawn_bundle(PbrBundle {
-                                mesh: quad_handle.clone(),
-                                material: material_handle.clone(),
-                                transform,
+                            // create a new quad mesh. this is what we will apply the texture to
+                            let quad_width = BLOCK;
+                            let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
+                                quad_width,
+                                quad_width * aspect,
+                            ))));
+
+                            // this material renders the texture normally
+                            let material_handle = materials.add(StandardMaterial {
+                                base_color_texture: Some(texture_handle.clone()),
+                                alpha_mode: AlphaMode::Blend,
+                                unlit: true, // !block_events.2.inserted_pic,
                                 ..default()
-                            })
-                            .insert(Name::new(format!(
-                                "BillboardUp {}",
-                                block_events.2.chain_name
-                            )));
+                            });
 
-                        block_events.2.inserted_pic = true;
-                    }
+                            use std::f32::consts::PI;
+                            // textured quad - normal
+                            let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+                                                                                               // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                            let transform = Transform {
+                                translation: Vec3::new(
+                                    -7., // + (BLOCK_AND_SPACER * block_num as f32),
+                                    0.1, //1.5
+                                    0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
+                                ),
+                                rotation: rot,
+                                ..default()
+                            };
 
+                            parent
+                                .spawn_bundle(PbrBundle {
+                                    mesh: quad_handle.clone(),
+                                    material: material_handle.clone(),
+                                    transform,
+                                    ..default()
+                                })
+                                .insert(Name::new("BillboardDown"))
+                                .insert(details.clone())
+                                .insert_bundle(PickableBundle::default());
+                                // by adding Details to the banners they are cleared down when we remove every entity with Details.
+
+                            // create a new quad mesh. this is what we will apply the texture to
+                            let quad_width = BLOCK;
+                            let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
+                                quad_width,
+                                quad_width * aspect,
+                            ))));
+
+                            // this material renders the texture normally
+                            let material_handle = materials.add(StandardMaterial {
+                                base_color_texture: Some(texture_handle.clone()),
+                                alpha_mode: AlphaMode::Blend,
+                                unlit: !block_events.2.inserted_pic,
+                                ..default()
+                            });
+
+                            // textured quad - normal
+                            let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+                                                                                               // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                            let transform = Transform {
+                                translation: Vec3::new(
+                                    -7., // + (BLOCK_AND_SPACER * block_num as f32),
+                                    0.1, //1.5
+                                    0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
+                                ),
+                                rotation: rot,
+                                ..default()
+                            };
+
+                            parent
+                                .spawn_bundle(PbrBundle {
+                                    mesh: quad_handle.clone(),
+                                    material: material_handle.clone(),
+                                    transform,
+                                    ..default()
+                                })
+                                .insert(Name::new(format!(
+                                    "BillboardUp {}",
+                                    block_events.2.chain_name
+                                )))
+                                .insert(details)
+                                .insert_bundle(PickableBundle::default()); // TODO: should be able to add same component onto 3 different entities maybe?
+
+                            block_events.2.inserted_pic = true;
+                        })
+                        .insert_bundle(PickableBundle::default());
                     let ext_with_events =
                         datasource::associate_events(block.extrinsics, block.events);
 
@@ -736,7 +751,8 @@ fn render_block(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,&encoded
+                        &mut polylines,
+                        &encoded,
                     );
 
                     add_blocks(
@@ -752,7 +768,8 @@ fn render_block(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,&encoded
+                        &mut polylines,
+                        &encoded,
                     );
                 }
             }
@@ -785,7 +802,7 @@ fn add_blocks<'a>(
     links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
     polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
     polylines: &mut ResMut<Assets<Polyline>>,
-    encoded: &str
+    encoded: &str,
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -817,8 +834,6 @@ fn add_blocks<'a>(
     const HIGH: f32 = 100.;
     let mut rain_height: [f32; 81] = [HIGH; 81];
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
-
-
 
     let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
