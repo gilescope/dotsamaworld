@@ -1,6 +1,7 @@
 use crate::DataEvent;
 
 use super::DataEntity;
+use crate::ui::details::Success;
 use bevy::render::color::Color;
 
 #[derive(Clone)]
@@ -67,14 +68,21 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 }
 
 pub fn style_data_event(entry: &DataEvent) -> ExStyle {
-    let msg = crate::content::is_event_message(entry);
-    let raw = &entry.raw;
+    // let msg = crate::content::is_event_message(entry);
+    let raw = &entry.details;
     if matches!(
         (raw.pallet.as_str(), raw.variant.as_str()),
         ("System", "ExtrinsicFailed") // | ("PolkadotXcm", "Attempted") - only an error if !completed variant.
-    ) {
+    ) || entry.details.success == Success::Sad
+    {
         return ExStyle {
             color: Color::rgb(1., 0., 0.),
+        };
+    }
+    if entry.details.success == Success::Worried {
+        return ExStyle {
+            // Trump Orange
+            color: Color::rgb(1., 0.6470588235, 0.),
         };
     }
 

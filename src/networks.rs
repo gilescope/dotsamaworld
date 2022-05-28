@@ -1,7 +1,9 @@
 #[allow(dead_code)]
+#[derive(Default, Debug, Clone)]
 pub enum Env {
     Local,
     Test,
+    #[default]
     Prod,
     SelfSovereign,
     SelfSovereignTest,
@@ -62,6 +64,36 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
         Env::Prod => {
             vec![
                 vec![
+                    "kusama-rpc.polkadot.io",
+                    "statemine-rpc.dwellir.com",
+                    "wss.api.moonriver.moonbeam.network", // metadata 13 still at 10_000_000
+                    "bifrost-rpc.dwellir.com",
+                    "khala-rpc.dwellir.com", // metadata 13 still at 10_000_000
+                    "shiden-rpc.dwellir.com", // metadata 13 still at 10_000_000
+                    "rpc-shadow.crust.network",
+                    "kusama.api.integritee.network",
+                    "kusama.rpc.robonomics.network",
+                    "calamari-rpc.dwellir.com",
+                    "heiko-rpc.parallel.fi",
+                    "kilt-rpc.dwellir.com",
+                    "picasso-rpc.composable.finance",
+                    "basilisk-rpc.dwellir.com", // metadata 13 still at 10_000_000
+                    "kintsugi-rpc.dwellir.com",
+                    "us-ws-quartz.unique.network",
+                    "para.subsocial.network",
+                    "rpc.api.kico.dico.io",
+                    "zeitgeist-rpc.dwellir.com",
+                    "crab-parachain-rpc.darwinia.network",
+                    "rpc.litmus-parachain.litentry.io",
+                    "karura-rpc.dwellir.com",
+                    "fullnode.altair.centrifuge.io", // metadata 13 still at 10_000_000
+                    "pioneer-1-rpc.bit.country",
+                    "rpc.turing.oak.tech",
+                ],
+                vec![
+                    // TODO: how can we dynamically discover
+                    // nodes we can hit? - can we track back to the
+                    // collator ip?
                     "rpc.polkadot.io",
                     "statemint-rpc.polkadot.io",
                     "acala.polkawallet.io",
@@ -75,37 +107,9 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "eden-rpc.dwellir.com", //noodle
                     "rpc.parallel.fi",
                     "wss://api.phala.network:443/ws",
-                    "mainnet.polkadex.trade",
+                    // "mainnet.polkadex.trade",
                     "ws.unique.network",
                     "k-ui.kapex.network",
-                    "wss.odyssey.aresprotocol.io",
-                ],
-                vec![
-                    "kusama-rpc.polkadot.io",
-                    "statemine-rpc.dwellir.com",
-                    "wss.api.moonriver.moonbeam.network",
-                    "bifrost-rpc.dwellir.com",
-                    "khala-rpc.dwellir.com",
-                    "shiden-rpc.dwellir.com",
-                    "rpc-shadow.crust.network",
-                    "kusama.api.integritee.network",
-                    "kusama.rpc.robonomics.network",
-                    "calamari-rpc.dwellir.com",
-                    "heiko-rpc.parallel.fi",
-                    "kilt-rpc.dwellir.com",
-                    "picasso-rpc.composable.finance",
-                    "basilisk-rpc.dwellir.com",
-                    "kintsugi-rpc.dwellir.com",
-                    "us-ws-quartz.unique.network",
-                    "para.subsocial.network",
-                    "rpc.api.kico.dico.io",
-                    "zeitgeist-rpc.dwellir.com",
-                    "crab-parachain-rpc.darwinia.network",
-                    "rpc.litmus-parachain.litentry.io",
-                    "karura-rpc.dwellir.com",
-                    "fullnode.altair.centrifuge.io",
-                    "pioneer-1-rpc.bit.country",
-                    "rpc.turing.oak.tech",
                 ],
             ]
         }

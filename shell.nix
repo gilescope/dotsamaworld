@@ -6,7 +6,10 @@ let
       rev = "e1f7540fc0a8b989fb8cf701dc4fd7fc76bcf168";
     });
   nixpkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
-  rust-nightly = with nixpkgs; ((rustChannelOf { date = "2022-05-14"; channel = "nightly"; }).rust.override {
+  rust-nightly = with nixpkgs; ((rustChannelOf { date = "2022-05-27"; channel = "nightly"; }).rust.override {
+    extensions = [
+	  "rust-src"
+	];
   });
 in
 with nixpkgs; mkShell {

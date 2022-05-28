@@ -3,12 +3,12 @@
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-use bevy::winit::WinitSettings;
+// use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 
-use bevy_inspector_egui::{plugin::InspectorWindows, Inspectable, InspectorPlugin};
+use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
@@ -17,18 +17,17 @@ use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use subxt::RawEventDetails;
 mod content;
 mod datasource;
 mod movement;
 mod style;
-use crate::details::Details;
+mod ui;
+use crate::ui::{Details, DotUrl};
 use bevy_inspector_egui::RegisterInspectable;
 #[cfg(feature = "spacemouse")]
-use bevy_spacemouse::{SpaceMouseRelativeControllable, SpaceMousePlugin};
+use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
 use std::convert::AsRef;
-
 
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
@@ -51,7 +50,6 @@ impl Default for MovementSettings {
     }
 }
 
-
 static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
 static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
@@ -71,50 +69,35 @@ type ABlocks = Arc<
         ChainInfo,
     )>,
 >;
+use crossbeam_channel::unbounded;
 
 mod networks;
+use color_eyre::eyre::Result;
 use networks::Env;
 
-mod details;
+pub struct DataSourceChangedEvent {
+    source: String,
+}
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let selected_env = Env::Prod; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+async fn main() -> color_eyre::eyre::Result<()> {
+    color_eyre::install()?;
 
-
-    let mut as_of = None;
-
-    if let Env::Local = selected_env {
-        as_of = Some("0"); // If local show from the first block...
-    }
-
-    let relays = networks::get_network(&selected_env);
-    let is_self_sovereign = selected_env.is_self_sovereign();
-    let relays = relays
-        .into_iter()
-        .map(|relay| {
-            relay
-                .iter()
-                .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-
-    let clone_chains = relays.clone();
-    let clone_chains_for_lanes = relays.clone();
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
-        //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-        
-        app.insert_resource(MovementSettings {
-            sensitivity: 0.00020, // default: 0.00012
-            speed: 12.0,          // default: 12.0
-        });
+    //  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
+    app.add_event::<DataSourceChangedEvent>();
+    app.insert_resource(MovementSettings {
+        sensitivity: 0.00020, // default: 0.00012
+        speed: 12.0,          // default: 12.0
+    });
 
-        #[cfg(feature = "normalmouse")]        
-        app.add_plugin(NoCameraPlayerPlugin);
-        app.insert_resource(movement::MouseCapture::default());
+    app.insert_resource(Sovereigns { relays: vec![] });
+
+    #[cfg(feature = "normalmouse")]
+    app.add_plugin(NoCameraPlayerPlugin);
+    app.insert_resource(movement::MouseCapture::default());
 
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
@@ -132,115 +115,245 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_startup_system(
             move |commands: Commands,
                   meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>
-                  | {
-                let clone_chains_for_lanes = clone_chains_for_lanes.clone();
-                setup(commands, meshes, materials, clone_chains_for_lanes);
+                  materials: ResMut<Assets<StandardMaterial>>| {
+                // let clone_chains_for_lanes = clone_chains_for_lanes.clone();
+                setup(commands, meshes, materials);
             },
         );
-        #[cfg(feature = "spacemouse")]
-        app.add_startup_system(
-            move |mut scale: ResMut<bevy_spacemouse::Scale>| {
-                      scale.rotate_scale = 0.00015;
-                      scale.translate_scale = 0.004;
-            },
-        );
-        app.add_system(movement::player_move_arrows)
+    #[cfg(feature = "spacemouse")]
+    app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
+        scale.rotate_scale = 0.00010;
+        scale.translate_scale = 0.004;
+    });
+    app.add_system(movement::player_move_arrows)
         .add_system(rain)
+        .add_system(source_data)
         .add_system(right_click_system)
-        .add_startup_system(details::configure_visuals)
+        .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
-            dynamic: false, // Set to false since we aren't changing the sky's appearance
+            dynamic: true, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
-        .add_system(
-            move |commands: Commands,
-                  meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>,
-                  asset_server: Res<AssetServer>,
-                  links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-                  polyline_materials: ResMut<Assets<PolylineMaterial>>,
-                  polylines: ResMut<Assets<Polyline>>| {
-                let clone_chains = clone_chains.clone();
-                render_new_events(
-                    commands,
-                    meshes,
-                    materials,
-                    clone_chains,
-                    asset_server,
-                    is_self_sovereign,
-                    links,
-                    polyline_materials,
-                    polylines,
-                )
-            },
-        )
+        .add_system(render_block)
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
-    for (relay_id, relay) in relays.into_iter().enumerate() {
-        for (arc, mut chain_name) in relay {
-            let lock_clone = arc.clone();
-            if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
-                chain_name = format!("wss://{}", chain_name);
-            }
-
-            let url = if chain_name[5..].contains(':') {
-                format!("{chain_name}")
-            } else {
-                format!("{chain_name}:443")
-            };
-            println!("url attaching to {}", url);
-
-            // let chain_name_clone = chain_name.clone();
-            let url_clone = url.clone();
-            std::thread::spawn(move || {
-                let mut reconnects = 0;
-
-                while reconnects < 20 {
-                    println!("Connecting to {}", &url);
-                    let _ = async_std::task::block_on(datasource::watch_events(
-                        lock_clone.clone(),                        
-                        &url,
-                        as_of
-                    ));
-                    println!("Problem with {} events (retrys left {})", &url, reconnects);
-                    std::thread::sleep(std::time::Duration::from_secs(20));
-                    reconnects += 1;
-                }
-                println!("giving up on {} events", url);
-            });
-
-            // let chain_name = chain_name_clone;
-            let lock_clone = arc.clone();
-            std::thread::spawn(move || {
-                let mut reconnects = 0;
-
-                while reconnects < 20 {
-                    println!("Connecting to {}", &url_clone);
-                    let _ = async_std::task::block_on(datasource::watch_blocks(
-                        lock_clone.clone(),
-                        url_clone.clone(),
-                        relay_id.to_string(),
-                        as_of
-                    ));
-                    println!(
-                        "Problem with {} blocks (retries left {})",
-                        &url_clone, reconnects
-                    );
-                    std::thread::sleep(std::time::Duration::from_secs(20));
-                    reconnects += 1;
-                }
-                println!("giving up on {} blocks", url_clone);
-            });
-        }
-    }
     app.run();
 
     // app.insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
     // .add_startup_system(add_people)
     // .add_system(greet_people);
     Ok(())
+}
+
+fn chain_name_to_url(chain_name: &str) -> String {
+    let mut chain_name = chain_name.to_string();
+    if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
+        chain_name = format!("wss://{}", chain_name);
+    }
+
+    if chain_name[5..].contains(':') {
+        format!("{chain_name}")
+    } else {
+        format!("{chain_name}:443")
+    }
+}
+
+fn source_data(
+    mut datasouce_events: EventReader<DataSourceChangedEvent>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut sovereigns: ResMut<Sovereigns>,
+    details: Query<Entity, With<Details>>,
+) {
+    for event in datasouce_events.iter() {
+        println!("data source chaneg to {}", event.source);
+
+        // Clear
+
+        // 1. Stop existing event threads!
+        // 2. remove all entities.
+        for detail in details.iter() {
+            commands.entity(detail).despawn();
+            // detail.despawn();
+        }
+
+        if event.source == "" {
+            return;
+        }
+        let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
+        let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+        println!("dot url {:?}", &dot_url);
+        let as_of = dot_url.block_number;
+        println!("Block number selected for relay chains: {:?}", as_of);
+        // let mut as_of = Some("10000000");
+
+        // if let Env::Local = selected_env {
+        // as_of = Some("10000000"); // If local show from the first block...
+        // }
+
+        let relays = networks::get_network(&selected_env);
+        // let is_self_sovereign = selected_env.is_self_sovereign();
+        let relays = relays
+            .into_iter()
+            .map(|relay| {
+                relay
+                    .iter()
+                    .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let clone_chains = relays.clone();
+        let clone_chains_for_lanes = relays.clone();
+
+        sovereigns.relays = clone_chains;
+
+        for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
+            let rfip = if rcount == 1 { -1. } else { 1. };
+            let relay_url = DotUrl {
+                sovereign: Some(rcount as u32),
+                ..dot_url.clone()
+            };
+
+            for (chain, chain_deets) in chains.iter().enumerate() {
+                let url = chain_name_to_url(&chain_deets.1);
+                let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+                    .append_pair("rpc", &url)
+                    .finish();
+                
+                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                commands
+                    .spawn_bundle(PbrBundle {
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+                        material: materials.add(
+                            StandardMaterial {
+                                base_color: Color::rgba(0., 0., 0., 0.4),
+                                alpha_mode: AlphaMode::Blend,
+                                perceptual_roughness: 0.08,
+                                ..default()
+                            }, //    Color::rgb(0.5, 0.5, 0.5).into()
+                        ),
+                        transform: Transform::from_translation(Vec3::new(
+                            (10000. / 2.) - 5.,
+                            0.,
+                            ((RELAY_CHAIN_CHASM_WIDTH - 5.)
+                                + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
+                                * rfip,
+                        )),
+                        ..Default::default()
+                    })
+                    .insert(Details {
+                        doturl: DotUrl {
+                            para_id,
+                            block_number: None, 
+                            ..relay_url.clone()
+                        },
+                        flattern: chain_deets.1.clone(),
+                        url: format!("https://polkadot.js.org/apps/?{}", &encoded),
+                        ..default()
+                    }).insert(Name::new("Blockchain")).insert_bundle(PickableBundle::default());
+            }
+        }
+
+        for (relay_id, relay) in relays.into_iter().enumerate() {
+            let relay_url = DotUrl {
+                sovereign: Some(relay_id as u32),
+                ..dot_url.clone()
+            };
+            let mut relay2: Vec<_> = vec![];
+            let mut send_map: HashMap<
+                NonZeroU32,
+                crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
+            > = Default::default();
+            for (arc, chain_name) in relay {
+                let url = chain_name_to_url(&chain_name);
+                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                let (tx, rc) = unbounded();
+                relay2.push((arc, chain_name, para_id, rc));
+                if let Some(para_id) = para_id {
+                    send_map.insert(para_id, tx);
+                }
+            }
+
+            let relay = relay2;
+            let mut send_map = Some(send_map); // take by only one.
+
+            for (arc, chain_name, para_id, rc) in relay {
+                let lock_clone = arc.clone();
+                let url = chain_name_to_url(&chain_name);
+                println!("url attaching to {}", url);
+
+                // let chain_name_clone = chain_name.clone();
+                let url_clone = url.clone();
+                let maybe_sender = if para_id.is_none() {
+                    send_map.take()
+                } else {
+                    None
+                };
+
+                // events are requested with blocks if not live.
+                if as_of.is_none() {
+                    let relay_url_clone = relay_url.clone();
+                    std::thread::spawn(move || {
+                        // let mut reconnects = 0;
+
+                        // while reconnects < 20 {
+                        println!("Connecting to {}", &url);
+                        let res = async_std::task::block_on(datasource::watch_events(
+                            lock_clone.clone(),
+                            &url,
+                            as_of,
+                            DotUrl {
+                                para_id,
+                                ..relay_url_clone
+                            },
+                            // /aybe_sender
+                        ));
+                        // if res.is_ok() { break; }
+                        // println!("Problem with {} events (retrys left {})", &url, reconnects);
+                        // std::thread::sleep(std::time::Duration::from_secs(20));
+                        // reconnects += 1;
+                        // }
+                        println!("giving up on {} for live events", url);
+                    });
+                }
+
+                // let chain_name = chain_name_clone;
+                let lock_clone = arc.clone();
+                let relay_url_clone = relay_url.clone();
+                std::thread::spawn(move || {
+                    // let mut reconnects = 0;
+
+                    // while reconnects < 20 {
+                    println!("Connecting to {}", &url_clone);
+                    let res = async_std::task::block_on(datasource::watch_blocks(
+                        lock_clone.clone(),
+                        url_clone.clone(),
+                        as_of,
+                        DotUrl {
+                            para_id,
+                            ..relay_url_clone
+                        },
+                        rc,
+                        maybe_sender,
+                    ));
+                    // if res.is_ok() { break; }
+                    // println!(
+                    //     "Problem with {} blocks (retries left {})",
+                    //     &url_clone, reconnects
+                    // );
+                    // std::thread::sleep(std::time::Duration::from_secs(20));
+                    // reconnects += 1;
+                    // }
+                    println!("giving up on {} blocks", url_clone);
+                });
+            }
+        }
+    }
 }
 
 // use bevy_hanabi::AccelModifier;
@@ -304,11 +417,11 @@ enum BuildDirection {
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
     let res = match entity {
-        DataEntity::Event(DataEvent { raw, .. }) => {
-            format!("{:#?}", raw)
+        DataEntity::Event(DataEvent { details, .. }) => {
+            format!("{:#?}", details)
         }
         DataEntity::Extrinsic {
-            id: _,
+            // id: _,
             args,
             contains,
             details,
@@ -337,7 +450,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 pub enum DataEntity {
     Event(DataEvent),
     Extrinsic {
-        id: (u32, u32),
+        // id: (u32, u32),
         // pallet: String,
         // variant: String,
         args: Vec<String>,
@@ -346,16 +459,19 @@ pub enum DataEntity {
         /// psudo-unique id to link to some other node(s).
         /// There can be multiple destinations per block! (TODO: need better resolution)
         /// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
-        link: Vec<String>,
+        start_link: Vec<String>,
+        /// list of links that we have finished
+        end_link: Vec<String>,
         details: Details,
     },
 }
 
 #[derive(Clone)]
 pub struct DataEvent {
-    raw: RawEventDetails,
+    // raw: RawEventDetails,
     details: Details,
-    link: Vec<String>,
+    start_link: Vec<String>,
+    end_link: Vec<String>,
 }
 
 /// A tag to identify an entity as being the source of a message.
@@ -377,13 +493,19 @@ impl DataEntity {
     }
     pub fn pallet(&self) -> &str {
         match self {
-            Self::Event(DataEvent { raw, .. }) => raw.pallet.as_ref(),
+            Self::Event(DataEvent { details, .. }) => details.pallet.as_ref(),
             Self::Extrinsic { details, .. } => &details.pallet,
+        }
+    }
+    pub fn dot(&self) -> &DotUrl {
+        match self {
+            Self::Event(DataEvent { details, .. }) => &details.doturl,
+            Self::Extrinsic { details, .. } => &details.doturl,
         }
     }
     pub fn variant(&self) -> &str {
         match self {
-            Self::Event(DataEvent { raw, .. }) => raw.variant.as_ref(),
+            Self::Event(DataEvent { details, .. }) => details.variant.as_ref(),
             Self::Extrinsic { details, .. } => &details.variant,
         }
     }
@@ -402,9 +524,15 @@ impl DataEntity {
         }
     }
 
-    pub fn link(&self) -> &Vec<String> {
+    pub fn start_link(&self) -> &Vec<String> {
         match self {
-            Self::Extrinsic { link, .. } => &link,
+            Self::Extrinsic { start_link, .. } => &start_link,
+            Self::Event(DataEvent { .. }) => &EMPTY_VEC,
+        }
+    }
+    pub fn end_link(&self) -> &Vec<String> {
+        match self {
+            Self::Extrinsic { end_link, .. } => &end_link,
             Self::Event(DataEvent { .. }) => &EMPTY_VEC,
         }
     }
@@ -414,21 +542,26 @@ static EMPTY_VEC: Vec<String> = vec![];
 
 const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
+const RELAY_CHAIN_CHASM_WIDTH: f32 = 25.;
 
-fn render_new_events(
+struct Sovereigns {
+    pub relays: Vec<Vec<(ABlocks, String)>>,
+}
+
+fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     // asset_server: Res<AssetServer>,
-    relays: Vec<Vec<(ABlocks, String)>>,
+    relays: Res<Sovereigns>,
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
-    is_self_sovereign: bool,
     links: Query<(Entity, &MessageSource, &GlobalTransform)>,
     mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
     mut polylines: ResMut<Assets<Polyline>>,
 ) {
-    for (rcount, relay) in relays.iter().enumerate() {
+    let is_self_sovereign = false; //TODO!
+    for (rcount, relay) in relays.relays.iter().enumerate() {
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
@@ -457,10 +590,13 @@ fn render_new_events(
                     };
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
-
+                    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+                        .append_pair("rpc", &block_events.2.chain_ws)
+                        .finish();
+                        
                     // Add the new block as a large rectangle on the ground:
                     commands.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
                         material: materials.add(StandardMaterial {
                             base_color: Color::rgba(0., 0., 0., 0.7),
                             alpha_mode: AlphaMode::Blend,
@@ -470,10 +606,19 @@ fn render_new_events(
                         transform: Transform::from_translation(Vec3::new(
                             0. + (BLOCK_AND_SPACER * block_num as f32),
                             0.,
-                            (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                            (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                         )),
                         ..Default::default()
-                    });
+                    }).insert(Details {
+                        doturl: DotUrl {
+                            extrinsic: None,
+                            event: None,
+                            ..block.events.first().unwrap().details.doturl.clone()
+                        },
+                      
+                        url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/0x{}", &encoded, hex::encode(block.blockhash)),
+                        ..default()
+                    }).insert(Name::new("Block")).insert_bundle(PickableBundle::default());
 
                     // if !block_events.2.inserted_pic
                     {
@@ -496,7 +641,7 @@ fn render_new_events(
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
                             alpha_mode: AlphaMode::Blend,
-                            unlit: !block_events.2.inserted_pic,
+                            unlit: true, // !block_events.2.inserted_pic,
                             ..default()
                         });
 
@@ -508,7 +653,7 @@ fn render_new_events(
                             translation: Vec3::new(
                                 -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
-                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
                             rotation: rot,
                             ..default()
@@ -534,7 +679,7 @@ fn render_new_events(
                         let material_handle = materials.add(StandardMaterial {
                             base_color_texture: Some(texture_handle.clone()),
                             alpha_mode: AlphaMode::Blend,
-                            unlit: !block_events.2.inserted_pic,
+                            unlit: true, // !block_events.2.inserted_pic,
                             ..default()
                         });
 
@@ -545,7 +690,7 @@ fn render_new_events(
                             translation: Vec3::new(
                                 -7. + (BLOCK_AND_SPACER * block_num as f32),
                                 0.1, //1.5
-                                (5.5 + BLOCK_AND_SPACER * chain as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             ),
                             rotation: rot,
                             ..default()
@@ -591,7 +736,7 @@ fn render_new_events(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,
+                        &mut polylines,&encoded
                     );
 
                     add_blocks(
@@ -607,7 +752,7 @@ fn render_new_events(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,
+                        &mut polylines,&encoded
                     );
                 }
             }
@@ -640,6 +785,7 @@ fn add_blocks<'a>(
     links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
     polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
     polylines: &mut ResMut<Assets<Polyline>>,
+    encoded: &str
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -664,7 +810,7 @@ fn add_blocks<'a>(
     let (base_x, base_y, base_z) = (
         0. + (BLOCK_AND_SPACER * block_num as f32) - 4.,
         0.5,
-        5.5 + BLOCK_AND_SPACER * chain as f32 - 4.,
+        RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
 
     const DOT_HEIGHT: f32 = 1.;
@@ -672,9 +818,7 @@ fn add_blocks<'a>(
     let mut rain_height: [f32; 81] = [HIGH; 81];
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
 
-    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-        .append_pair("rpc", &chain_info.chain_ws)
-        .finish();
+
 
     let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
@@ -714,7 +858,7 @@ fn add_blocks<'a>(
                 let mut found = false;
 
                 let mut create_source = vec![];
-                for link in block.link() {
+                for link in block.end_link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {
@@ -758,12 +902,12 @@ fn add_blocks<'a>(
                             commands.entity(entity).remove::<MessageSource>();
                         }
                     }
-                    if !found {
-                        println!("inserting source of rainbow!");
-                        create_source.push(MessageSource {
-                            id: link.to_string(),
-                        });
-                    }
+                }
+                for link in block.start_link() {
+                    println!("inserting source of rainbow!");
+                    create_source.push(MessageSource {
+                        id: link.to_string(),
+                    });
                 }
 
                 let mut bun = commands.spawn_bundle(PbrBundle {
@@ -778,11 +922,14 @@ fn add_blocks<'a>(
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+                        doturl: block.dot().clone(),
                         flattern: block.details().flattern.clone(),
                         url: format!(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
                             &encoded, &call_data
                         ),
+                        parent: None,
+                        success: ui::details::Success::Happy,
                         pallet: block.pallet().to_string(),
                         variant: block.variant().to_string(),
                     })
@@ -802,7 +949,7 @@ fn add_blocks<'a>(
 
         for event in events {
             let details = Details {
-                hover: format!("{:#?}", event.raw),
+                // hover: format!("{:#?}", event.raw),
                 // flattern: String::new(),
                 url: format!(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
@@ -837,19 +984,26 @@ fn add_blocks<'a>(
             ));
 
             // t.translation.y += ;
-            commands
-                .spawn_bundle(PbrBundle {
-                    mesh,
-                    material: material.clone(),
-                    transform: t,
-                    ..Default::default()
-                })
+            let mut x = commands.spawn_bundle(PbrBundle {
+                mesh,
+                material: material.clone(),
+                transform: t,
+                ..Default::default()
+            });
+            let event_bun = x
                 .insert_bundle(PickableBundle::default())
                 .insert(entity.details.clone())
                 .insert(Rainable {
                     dest: target_y * build_direction,
                 })
                 .insert(Name::new("BlockEvent"));
+
+            for link in &event.start_link {
+                println!("inserting source of rainbow (an event)!");
+                event_bun.insert(MessageSource {
+                    id: link.to_string(),
+                });
+            }
         }
     }
 }
@@ -860,11 +1014,15 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
     let start = vertices[0];
     let end = vertices[1];
     let diff = end - start;
+    println!("start {:#?}", start);
+    println!("end {:#?}", end);
+    println!("diff {:#?}", diff);
     // x, z are linear interpolations, it is only y that goes up!
 
     let center = (start + end) / 2.;
-
+    println!("center {:#?}", center);
     let r = end - center;
+    println!("r {:#?}", r);
     let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be aproximate
                                                              // println!("vertst {},{},{}", start.x, start.y, start.z);
                                                              // println!("verten {},{},{}", end.x, end.y, end.z);
@@ -986,8 +1144,16 @@ pub fn print_events(
     mut events: EventReader<PickingEvent>,
     mut query2: Query<(Entity, &Details)>,
     mut inspector: ResMut<Inspector>,
+    mut custom: EventWriter<DataSourceChangedEvent>,
     //  mut inspector_windows: Res<InspectorWindows>,
 ) {
+    if inspector.start_location.changed {
+        inspector.start_location.changed = false;
+
+        custom.send(DataSourceChangedEvent {
+            source: inspector.start_location.location.clone(),
+        });
+    }
     for event in events.iter() {
         match event {
             PickingEvent::Selection(selection) => {
@@ -1002,13 +1168,13 @@ pub fn print_events(
                     //     commands.entity(entity).despawn();
                     // });
 
-                    let (entity, details) = query2.get_mut(*entity).unwrap();
+                    let (_entity, details) = query2.get_mut(*entity).unwrap();
 
                     // if inspector.active == Some(details) {
                     //     print!("deselected current selection");
                     //     inspector.active = None;
                     // } else {
-                        inspector.active = Some(details.clone());
+                    inspector.selected = Some(details.clone());
                     // }
 
                     // info!("{}", details.hover.as_str());
@@ -1058,7 +1224,6 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    relays: Vec<Vec<(ABlocks, String)>>,
     // asset_server: Res<AssetServer>,
 ) {
     // add entities to the world
@@ -1076,30 +1241,6 @@ fn setup(
         ),
         ..Default::default()
     });
-
-    for (rcount, chains) in relays.iter().enumerate() {
-        let rfip = if rcount == 1 { -1. } else { 1. };
-
-        for (chain, _chain) in chains.iter().enumerate() {
-            commands.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                material: materials.add(
-                    StandardMaterial {
-                        base_color: Color::rgba(0., 0., 0., 0.4),
-                        alpha_mode: AlphaMode::Blend,
-                        perceptual_roughness: 0.08,
-                        ..default()
-                    }, //    Color::rgb(0.5, 0.5, 0.5).into()
-                ),
-                transform: Transform::from_translation(Vec3::new(
-                    (10000. / 2.) - 5.,
-                    0.,
-                    (0.5 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32)) * rfip,
-                )),
-                ..Default::default()
-            });
-        }
-    }
 
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
@@ -1122,8 +1263,7 @@ fn setup(
         ..default()
     });
     #[cfg(feature = "normalmouse")]
-    entity_comands
-        .insert(FlyCam);
+    entity_comands.insert(FlyCam);
     entity_comands
         .insert(Viewport)
         .insert_bundle(PickingCameraBundle { ..default() });
@@ -1140,7 +1280,7 @@ fn setup(
 
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.7,
+        brightness: 0.9,
     });
 
     // commands.spawn_bundle(PointLightBundle {
@@ -1155,8 +1295,97 @@ fn setup(
 
 #[derive(Inspectable, Default)]
 pub struct Inspector {
+    // #[inspectable(deletable = false)]
+    start_location: UrlBar,
     #[inspectable(deletable = false)]
-    active: Option<Details>,
+    selected: Option<Details>,
+}
+
+impl Default for UrlBar {
+    fn default() -> Self {
+        Self {
+            location: "dotsama:/1//10000000".to_string(),
+            changed: false,
+        }
+    }
+}
+
+struct UrlBar {
+    changed: bool,
+    location: String,
+}
+use bevy_inspector_egui::options::StringAttributes;
+use bevy_inspector_egui::Context;
+use egui::Grid;
+impl Inspectable for UrlBar {
+    type Attributes = ();
+
+    fn ui(
+        &mut self,
+        ui: &mut bevy_egui::egui::Ui,
+        _options: Self::Attributes,
+        context: &mut Context,
+    ) -> bool {
+        let mut changed = false;
+        ui.vertical_centered(|ui| {
+            Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
+                // ui.label("Pallet");
+                changed |= self
+                    .location
+                    .ui(ui, StringAttributes { multiline: false }, context);
+
+                ui.end_row();
+
+                if ui.button("Time travel").clicked() {
+                    self.changed = true;
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Live").clicked() {
+                    self.changed = true;
+                    self.location = "///".into();
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Clear").clicked() {
+                    self.changed = true;
+                    self.location = "".into();
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                // ui.label("Method");
+                // changed |= self
+                //     .variant
+                //     .ui(ui, StringAttributes { multiline: false }, context);
+                // ui.end_row();
+                // changed |= self
+                //     .parent.unwrap_or_default()
+                //     .ui(ui, NumberAttributes::default(), context);
+                // ui.end_row();
+                // changed |= self
+                //     .hover
+                //     .ui(ui, StringAttributes { multiline: true }, context);
+                // ui.end_row();
+                // changed |= self
+                //     .flattern
+                //     .ui(ui, StringAttributes { multiline: true }, context);
+                // ui.end_row();
+                // ui.label("Rotation");
+                // changed |= self.rotation.ui(ui, Default::default(), context);
+                // self.rotation = self.rotation.normalize();
+                // ui.end_row();
+
+                // ui.label("Scale");
+                // let scale_attributes = NumberAttributes {
+                //     min: Some(Vec3::splat(0.0)),
+                //     ..Default::default()
+                // };
+                // changed |= self.scale.ui(ui, scale_attributes, context);
+                // ui.end_row();
+            });
+        });
+        changed
+    }
 }
 
 #[derive(Component)]

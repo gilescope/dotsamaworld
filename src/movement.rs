@@ -2,19 +2,18 @@ use bevy::core::Time;
 use bevy::ecs::system::Query;
 use bevy::ecs::system::Res;
 use bevy::input::keyboard::KeyCode;
-use bevy::input::mouse::MouseWheel;
+// use bevy::input::mouse::MouseWheel;
 use bevy::input::Input;
 use bevy::prelude::*;
-use bevy::render::camera::CameraProjection;
+// use bevy::render::camera::CameraProjection;
+use crate::Viewport;
 use bevy::transform::components::Transform;
 use bevy::window::Windows;
-use crate::Viewport;
 
-#[cfg(feature = "normalmouse")]
-use bevy_flycam::{FlyCam,MovementSettings};
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
-
+#[cfg(feature = "normalmouse")]
+use bevy_flycam::{FlyCam, MovementSettings};
 
 pub struct MouseCapture(pub bool);
 

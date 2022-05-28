@@ -1,16 +1,29 @@
 //! This mod contains all the egui code for 2d that powers the details screen.
+use super::DotUrl;
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiSettings;
+use bevy_inspector_egui::options::NumberAttributes;
 use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
 use bevy_inspector_egui::Inspectable;
 
-#[derive(Component, Default, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub enum Success {
+    #[default]
+    Happy,
+    Worried,
+    Sad,
+}
+
+#[derive(Component, Default, Clone, Debug)]
 pub struct Details {
     pub pallet: String,
+    pub doturl: DotUrl,
+    pub parent: Option<u32>,
     pub variant: String,
+    pub success: Success,
     pub hover: String,
     pub flattern: String,
     // #[inspectable(label = "Url:")]
@@ -30,6 +43,11 @@ impl Inspectable for Details {
         ui.vertical_centered(|ui| {
             Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
                 // ui.label("Pallet");
+                changed |=
+                    self.doturl
+                        .to_string()
+                        .ui(ui, StringAttributes { multiline: false }, context);
+                ui.end_row();
                 changed |= self
                     .pallet
                     .ui(ui, StringAttributes { multiline: false }, context);
@@ -39,7 +57,11 @@ impl Inspectable for Details {
                     .variant
                     .ui(ui, StringAttributes { multiline: false }, context);
                 ui.end_row();
-
+                changed |=
+                    self.parent
+                        .unwrap_or_default()
+                        .ui(ui, NumberAttributes::default(), context);
+                ui.end_row();
                 changed |= self
                     .hover
                     .ui(ui, StringAttributes { multiline: true }, context);

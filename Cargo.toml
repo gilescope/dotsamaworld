@@ -20,6 +20,10 @@ async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
 tracing-wasm = "*"
 wasm-bindgen = "*"
 futures = "0.3.13"
+jsonrpsee-types = "*"
+
+crossbeam-channel = "*"
+
 #wasm-bindgen-rayon = "1.0"
 #[target.'cfg(target_os = "linux")'.dependencies]
 
@@ -45,6 +49,7 @@ bevy_egui = "*"
 egui = "*"
 open = "1"
 url = "*"
+color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
 lazy_static = "*"
 # bevy_hanabi = "0.2"
@@ -104,3 +109,7 @@ opt-level = 1
 
 # lto = true
 # opt-level = 's'
+
+
+[profile.dev.package.backtrace]
+opt-level = 3
