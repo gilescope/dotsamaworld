@@ -135,28 +135,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
             dynamic: true, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
-        .add_system(
-            render_new_events, // move |commands: Commands,
-                               //       meshes: ResMut<Assets<Mesh>>,
-                               //       materials: ResMut<Assets<StandardMaterial>>,
-                               //       asset_server: Res<AssetServer>,
-                               //       links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-                               //       polyline_materials: ResMut<Assets<PolylineMaterial>>,
-                               //       polylines: ResMut<Assets<Polyline>>| {
-                               //     // let clone_chains = clone_chains.clone();
-                               //     render_new_events(
-                               //         commands,
-                               //         meshes,
-                               //         materials,
-                               //         clone_chains,
-                               //         asset_server,
-                               //         is_self_sovereign,
-                               //         links,
-                               //         polyline_materials,
-                               //         polylines,
-                               //     )
-                               // },
-        )
+        .add_system(render_block)
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
     app.run();
@@ -569,7 +548,7 @@ struct Sovereigns {
     pub relays: Vec<Vec<(ABlocks, String)>>,
 }
 
-fn render_new_events(
+fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -611,10 +590,13 @@ fn render_new_events(
                     };
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
-
+                    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+                        .append_pair("rpc", &block_events.2.chain_ws)
+                        .finish();
+                        
                     // Add the new block as a large rectangle on the ground:
                     commands.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.1, 10.))),
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
                         material: materials.add(StandardMaterial {
                             base_color: Color::rgba(0., 0., 0., 0.7),
                             alpha_mode: AlphaMode::Blend,
@@ -627,7 +609,16 @@ fn render_new_events(
                             (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                         )),
                         ..Default::default()
-                    });
+                    }).insert(Details {
+                        doturl: DotUrl {
+                            extrinsic: None,
+                            event: None,
+                            ..block.events.first().unwrap().details.doturl.clone()
+                        },
+                      
+                        url: format!("https://polkadot.js.org/apps/?{}#/explorer/query/0x{}", &encoded, hex::encode(block.blockhash)),
+                        ..default()
+                    }).insert(Name::new("Block")).insert_bundle(PickableBundle::default());
 
                     // if !block_events.2.inserted_pic
                     {
@@ -745,7 +736,7 @@ fn render_new_events(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,
+                        &mut polylines,&encoded
                     );
 
                     add_blocks(
@@ -761,7 +752,7 @@ fn render_new_events(
                         &block.blockhash,
                         &links,
                         &mut polyline_materials,
-                        &mut polylines,
+                        &mut polylines,&encoded
                     );
                 }
             }
@@ -794,6 +785,7 @@ fn add_blocks<'a>(
     links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
     polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
     polylines: &mut ResMut<Assets<Polyline>>,
+    encoded: &str
 ) {
     let build_direction = if let BuildDirection::Up = build_direction {
         1.0
@@ -826,9 +818,7 @@ fn add_blocks<'a>(
     let mut rain_height: [f32; 81] = [HIGH; 81];
     let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
 
-    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-        .append_pair("rpc", &chain_info.chain_ws)
-        .finish();
+
 
     let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
