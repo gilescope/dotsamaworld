@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub enum Env {
     Local,
     Test,
@@ -64,6 +64,9 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
         Env::Prod => {
             vec![
                 vec![
+                    // TODO: how can we dynamically discover
+                    // nodes we can hit? - can we track back to the
+                    // collator ip?
                     "rpc.polkadot.io",
                     "statemint-rpc.polkadot.io",
                     "acala.polkawallet.io",

@@ -134,7 +134,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_startup_system(details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
-            dynamic: false, // Set to false since we aren't changing the sky's appearance
+            dynamic: true, // Set to false since we aren't changing the sky's appearance
             sky_radius: 10.0,
         })
         .add_system(
@@ -188,17 +188,30 @@ fn source_data(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut sovereigns: ResMut<Sovereigns>,
+    mut details: Query<Entity, With<Details>>,
 ) {
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
 
-     
+        //if event.source == "" 
+        {
+            // Clear
 
+            // 1. Stop existing event threads!
+            // 2. remove all entities.
+            for detail in details.iter() {
+                commands.entity(detail).despawn();
+                // detail.despawn();
+            }
+
+
+        }
+     
         let dot_url= DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
         let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod}; 
         println!("dot url {:?}", &dot_url);
-        let mut as_of = dot_url.block_number;
+        let as_of = dot_url.block_number;
         println!("Block number selected for relay chains: {:?}", as_of);
         // let mut as_of = Some("10000000");
 
@@ -314,7 +327,7 @@ fn source_data(
                         url_clone.clone(),
                         relay_id.to_string(),
                         as_of,
-                        para_id,
+                        DotUrl{ para_id, ..dot_url.clone() },
                         rc,
                         maybe_sender,
                     ));
@@ -427,7 +440,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 pub enum DataEntity {
     Event(DataEvent),
     Extrinsic {
-        id: (u32, u32),
+        // id: (u32, u32),
         // pallet: String,
         // variant: String,
         args: Vec<String>,
@@ -472,6 +485,12 @@ impl DataEntity {
         match self {
             Self::Event(DataEvent { details, .. }) => details.pallet.as_ref(),
             Self::Extrinsic { details, .. } => &details.pallet,
+        }
+    }
+    pub fn dot(&self) -> &DotUrl {
+        match self {
+            Self::Event(DataEvent { details, .. }) => &details.dot,
+            Self::Extrinsic { details, .. } => &details.dot,
         }
     }
     pub fn variant(&self) -> &str {
@@ -882,6 +901,7 @@ fn add_blocks<'a>(
                     .insert(Details {
                         hover: format_entity(&chain_info.chain_name, block),
                         // data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+                        dot: block.dot().clone(),
                         flattern: block.details().flattern.clone(),
                         url: format!(
                             "https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
@@ -1269,11 +1289,11 @@ impl Default for UrlBar {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 struct DotUrl {
     env: Env, 
     sovereign: Option<u32>,
-    para_id: Option<u32>,
+    para_id: Option<NonZeroU32>,
     block_number: Option<u32>,
     extrinsic: Option<u32>,
     event: Option<u32>,
@@ -1348,6 +1368,12 @@ impl Inspectable for UrlBar {
                 if ui.button("Live").clicked() {
                     self.changed = true;
                     self.location = "///".into();
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Clear").clicked() {
+                    self.changed = true;
+                    self.location = "".into();
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();

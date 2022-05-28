@@ -23,6 +23,7 @@ use subxt::rpc::ClientT;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
+use crate::DotUrl;
 // use subxt::EventDetails;
 // use subxt::RawEventDetails;
 
@@ -531,7 +532,7 @@ pub async fn watch_blocks(
     url: String,
     relay_id: String,
     as_of: Option<u32>,
-    para_id: Option<NonZeroU32>,
+    parachain_doturl: DotUrl,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -541,7 +542,7 @@ pub async fn watch_blocks(
     // let mut hasher = DefaultHasher::default();
     // url.hash(&mut hasher);
     // let metad = get_desub_metadata(&url, None).await;
-
+    let para_id = parachain_doturl.para_id.clone();
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
     let mut api =
@@ -562,7 +563,7 @@ pub async fn watch_blocks(
             .insert((relay_id.clone(), para_id), parachain_name.clone());
     }
     //     ""), None).await?;
-
+    // let parachain_doturl = DotUrl{ block_number: Some(block_number), ..parachain_doturl.clone() };
     // Fetch the metadata
     // let bytes: subxt::Bytes = self
     //     .client
@@ -595,7 +596,7 @@ pub async fn watch_blocks(
             while let Ok((block_number, block_hash)) = recieve_channel.recv() {
                 println!("block hash recieved from relay chain num {}", block_number);
                 // let as_of: u32 = as_of.parse().unwrap();
-
+                let block_doturl = DotUrl {block_number: Some(block_number), ..parachain_doturl };
                 // let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
 
                 let extrinsics = get_extrinsics(block_number, &url, &api, block_hash).await;
@@ -631,12 +632,13 @@ pub async fn watch_blocks(
                             let entity = process_extrisic(
                                 &relay_id,
                                 // &metad,
-                                para_id,
-                                block_number,
+                                // para_id,
+                                // block_number,
                                 // block_hash,
                                 (ex_slice).clone(),
                                 &extrinsic,
-                                i as u32,
+                                // i as u32,
+                                DotUrl {extrinsic: Some(i as u32), ..block_doturl }
                             )
                             .await;
                             if let Some(entity) = entity {
@@ -685,6 +687,7 @@ pub async fn watch_blocks(
 
             //let as_of: u32 = as_of.parse().unwrap();
             for block_number in as_of.. {
+                let block_url = DotUrl{block_number:Some(block_number), ..parachain_doturl};
                 let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number)
                     .await
                     .expect(&format!(
@@ -728,12 +731,12 @@ pub async fn watch_blocks(
                             let entity = process_extrisic(
                                 &relay_id,
                                 // &metad,
-                                para_id,
-                                block_number,
+                                // para_id,
+                                // block_number,
                                 // block_hash,
                                 (ex_slice).clone(),
                                 &extrinsic,
-                                i as u32,
+                                DotUrl{extrinsic:Some(i as u32), .. block_url}, 
                             )
                             .await;
                             if let Some(entity) = entity {
@@ -790,6 +793,7 @@ pub async fn watch_blocks(
                     let block_number = block_header.number;
                     let block_hash = block_header.hash();
 
+                    let block_doturl = DotUrl{ block_number: Some(block_number), ..parachain_doturl.clone() };
 
                     let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
                     let metad =
@@ -806,7 +810,7 @@ pub async fn watch_blocks(
                             {
                                 let entity = process_extrisic(&relay_id, //&metad,
                                      para_id, block_number, //block_hash,
-                                      ex_slice,&extrinsic, i as u32).await;
+                                      ex_slice,&extrinsic, i as u32, &block_doturl).await;
                                 if let Some(entity) = entity { exts.push(entity); }
                             } else {
                                 println!("here be dragoons. can's do extrinsic in {}", &block_hash);
@@ -894,13 +898,15 @@ async fn get_extrinsics(
 async fn process_extrisic<'a>(
     relay_id: &str,
     // metad: &Metadata,
-    para_id: Option<NonZeroU32>,
-    block_number: u32,
+    // para_id: Option<NonZeroU32>,
+    // block_number: u32,
     // block_hash: H256,
     ex_slice: Vec<u8>,
     ext: &desub_current::decoder::Extrinsic<'a>,
-    extrinsic_index: u32,
+    extrinsic_url: DotUrl
 ) -> Option<DataEntity> {
+    let block_number = extrinsic_url.block_number.unwrap();
+    let para_id = extrinsic_url.para_id.clone();
     // let s : String = ext_bytes;
     // ext_bytes.using_encoded(|ref slice| {
     //     assert_eq!(slice, &b"\x0f");
@@ -1059,7 +1065,7 @@ async fn process_extrisic<'a>(
                                                         let instruction = format!("{:?}", &msg);
                                                         println!("instruction {:?}", &instruction);
                                                         children.push(DataEntity::Extrinsic {
-                                                            id: (block_number, extrinsic_index),
+                                                            // id: (block_number, extrinsic_urlbextrinsic_index),
                                                             args: vec![instruction.clone()],
                                                             contains: vec![],
                                                             raw: vec![], //TODO: should be simples
@@ -1072,6 +1078,7 @@ async fn process_extrisic<'a>(
                                                                     .unwrap()
                                                                     .0
                                                                     .to_string(),
+                                                                    doturl: extrinsic_url,
                                                                 ..Details::default()
                                                             },
                                                         });
@@ -1115,7 +1122,7 @@ async fn process_extrisic<'a>(
                                                         let instruction = format!("{:?}", &msg);
                                                         println!("instruction {:?}", &instruction);
                                                         children.push(DataEntity::Extrinsic {
-                                                            id: (block_number, extrinsic_index),
+                                                            // id: (block_number, extrinsic_index),
                                                             args: vec![instruction.clone()],
                                                             contains: vec![],
                                                             raw: vec![], //TODO: should be simples
@@ -1128,6 +1135,7 @@ async fn process_extrisic<'a>(
                                                                     .unwrap()
                                                                     .0
                                                                     .to_string(),
+                                                                doturl: extrinsic_url,
                                                                 ..Details::default()
                                                             },
                                                         });
@@ -1178,7 +1186,7 @@ async fn process_extrisic<'a>(
                                                                 &instruction
                                                             );
                                                             children.push(DataEntity::Extrinsic {
-                                                                id: (block_number, extrinsic_index),
+                                                              
                                                                 args: vec![instruction.clone()],
                                                                 contains: vec![],
                                                                 raw: vec![], //TODO: should be simples
@@ -1195,6 +1203,7 @@ async fn process_extrisic<'a>(
                                                                         ))
                                                                         .0
                                                                         .to_string(),
+                                                                    doturl: extrinsic_url,
                                                                     ..Details::default()
                                                                 },
                                                             });
@@ -1455,7 +1464,7 @@ async fn process_extrisic<'a>(
                                         ValueDef::Variant(Variant { name, values }) => {
                                             // println!("{pallet} {variant} has inside a {inner_pallet} {name}");
                                             children.push(DataEntity::Extrinsic {
-                                                id: (block_number, extrinsic_index),
+                                                // id: (block_number, extrinsic_index),
                                                 args: vec![format!("{:?}", values)],
                                                 contains: vec![],
                                                 raw: vec![], //TODO: should be simples
@@ -1464,6 +1473,7 @@ async fn process_extrisic<'a>(
                                                 details: Details {
                                                     pallet: inner_pallet.to_string(),
                                                     variant: name.clone(),
+                                                    doturl: extrinsic_url.clone(),
                                                     ..Details::default()
                                                 },
                                             });
@@ -1497,7 +1507,7 @@ async fn process_extrisic<'a>(
     // args.insert(0, format!("{results:#?}"));
 
     Some(DataEntity::Extrinsic {
-        id: (block_number, extrinsic_index),
+        id: (block_number, extrinsic_url.extrinsic.unwrap()),
         args,
         contains: children,
         raw: ex_slice,
@@ -1505,6 +1515,7 @@ async fn process_extrisic<'a>(
         end_link,
         details: Details {
             hover: "".to_string(),
+            dot: extrinsic_url,
             flattern: format!("{results:#?}"),
             url: "".to_string(),
             parent: None,

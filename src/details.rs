@@ -7,6 +7,7 @@ use bevy_inspector_egui::options::NumberAttributes;
 use bevy_inspector_egui::options::StringAttributes;
 use bevy_inspector_egui::Context;
 use bevy_inspector_egui::Inspectable;
+use super::DotUrl;
 
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum Success {
@@ -19,6 +20,7 @@ pub enum Success {
 #[derive(Component, Default, Clone, Debug)]
 pub struct Details {
     pub pallet: String,
+    pub doturl: DotUrl,
     pub parent: Option<u32>,
     pub variant: String,
     pub success: Success,
