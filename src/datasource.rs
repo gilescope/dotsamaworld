@@ -1653,7 +1653,7 @@ async fn get_events_for_block(
                                                     val.value
                                                 {
                                                     details.parent = Some(v);
-                                                    let mut count =
+                                                    let count =
                                                         ext_count_map.entry(v).or_insert(0);
                                                     *count += 1;
                                                     details.doturl.extrinsic = Some(v);
@@ -1663,7 +1663,7 @@ async fn get_events_for_block(
                                         }
                                         if details.parent.is_none() {
                                             // system event. increment the system event count:
-                                            let mut count =
+                                            let count =
                                                 ext_count_map.entry(u32::MAX).or_insert(0);
                                             *count += 1;
                                             details.doturl.extrinsic = None;

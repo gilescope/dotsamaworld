@@ -12,7 +12,6 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
-use color_eyre::owo_colors::OwoColorize;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -234,27 +233,49 @@ fn source_data(
 
         for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
             let rfip = if rcount == 1 { -1. } else { 1. };
+            let relay_url = DotUrl {
+                sovereign: Some(rcount as u32),
+                ..dot_url.clone()
+            };
 
-            for (chain, _chain) in chains.iter().enumerate() {
-                commands.spawn_bundle(PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                    material: materials.add(
-                        StandardMaterial {
-                            base_color: Color::rgba(0., 0., 0., 0.4),
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: 0.08,
-                            ..default()
-                        }, //    Color::rgb(0.5, 0.5, 0.5).into()
-                    ),
-                    transform: Transform::from_translation(Vec3::new(
-                        (10000. / 2.) - 5.,
-                        0.,
-                        ((RELAY_CHAIN_CHASM_WIDTH - 5.)
-                            + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
-                            * rfip,
-                    )),
-                    ..Default::default()
-                });
+            for (chain, chain_deets) in chains.iter().enumerate() {
+                let url = chain_name_to_url(&chain_deets.1);
+                let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+                    .append_pair("rpc", &url)
+                    .finish();
+                
+                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                commands
+                    .spawn_bundle(PbrBundle {
+                        mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+                        material: materials.add(
+                            StandardMaterial {
+                                base_color: Color::rgba(0., 0., 0., 0.4),
+                                alpha_mode: AlphaMode::Blend,
+                                perceptual_roughness: 0.08,
+                                ..default()
+                            }, //    Color::rgb(0.5, 0.5, 0.5).into()
+                        ),
+                        transform: Transform::from_translation(Vec3::new(
+                            (10000. / 2.) - 5.,
+                            0.,
+                            ((RELAY_CHAIN_CHASM_WIDTH - 5.)
+                                + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
+                                * rfip,
+                        )),
+                        ..Default::default()
+                    })
+                    .insert(Details {
+                        doturl: DotUrl {
+                            para_id,
+                            block_number: None, 
+                            ..relay_url.clone()
+                        },
+                        flattern: chain_deets.1.clone(),
+                        url: format!("https://polkadot.js.org/apps/?{}", &encoded),
+                        ..default()
+                    }).insert(Name::new("Blockchain")).insert_bundle(PickableBundle::default());
             }
         }
 
