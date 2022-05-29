@@ -14,7 +14,7 @@ use bevy_mod_picking::*;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 mod content;
@@ -51,8 +51,8 @@ impl Default for MovementSettings {
     }
 }
 
-static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
-static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
+static BASETIME: AtomicU64 = AtomicU64::new(0);
+//static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Default)]
 pub struct ChainInfo {
@@ -181,8 +181,7 @@ fn source_data(
         for detail in clean_me.iter() {
             commands.entity(detail).despawn();
         }
-        RELAY_BLOCKS.store(0, Ordering::Relaxed);
-        RELAY_BLOCKS2.store(0, Ordering::Relaxed);
+        BASETIME.store(0, Ordering::Relaxed);
 
         if event.source == "" {
             return;
@@ -506,29 +505,37 @@ fn render_block(
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
-                    let block_num = if is_self_sovereign {
-                        block.blockurl.block_number.unwrap() as u32
-                    } else {
-                        if rcount == 0 {
-                            if chain == 0 {
-                                //relay
-                                RELAY_BLOCKS.store(
-                                    RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-                                    Ordering::Relaxed,
-                                );
-                            }
-                            RELAY_BLOCKS.load(Ordering::Relaxed)
-                        } else {
-                            if chain == 0 {
-                                //relay
-                                RELAY_BLOCKS2.store(
-                                    RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-                                    Ordering::Relaxed,
-                                );
-                            }
-                            RELAY_BLOCKS2.load(Ordering::Relaxed)
-                        }
-                    };
+                    let mut base_time = BASETIME.load(Ordering::Relaxed);
+                    if base_time == 0 {
+                        BASETIME.store(block.timestamp.unwrap(), Ordering::Relaxed);
+                        base_time = block.timestamp.unwrap();
+                    }
+
+                    // let block_num = if is_self_sovereign {
+                    //     block.blockurl.block_number.unwrap() as u32
+                    // } else {
+                        
+                    //     if base_time == 0
+                    //     if rcount == 0 {
+                    //         if chain == 0 &&  {
+                    //             //relay
+                    //             RELAY_BLOCKS.store(
+                    //                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+                    //                 Ordering::Relaxed,
+                    //             );
+                    //         }
+                    //         RELAY_BLOCKS.load(Ordering::Relaxed)
+                    //     } else {
+                    //         if chain == 0 {
+                    //             //relay
+                    //             RELAY_BLOCKS2.store(
+                    //                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+                    //                 Ordering::Relaxed,
+                    //             );
+                    //         }
+                    //         RELAY_BLOCKS2.load(Ordering::Relaxed)
+                    //     }
+                    // };
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
                     let encoded: String = url::form_urlencoded::Serializer::new(String::new())
@@ -550,6 +557,11 @@ fn render_block(
                         ..default()
                     };
 
+                    let block_num = block.timestamp.unwrap_or(base_time) as f64 - base_time as f64;
+                    //   miliseconds / = 14
+                    let block_num = (block_num / 500.) as f32;
+                    // println!("block num time becomes {}", block_num);
+
                     // Add the new block as a large rectangle on the ground:
                     commands
                         .spawn_bundle(PbrBundle {
@@ -562,7 +574,7 @@ fn render_block(
                                 ..default()
                             }),
                             transform: Transform::from_translation(Vec3::new(
-                                0. + (BLOCK_AND_SPACER * block_num as f32),
+                                0. + (block_num as f32),
                                 0.,
                                 (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             )),
@@ -729,7 +741,7 @@ fn render_block(
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
 fn add_blocks<'a>(
     chain_info: &ChainInfo,
-    block_num: u32,
+    block_num: f32,
     chain: usize,
     block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
     commands: &mut Commands,
@@ -764,7 +776,7 @@ fn add_blocks<'a>(
     let mut mat_map = HashMap::new();
 
     let (base_x, base_y, base_z) = (
-        0. + (BLOCK_AND_SPACER * block_num as f32) - 4.,
+        0. + ( block_num) - 4.,
         0.5,
         RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
