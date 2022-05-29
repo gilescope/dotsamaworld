@@ -28,7 +28,7 @@ use bevy_inspector_egui::RegisterInspectable;
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
 use std::convert::AsRef;
-
+use std::convert::TryInto;
 // #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
 // pub mod polkadot {}
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
@@ -176,8 +176,9 @@ fn source_data(
         // 2. remove all entities.
         for detail in details.iter() {
             commands.entity(detail).despawn();
-            // detail.despawn();
         }
+        RELAY_BLOCKS.store(0, Ordering::Relaxed);
+        RELAY_BLOCKS2.store(0, Ordering::Relaxed);
 
         if event.source == "" {
             return;
@@ -224,7 +225,7 @@ fn source_data(
                     .finish();
 
                 // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).unwrap_or(Some(9999u32.try_into().unwrap()));
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
@@ -273,7 +274,7 @@ fn source_data(
             for (arc, chain_name) in relay {
                 let url = chain_name_to_url(&chain_name);
                 // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url);
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).unwrap_or(Some(9999u32.try_into().unwrap()));
                 let (tx, rc) = unbounded();
                 relay2.push((arc, chain_name, para_id, rc));
                 if let Some(para_id) = para_id {
@@ -568,7 +569,7 @@ fn render_block(
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
                     let block_num = if is_self_sovereign {
-                        block.blocknum as u32
+                        block.blocknum.unwrap() as u32
                     } else {
                         if rcount == 0 {
                             if chain == 0 {
@@ -600,7 +601,7 @@ fn render_block(
                         doturl: DotUrl {
                             extrinsic: None,
                             event: None,
-                            ..block.events.first().unwrap().details.doturl.clone()
+                            ..block.extrinsics.first().unwrap().details().doturl.clone()
                         },
 
                         url: format!(
@@ -679,7 +680,7 @@ fn render_block(
                                 .insert(Name::new("BillboardDown"))
                                 .insert(details.clone())
                                 .insert_bundle(PickableBundle::default());
-                                // by adding Details to the banners they are cleared down when we remove every entity with Details.
+                            // by adding Details to the banners they are cleared down when we remove every entity with Details.
 
                             // create a new quad mesh. this is what we will apply the texture to
                             let quad_width = BLOCK;
@@ -882,7 +883,7 @@ fn add_blocks<'a>(
 
                             let mut vertices = vec![
                                 source_global.translation,
-                                Vec3::new(px, target_y * build_direction, pz),
+                                Vec3::new(px, target_y * build_direction, pz * rflip),
                             ];
                             rainbow(&mut vertices, 50);
 
@@ -1319,7 +1320,7 @@ pub struct Inspector {
 impl Default for UrlBar {
     fn default() -> Self {
         Self {
-            location: "dotsama:/1//10000000".to_string(),
+            location: "dotsama:/1//10504595".to_string(),
             changed: false,
         }
     }

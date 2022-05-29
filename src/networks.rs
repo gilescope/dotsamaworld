@@ -62,54 +62,96 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
             ]
         }
         Env::Prod => {
+            // for history mode to work well we need to be pointing to archive nodes
+            // ( those running --pruning=archive )
+            // othewise you hit "State already discarded for BlockId"
             vec![
                 vec![
+                    // Ordering should really be done on who won the auction first!
                     "kusama-rpc.polkadot.io",
                     "statemine-rpc.dwellir.com",
-                    "wss.api.moonriver.moonbeam.network", // metadata 13 still at 10_000_000
-                    "bifrost-rpc.dwellir.com",
-                    "khala-rpc.dwellir.com", // metadata 13 still at 10_000_000
-                    "shiden-rpc.dwellir.com", // metadata 13 still at 10_000_000
-                    "rpc-shadow.crust.network",
-                    "kusama.api.integritee.network",
-                    "kusama.rpc.robonomics.network",
-                    "calamari-rpc.dwellir.com",
-                    "heiko-rpc.parallel.fi",
-                    "kilt-rpc.dwellir.com",
-                    "picasso-rpc.composable.finance",
-                    "basilisk-rpc.dwellir.com", // metadata 13 still at 10_000_000
-                    "kintsugi-rpc.dwellir.com",
-                    "us-ws-quartz.unique.network",
-                    "para.subsocial.network",
-                    "rpc.api.kico.dico.io",
-                    "zeitgeist-rpc.dwellir.com",
-                    "crab-parachain-rpc.darwinia.network",
-                    "rpc.litmus-parachain.litentry.io",
-                    "karura-rpc.dwellir.com",
-                    "fullnode.altair.centrifuge.io", // metadata 13 still at 10_000_000
-                    "pioneer-1-rpc.bit.country",
-                    "rpc.turing.oak.tech",
+                    //
+                    // Auction Batch 1
+                    "karura-rpc.dwellir.com",             // 1st
+                    "wss.api.moonriver.moonbeam.network", // 2nd.
+                    "shiden-rpc.dwellir.com",             // 3rd
+                    "khala-rpc.dwellir.com",              // 4th
+                    "bifrost-rpc.dwellir.com",            // 5th
+                    //
+                    // Auction Batch 2
+                    "kilt-rpc.dwellir.com",          // 6th
+                    "calamari-rpc.dwellir.com",      // 7th
+                    "basilisk-rpc.dwellir.com",      // 8th
+                    "fullnode.altair.centrifuge.io", //9th
+                    "heiko-rpc.parallel.fi",         // 10th
+                    "kintsugi-rpc.dwellir.com",      // 11th
+                    //
+                    // Auction Batch 3
+                    "picasso-rpc.composable.finance", // 12th
+                    "pioneer-1-rpc.bit.country",      // 13th
+                    "us-ws-quartz.unique.network",    // 14th
+                    //15th genshiro
+
+                    // Auction Batch 4
+                    "para.subsocial.network",    // 16th
+                    "zeitgeist-rpc.dwellir.com", // 17th
+                    //Sakura 18th
+                    "rpc-shadow.crust.network",      // 19th
+                    "kusama.rpc.robonomics.network", // 20th
+                    //
+                    // Auction Batch 5
+                    "kusama.api.integritee.network",       // 21st
+                    "crab-parachain-rpc.darwinia.network", // 22nd
+                    "rpc.litmus-parachain.litentry.io",    // 23rd
+                    "ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
+                    "rpc.api.kico.dico.io",                // 25th
+                    //
+                    // Auction Batch 6
+                    "prod-kusama-collator-01.mangatafinance.cloud", // 26th
+                    // 27th renewal
+                    // 28th renewal
+                    // 29th renewal
+                    "rpc.turing.oak.tech", // 30th
+                    // Auction Batch 7
+                    // "kusama.kylin-node.co.uk", 31st not online yet
+                                               // 32nd renewal
+                                               // Dora Factory (not yet online) 33rd
+                                               // 34nd renewal
+                                               // 35nd renewal
+
+                                               // Auction Batch 8
+                                               // Listen (not online yet) 36th
                 ],
                 vec![
                     // TODO: how can we dynamically discover
                     // nodes we can hit? - can we track back to the
                     // collator ip?
                     "rpc.polkadot.io",
-                    "statemint-rpc.polkadot.io",
-                    "acala.polkawallet.io",
-                    "astar-rpc.dwellir.com",
-                    "fullnode.parachain.centrifuge.io",
-                    "rpc-para.clover.finance",
-                    "rpc.efinity.io",
-                    "rpc-01.hydradx.io",
-                    "interlay.api.onfinality.io:443/public-ws",
-                    "wss.api.moonbeam.network",
-                    "eden-rpc.dwellir.com", //noodle
-                    "rpc.parallel.fi",
-                    "wss://api.phala.network:443/ws",
-                    // "mainnet.polkadex.trade",
-                    "ws.unique.network",
-                    "k-ui.kapex.network",
+                    "statemint-rpc.polkadot.io", //1st parachain.
+                    //
+                    // Auction Batch 1
+                    "acala.polkawallet.io",     // 1st auction winner
+                    "wss.api.moonbeam.network", // 2nd
+                    "astar-rpc.dwellir.com",    // 3rd
+                    "rpc.parallel.fi",          // 4th
+                    "rpc-para.clover.finance",  // 5th
+                    //
+                    // Auction Batch 2
+                    "rpc.efinity.io",                           // 6th
+                    "rpc.composable.finance",                   // 7th
+                    "fullnode.parachain.centrifuge.io",         // 8th
+                    "rpc-01.hydradx.io",                        // 9th
+                    "interlay.api.onfinality.io:443/public-ws", // 10th
+                    "eden-rpc.dwellir.com",                     // noodle 11th
+                    //
+                    // Auction Batch 3
+                    "nde.pol.equilibrium.io",         // 12th
+                    "wss://api.phala.network:443/ws", //13th
+                    "ws.unique.network",              // 14th
+                    "rpc.litentry-parachain.litentry.io", // 15th
+                                                      // "mainnet.polkadex.trade", // 16th (not on line yet)
+                                                      // 17th origin trail (not live yet)
+                                                      // "k-ui.kapex.network",
                 ],
             ]
         }

@@ -250,7 +250,6 @@ async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Metad
         params = Some(jsonrpsee_types::ParamsSer::Array(vec![
             subxt::rpc::JsonValue::String(hex::encode(hash.as_bytes())),
         ]));
-        println!("getting metadata for hash");
     }
 
     let metadata_bytes = if let Ok(result) = std::fs::read(&metadata_path) {
@@ -370,18 +369,19 @@ pub fn get_cached_parachain_id(url: &str) -> Option<NonZeroU32> {
     }
 }
 
-pub fn get_parachain_id_from_url(url: &str) -> Option<NonZeroU32> {
+pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>,()> {
     if let Some(cached_id) = get_cached_parachain_id(url) {
-        return Some(cached_id);
+        return Ok(Some(cached_id));
     }
     let result: Result<subxt::Client<subxt::DefaultConfig>, _> =
         async_std::task::block_on(ClientBuilder::new().set_url(url).build());
     if let Ok(client) = result {
         let para_id: Option<NonZeroU32> =
             async_std::task::block_on(get_parachain_id(&client, &url));
-        para_id
+        Ok(para_id)
     } else {
-        panic!("COULD NOT GET CLIENT FOR URL {}", url);
+        eprintln!("COULD NOT GET CLIENT FOR URL {}", url);
+        Err(())
     }
     // Some(std::num::NonZeroU32::try_from(3).unwrap())
 }
@@ -420,23 +420,29 @@ async fn get_metadata_version<T: subxt::Config>(
                 let err = err.to_string();
                 // TODO: if we're looking at finalised blocks why are we running into this?
                 let needle = "State already discarded for BlockId::Hash(";
+
                 let pos = err.find(needle);
-                if let Some(pos) = pos {
-                    println!("error message (recoverable) {}", &err);
-                    let pos = pos + needle.len() + "0x".len();
-                    if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
-                        println!("found new hash decoded {}", &err[pos..(pos + 64)]);
-                        // T::Hashing()
-                        let hash = T::Hashing::hash(new_hash.as_slice());
-                        let call = client
-                            .storage()
-                            .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
-                            .await
-                            .unwrap();
-                        call
-                    } else {
-                        panic!("could not recover from error {:?}", err);
-                    }
+                if let Some(_pos) = pos {
+                    eprintln!(
+                        "{} is not alas an archive node and does not go back this far in time.",
+                        &url
+                    );
+                    return None; // If you get this error you need to point to an archive node.
+                                 // println!("error message (recoverable) {}", &err);
+                                 // let pos = pos + needle.len() + "0x".len();
+                                 // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
+                                 //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
+                                 //     // T::Hashing()
+                                 //     let hash = T::Hashing::hash(new_hash.as_slice());
+                                 //     let call = client
+                                 //         .storage()
+                                 //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
+                                 //         .await
+                                 //         .unwrap();
+                                 //     call
+                                 // } else {
+                                 //     panic!("could not recover from error {:?}", err);
+                                 // }
                 } else {
                     panic!("could not recover from error2 {:?}", err);
                 }
@@ -512,13 +518,7 @@ where
         Some(para_name)
     } else {
         println!("cache miss! block hash {} {}", url, block_number);
-        if let Some(block_hash) = api
-            .client
-            .rpc()
-            .block_hash(Some(block_number.into()))
-            .await
-            .unwrap()
-        {
+        if let Ok(Some(block_hash)) = api.client.rpc().block_hash(Some(block_number.into())).await {
             std::fs::write(&filename, &hex::encode(block_hash.as_bytes()))
                 .expect("Couldn't write event output");
             Some(block_hash)
@@ -599,98 +599,103 @@ pub async fn watch_blocks(
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
-            while let Ok((block_number, block_hash)) = recieve_channel.recv() {
-                println!("block hash recieved from relay chain num {}", block_number);
+            while let Ok((relay_block_number, block_hash)) = recieve_channel.recv() {
+                // println!("block hash recieved from relay chain num {}", relay_block_number);
                 // let as_of: u32 = as_of.parse().unwrap();
-                let block_doturl = DotUrl {
-                    block_number: Some(block_number),
-                    ..parachain_doturl.clone()
-                };
+
                 // let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
 
-                let extrinsics = get_extrinsics(block_number, &url, &api, block_hash).await;
-
-                let version =
-                    get_metadata_version(&api.client, &url, block_hash, block_number).await;
-                let metad = get_desub_metadata(&url, Some((version.unwrap(), block_hash))).await;
-
-                // let block_num = blocknum;
-                // let block_hash = blockhash;
-                // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
-                //TODO decode block
-                // if let Ok(extrinsics) =
-                //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
+                if let Ok((block_number, extrinsics)) = get_extrinsics(&url, &api, block_hash).await
                 {
-                    //AllExtrinsicBytes::new(&bytes).unwrap();
-                    // for extrinsics in all {
-                    // for extrinsic in extrinsics {
-                    //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
-                    let mut exts = vec![];
-                    for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
-                        // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-                        let ex_slice =
-                            <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                                .unwrap()
-                                .0;
+                    let block_doturl = DotUrl {
+                        block_number: Some(block_number),
+                        ..parachain_doturl.clone()
+                    };
 
-                        // let ex_slice = &ext_bytes.0;
-                        if let Ok(extrinsic) =
-                            decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                        {
-                            // let ext_bytes = ext_bytes.encode();
-                            let entity = process_extrisic(
-                                // &relay_id,
-                                // &metad,
-                                // para_id,
-                                // block_number,
-                                // block_hash,
-                                (ex_slice).clone(),
-                                &extrinsic,
-                                DotUrl {
-                                    extrinsic: Some(i as u32),
-                                    ..block_doturl.clone()
-                                },
-                            )
-                            .await;
-                            if let Some(entity) = entity {
-                                exts.push(entity);
-                            }
-                        } else {
-                            println!("can't decode block ext {}-{} {}", block_number, i, &url);
-                        }
-                    }
-                    let ext_clone = exts.clone();
-                    let mut handle = tx.lock().unwrap();
-
-                    // no need to pass sender here as not re-publishing events to other parachains
-                    let events =
-                        get_events_for_block(&api, &url, block_hash, &None, &block_doturl).await?;
-                    let current = handle
-                        .0
-                        .entry(hex::encode(block_hash.as_bytes()))
-                        .or_insert(PolkaBlock {
-                            blocknum: block_number,
-                            blockhash: block_hash,
-                            extrinsics: exts,
-                            events,
-                        });
-                    println!(
-                        "got block oh yeeet, we yoloing!!! {} {}",
-                        ext_clone.len(),
-                        hex::encode(block_hash.as_bytes())
-                    );
-
-                    // if !current.events.is_empty()
-                    //- blocks sometimes have no events in them.
+                    let version =
+                        get_metadata_version(&api.client, &url, block_hash, block_number).await;
+                    let metad = if let Some(version) = version {
+                        get_desub_metadata(&url, Some((version, block_hash))).await
+                    } else {
+                        //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
+                        get_desub_metadata(&url, None).await
+                    };
+                    // let block_num = blocknum;
+                    // let block_hash = blockhash;
+                    // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
+                    //TODO decode block
+                    // if let Ok(extrinsics) =
+                    //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
                     {
-                        let mut current = handle
+                        //AllExtrinsicBytes::new(&bytes).unwrap();
+                        // for extrinsics in all {
+                        // for extrinsic in extrinsics {
+                        //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
+                        let mut exts = vec![];
+                        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+                            // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
+                            let ex_slice =
+                                <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                                    .unwrap()
+                                    .0;
+
+                            // let ex_slice = &ext_bytes.0;
+                            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(
+                                &metad,
+                                &mut ex_slice.as_slice(),
+                            ) {
+                                // let ext_bytes = ext_bytes.encode();
+                                let entity = process_extrisic(
+                                    // &relay_id,
+                                    // &metad,
+                                    // para_id,
+                                    // block_number,
+                                    // block_hash,
+                                    (ex_slice).clone(),
+                                    &extrinsic,
+                                    DotUrl {
+                                        extrinsic: Some(i as u32),
+                                        ..block_doturl.clone()
+                                    },
+                                )
+                                .await;
+                                if let Some(entity) = entity {
+                                    exts.push(entity);
+                                }
+                            } else {
+                                println!("can't decode block ext {}-{} {}", block_number, i, &url);
+                            }
+                        }
+                        let ext_clone = exts.clone();
+                        let mut handle = tx.lock().unwrap();
+
+                        // no need to pass sender here as not re-publishing events to other parachains
+                        let events =
+                            get_events_for_block(&api, &url, block_hash, &None, &block_doturl)
+                                .await?;
+                        let current = handle
                             .0
-                            .remove(&hex::encode(block_hash.as_bytes()))
-                            .unwrap();
-                        current.extrinsics = ext_clone;
-                        handle.1.push(current);
+                            .entry(hex::encode(block_hash.as_bytes()))
+                            .or_insert(PolkaBlock {
+                                blocknum: Some(block_number),
+                                blockhash: block_hash,
+                                extrinsics: exts,
+                                events,
+                            });
+                        
+
+                        // if !current.events.is_empty()
+                        //- blocks sometimes have no events in them.
+                        {
+                            let mut current = handle
+                                .0
+                                .remove(&hex::encode(block_hash.as_bytes()))
+                                .unwrap();
+                            current.extrinsics = ext_clone;
+                            handle.1.push(current);
+                        }
+                        //
                     }
-                    //
                 }
             }
         } else {
@@ -709,89 +714,91 @@ pub async fn watch_blocks(
                         block_number, &url
                     ));
 
-                let extrinsics = get_extrinsics(block_number, &url, &api, block_hash).await;
-
-                let version =
-                    get_metadata_version(&api.client, &url, block_hash, block_number).await;
-                let metad = async_std::task::block_on(get_desub_metadata(
-                    &url,
-                    Some((version.unwrap(), block_hash)),
-                ));
-
-                // let block_num = blocknum;
-                // let block_hash = blockhash;
-                // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
-                //TODO decode block
-                // if let Ok(extrinsics) =
-                //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
+                if let Ok((got_block_num, extrinsics)) =
+                    get_extrinsics(&url, &api, block_hash).await
                 {
-                    //AllExtrinsicBytes::new(&bytes).unwrap();
-                    // for extrinsics in all {
-                    // for extrinsic in extrinsics {
-                    //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
-                    let mut exts = vec![];
-                    for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
-                        // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-                        let ex_slice =
-                            <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                                .unwrap()
-                                .0;
+                    assert_eq!(block_number, got_block_num);
 
-                        // let ex_slice = &ext_bytes.0;
-                        if let Ok(extrinsic) =
-                            decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                        {
-                            // let ext_bytes = ext_bytes.encode();
-                            let entity = process_extrisic(
-                                // &relay_id,
-                                // &metad,
-                                // para_id,
-                                // block_number,
-                                // block_hash,
-                                (ex_slice).clone(),
-                                &extrinsic,
-                                DotUrl {
-                                    extrinsic: Some(i as u32),
-                                    ..block_url.clone()
-                                },
-                            )
-                            .await;
-                            if let Some(entity) = entity {
-                                exts.push(entity);
-                            }
-                        } else {
-                            println!("can't decode block ext {}-{} {}", block_number, i, &url);
-                        }
-                    }
-                    let ext_clone = exts.clone();
-                    let mut handle = tx.lock().unwrap();
-                    let current = handle
-                        .0
-                        .entry(hex::encode(block_hash.as_bytes()))
-                        .or_insert(PolkaBlock {
-                            blocknum: block_number,
-                            blockhash: block_hash,
-                            extrinsics: exts,
-                            events: vec![],
-                        });
-                    println!(
-                        "got block oh yeeet, we yoloing!!! {} {}",
-                        ext_clone.len(),
-                        hex::encode(block_hash.as_bytes())
-                    );
+                    let version =
+                        get_metadata_version(&api.client, &url, block_hash, block_number).await;
+                    let metad = async_std::task::block_on(get_desub_metadata(
+                        &url,
+                        Some((version.unwrap(), block_hash)),
+                    ));
 
-                    current.events =
-                        get_events_for_block(&api, &url, block_hash, &sender, &block_url).await?;
-
-                    // if !current.events.is_empty()
-                    //- blocks sometimes have no events in them.
+                    // let block_num = blocknum;
+                    // let block_hash = blockhash;
+                    // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
+                    //TODO decode block
+                    // if let Ok(extrinsics) =
+                    //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
                     {
-                        let mut current = handle
+                        //AllExtrinsicBytes::new(&bytes).unwrap();
+                        // for extrinsics in all {
+                        // for extrinsic in extrinsics {
+                        //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
+                        let mut exts = vec![];
+                        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+                            // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
+                            let ex_slice =
+                                <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                                    .unwrap()
+                                    .0;
+
+                            // let ex_slice = &ext_bytes.0;
+                            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(
+                                &metad,
+                                &mut ex_slice.as_slice(),
+                            ) {
+                                // let ext_bytes = ext_bytes.encode();
+                                let entity = process_extrisic(
+                                    // &relay_id,
+                                    // &metad,
+                                    // para_id,
+                                    // block_number,
+                                    // block_hash,
+                                    (ex_slice).clone(),
+                                    &extrinsic,
+                                    DotUrl {
+                                        extrinsic: Some(i as u32),
+                                        ..block_url.clone()
+                                    },
+                                )
+                                .await;
+                                if let Some(entity) = entity {
+                                    exts.push(entity);
+                                }
+                            } else {
+                                println!("can't decode block ext {}-{} {}", block_number, i, &url);
+                            }
+                        }
+                        let ext_clone = exts.clone();
+                        let mut handle = tx.lock().unwrap();
+                        let current = handle
                             .0
-                            .remove(&hex::encode(block_hash.as_bytes()))
-                            .unwrap();
-                        current.extrinsics = ext_clone;
-                        handle.1.push(current);
+                            .entry(hex::encode(block_hash.as_bytes()))
+                            .or_insert(PolkaBlock {
+                                blocknum: Some(block_number),
+                                blockhash: block_hash,
+                                extrinsics: exts,
+                                events: vec![],
+                            });
+
+                        current.events =
+                            get_events_for_block(&api, &url, block_hash, &sender, &block_url)
+                                .await?;
+
+                        // if !current.events.is_empty()
+                        //- blocks sometimes have no events in them.
+                        {
+                            let mut current = handle
+                                .0
+                                .remove(&hex::encode(block_hash.as_bytes()))
+                                .unwrap();
+                            current.blocknum = Some(block_number); // live events does not know block num.
+                            current.extrinsics = ext_clone;
+                            handle.1.push(current);
+                        }
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_secs(6));
@@ -838,7 +845,7 @@ pub async fn watch_blocks(
                             .0
                             .entry(hex::encode(block_hash.as_bytes()))
                             .or_insert(PolkaBlock {
-                                blocknum: block_number,
+                                blocknum: Some(block_number),
                                 blockhash: block_hash,
                                 extrinsics: exts,
                                 events: vec![],
@@ -848,6 +855,12 @@ pub async fn watch_blocks(
                         {
                             let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
                             current.extrinsics = ext_clone;
+
+                            //patch block num as live events did not know it
+                            for event in current.events.iter_mut() {
+                                event.details.doturl.block_number = Some(block_number);
+                            }
+
                             handle.1.push(current);
                         }
                        //TODO: assert_eq!(block_header.hash(), block.hash());
@@ -867,7 +880,7 @@ pub async fn watch_blocks(
 
 // fetches extrinsics from node for a block number (wrapped by a file cache).
 async fn get_extrinsics(
-    block_number: u32,
+    // relay_block_number: u32,
     url: &str,
     api: &RuntimeApi<
         DefaultConfig,
@@ -877,45 +890,48 @@ async fn get_extrinsics(
         >,
     >,
     block_hash: H256,
-) -> Vec<Vec<u8>> {
+) -> Result<(u32, Vec<Vec<u8>>), ()> {
     let urlhash = please_hash(&url);
     let path = format!("target/{urlhash}.metadata.scale.events");
     let _ = std::fs::create_dir(&path);
 
-    let filename = format!("{}/{}.blocks", path, block_number);
-    let extrinsics: Vec<Vec<u8>> = if let Ok(contents) = std::fs::read(&filename) {
-        let exs = String::from_utf8(contents)
-            .unwrap()
-            .lines()
-            .map(|ex| hex::decode(ex).unwrap())
-            .collect();
-        Some(exs)
+    let filename = format!("{}/{}.block", path, hex::encode(block_hash.as_bytes()));
+    if let Ok(contents) = std::fs::read(&filename) {
+        let temp = String::from_utf8(contents).unwrap();
+        let mut exs: Vec<_> = temp.lines().collect();
+        let block_num_str = exs.remove(0);
+        let block_num: u32 = block_num_str.parse().unwrap();
+        let exs = exs.iter().map(|ex| hex::decode(ex).unwrap()).collect();
+        Some((block_num, exs))
     } else {
-        println!("cache miss block! {} {}", url, block_number);
+        println!("cache miss block! {} {}", url, filename);
         if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
-            let vals = block_body
-                .block
-                .extrinsics
-                .iter()
-                .fold(String::new(), |mut buf, ex| {
-                    buf.push_str(&hex::encode(ex.encode()));
+            let mut vals = block_body.block.extrinsics.iter().fold(
+                block_body.block.header.number.to_string(),
+                |mut buf, ex| {
                     buf.push('\n');
+                    buf.push_str(&hex::encode(ex.encode()));
                     buf
-                });
+                },
+            );
+            vals.push('\n');
             // let bytes = block_body.block.extrinsics.encode();
             std::fs::write(&filename, vals.as_bytes()).expect("Couldn't write block");
 
             // let exts = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice());
             // desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice()).unwrap();
-            let exs = vals.lines().map(|ex| hex::decode(ex).unwrap()).collect();
+            let exs = vals
+                .lines()
+                .skip(1)
+                .map(|ex| hex::decode(ex).unwrap())
+                .collect();
 
-            Some(exs)
+            Some((block_body.block.header.number, exs))
         } else {
             None
         }
     }
-    .unwrap();
-    extrinsics
+    .ok_or(())
 }
 
 async fn process_extrisic<'a>(
@@ -1294,116 +1310,7 @@ async fn process_extrisic<'a>(
 
     // Anything that looks batch like we will assume is a batch
     if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
-        let mut results = HashMap::new();
-        flattern(&ext.call_data.arguments[0].value, "", &mut results);
-        println!("FLATTERN {:#?}", results);
-
-        if let Some(dest) = results.get(".V2.0.interior.X1.0.Parachain.0") {
-            println!("first time!");
-            //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-            let dest: NonZeroU32 = dest.parse().unwrap();
-            let name = if let Some(name) = PARA_ID_TO_NAME
-                .read()
-                .await
-                .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-            {
-                name.clone()
-            } else {
-                "unknown".to_string()
-            };
-            let mut results = HashMap::new();
-            flattern(&ext.call_data.arguments[1].value, "", &mut results);
-            let to = results.get(".V2.0.interior.X1.0.AccountId32.id");
-
-            if let Some(to) = to {
-                let msg_id = format!("{}-{}", block_number, please_hash(to));
-                println!("SEND MSG v2 hash {}", msg_id);
-                start_link.push(msg_id);
-            }
-            println!(
-                "Reserve_transfer_assets from {:?} to {} ({})",
-                para_id, dest, name
-            );
-
-            // if ext.call_data.arguments.len() > 1 {
-            //     let mut results = HashMap::new();
-            //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-            //     println!("FLATTERN DEST2 {:#?}", results);
-            //     println!("ARGS {:?}", ext.call_data.arguments);
-            // } else {
-            //     warn!("expected more params...");
-            // }
-        }
-        if let Some(dest) = results.get(".V1.0.interior.X1.0.Parachain.0") {
-            //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-            let dest: NonZeroU32 = dest.parse().unwrap();
-            let name = if let Some(name) = PARA_ID_TO_NAME
-                .read()
-                .await
-                .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-            {
-                name.clone()
-            } else {
-                "unknown".to_string()
-            };
-            let mut results = HashMap::new();
-            flattern(&ext.call_data.arguments[1].value, "", &mut results);
-            let to = results.get(".V1.0.interior.X1.0.AccountId32.id");
-
-            if let Some(to) = to {
-                let msg_id = format!("{}-{}", block_number, please_hash(to));
-                println!("SEND MSG v1 hash {}", msg_id);
-                start_link.push(msg_id);
-            }
-            println!(
-                "Reserve_transfer_assets from {:?} to {} ({})",
-                para_id, dest, name
-            );
-
-            // if ext.call_data.arguments.len() > 1 {
-            //     let mut results = HashMap::new();
-            //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-            //     println!("FLATTERN DEST2 {:#?}", results);
-            //     println!("ARGS {:?}", ext.call_data.arguments);
-            // } else {
-            //     warn!("expected more params...");
-            // }
-        }
-        if let Some(dest) = results.get(".V0.0.X1.0.Parachain.0") {
-            //TODO; something with parent for cross relay chain maybe.(results.get(".V1.0.parents"),
-            let dest: NonZeroU32 = dest.parse().unwrap();
-            let name = if let Some(name) = PARA_ID_TO_NAME
-                .read()
-                .await
-                .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-            {
-                name.clone()
-            } else {
-                "unknown".to_string()
-            };
-            let mut results = HashMap::new();
-            flattern(&ext.call_data.arguments[1].value, "", &mut results);
-            let to = results.get(".V0.0.X1.0.AccountId32.id");
-
-            if let Some(to) = to {
-                let msg_id = format!("{}-{}", block_number, please_hash(to));
-                println!("SEND MSG v0 hash {}", msg_id);
-                start_link.push(msg_id);
-            }
-            println!(
-                "Reserve_transfer_assets from {:?} to {} ({})",
-                para_id, dest, name
-            );
-
-            // if ext.call_data.arguments.len() > 1 {
-            //     let mut results = HashMap::new();
-            //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-            //     println!("FLATTERN DEST2 {:#?}", results);
-            //     println!("ARGS {:?}", ext.call_data.arguments);
-            // } else {
-            //     warn!("expected more params...");
-            // }
-        }
+        check_reserve_asset(&ext.call_data.arguments, &extrinsic_url, block_number, &mut start_link, para_id).await;
 
         //                                 print_val(&ext.call_data.arguments[0].value);
         //                                 println!("Got here!!!!!");
@@ -1499,6 +1406,25 @@ async fn process_extrisic<'a>(
                                                     ..Details::default()
                                                 },
                                             });
+
+                                            if inner_pallet == "XcmPallet" && name == "reserve_transfer_assets"{
+                                                println!("HELL YEAH");
+                                                match values {
+                                                    Composite::Named(named)  => {
+//                                                        for (name, values) in named {
+                                                            // print_val(&values.value);
+                                                            let vec: Vec<Value<TypeId>> = named.iter().map(|(n,v)|v.clone()).collect();
+                                                        check_reserve_asset(&vec,
+                                                         &extrinsic_url, block_number, &mut start_link, para_id).await;
+   //                                                     }
+                                                    }
+                                                     Composite::Unnamed(named)  => {println!("oo");for values in named {print_val(&values.value);}}
+                                                }
+                                                
+                                                //if let Composite::Named()values.value
+                                                
+                                                println!("HELL YEAH");
+                                            }
                                         }
                                         _ => {
                                             println!("miss yet close");
@@ -1549,9 +1475,123 @@ async fn process_extrisic<'a>(
 
     // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
 }
+use desub_current::TypeId;
+async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &DotUrl, block_number: u32, start_link: &'b mut Vec<String>, para_id: Option<NonZeroU32>) {
+    let mut flat0 = HashMap::new();
+    flattern(&args[0].value, "", &mut flat0);
+    // println!("FLATTERN {:#?}", flat0);
+    let mut flat1 = HashMap::new();
+    flattern(&args[1].value, "", &mut flat1);
+
+    if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+        let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+
+        println!("first time!");
+        //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+        let dest: NonZeroU32 = dest.parse().unwrap();
+        let name = if let Some(name) = PARA_ID_TO_NAME
+            .read()
+            .await
+            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        {
+            name.clone()
+        } else {
+            "unknown".to_string()
+        };
+       
+        if let Some(to) = to {
+            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            println!("SEND MSG v2 hash {}", msg_id);
+            start_link.push(msg_id);
+        }
+        println!(
+            "Reserve_transfer_assets from {:?} to {} ({})",
+            para_id, dest, name
+        );
+
+        // if ext.call_data.arguments.len() > 1 {
+        //     let mut results = HashMap::new();
+        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+        //     println!("FLATTERN DEST2 {:#?}", results);
+        //     println!("ARGS {:?}", ext.call_data.arguments);
+        // } else {
+        //     warn!("expected more params...");
+        // }
+    }
+    if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+        let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
+
+        //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+        let dest: NonZeroU32 = dest.parse().unwrap();
+        let name = if let Some(name) = PARA_ID_TO_NAME
+            .read()
+            .await
+            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        {
+            name.clone()
+        } else {
+            "unknown".to_string()
+        };
+        
+
+        if let Some(to) = to {
+            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            println!("SEND MSG v1 hash {}", msg_id);
+            start_link.push(msg_id);
+        }
+        println!(
+            "Reserve_transfer_assets from {:?} to {} ({})",
+            para_id, dest, name
+        );
+
+        // if ext.call_data.arguments.len() > 1 {
+        //     let mut results = HashMap::new();
+        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+        //     println!("FLATTERN DEST2 {:#?}", results);
+        //     println!("ARGS {:?}", ext.call_data.arguments);
+        // } else {
+        //     warn!("expected more params...");
+        // }
+    }
+    if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+        let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+
+        //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+        let dest: NonZeroU32 = dest.parse().unwrap();
+        let name = if let Some(name) = PARA_ID_TO_NAME
+            .read()
+            .await
+            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        {
+            name.clone()
+        } else {
+            "unknown".to_string()
+        };
+      
+
+        if let Some(to) = to {
+            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            println!("SEND MSG v0 hash {}", msg_id);
+            start_link.push(msg_id);
+        }
+        println!(
+            "Reserve_transfer_assets from {:?} to {} ({})",
+            para_id, dest, name
+        );
+
+        // if ext.call_data.arguments.len() > 1 {
+        //     let mut results = HashMap::new();
+        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
+        //     println!("FLATTERN DEST2 {:#?}", results);
+        //     println!("ARGS {:?}", ext.call_data.arguments);
+        // } else {
+        //     warn!("expected more params...");
+        // }
+    }
+}
 
 pub struct PolkaBlock {
-    pub blocknum: u32,
+    pub blocknum: Option<u32>,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
@@ -1577,10 +1617,12 @@ async fn get_events_for_block(
     let events_path = format!("target/{urlhash}.metadata.scale.events");
     let blocknum = block_url.block_number.unwrap();
 
-    let metad = async_std::task::block_on(get_desub_metadata(
-        &url,
-        Some((version.unwrap(), blockhash)),
-    ));
+    let metad = if let Some(version) = version {
+        async_std::task::block_on(get_desub_metadata(&url, Some((version, blockhash))))
+    } else {
+        //TODO: Should use oldest metadata
+        async_std::task::block_on(get_desub_metadata(&url, None))
+    };
     // TODO: pass metadata into fn.
     let storage = decoder::decode_storage(&metad);
     let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
@@ -1592,7 +1634,6 @@ async fn get_events_for_block(
     let filename = format!("{}/{}.events", events_path, blocknum);
     let bytes = if let Ok(contents) = std::fs::read(&filename) {
         // println!("cache hit events!");
-        println!("{} len {} as hex", blocknum, contents.len());
         Some(hex::decode(contents).unwrap())
     } else {
         println!("cache miss events!");
@@ -1822,17 +1863,17 @@ async fn get_events_for_block(
                         let mailbox = sender2.get(&para_id);
                         if let Some(mailbox) = mailbox {
                             let hash = H256::from_slice(hash.as_slice());
-                            mailbox.send((blocknum, hash)).unwrap();
-                            println!("block hash sent at {} ", blocknum);
+                            if let Err(err) = mailbox.send((blocknum, hash)) {
+                                println!(
+                                    "block hash failed to send at {} error: {}",
+                                    blocknum, err
+                                );
+                            } else {
+                                // println!("block hash sent at {} ", blocknum);
+                            }
                         }
                     }
                 }
-
-                // println!("events count {}!", events.len());
-                println!(
-                    "got event oh yeeet, wee yoloing!!! {}",
-                    hex::encode(blockhash.as_bytes())
-                );
 
                 // let mut handle = tx.lock().unwrap();
                 // let current = handle.0.entry(
@@ -1890,11 +1931,11 @@ pub async fn watch_events(
         //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
         {
             if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
-                let mut blocknum = 1;
+                // let mut blocknum = 1;
                 while let Some(events) = event_sub.next().await {
                     let events = events?;
                     let blockhash = events.block_hash();
-                    blocknum += 1;
+                    // blocknum += 1;
 
                     let mut data_events = vec![];
 
@@ -1903,7 +1944,7 @@ pub async fn watch_events(
                         let mut end_link = vec![];
                         let mut details = Details::default();
                         details.doturl = DotUrl {
-                            block_number: Some(blocknum),
+                            // block_number: Some(blocknum),
                             event: Some(event_index as u32),
                             ..parachain_url.clone()
                         };
@@ -1998,7 +2039,7 @@ pub async fn watch_events(
                             .0
                             .entry(hex::encode(blockhash.as_bytes()))
                             .or_insert(PolkaBlock {
-                                blocknum,
+                                blocknum: None,
                                 blockhash,
                                 extrinsics: vec![],
                                 events: data_events.clone(),
@@ -2064,49 +2105,6 @@ pub fn associate_events(
     ext
     //leftovers in events should be utils..
 }
-
-// fn get_metadata_ver(block_number: u32, url: &str) -> Option<u32>{
-//     match url {
-//         "wss://rpc.polkadot.io:443" => {
-//             let nums = vec![
-//             0,
-//             29231,
-//             188836,
-//             199405,
-//             214264,
-//             244358,
-//             303079,
-//             314201,
-//             342400,
-//             443963,
-//             528470,
-//             687751,
-//             746085,
-//             787923,
-//             799302,
-//             1205128,
-//             1603423,
-//             1733218,
-//             2005673,
-//             2436698,
-//             3613564,
-//             3899547,
-//             4345767,
-//             4876134,
-//             5661442,
-//             6321619,
-//             6713249
-//             ];
-
-//             for i in 1..nums.len() {
-//                 if nums[i] > block_number { return Some((i - 1) as u32) }
-//             }
-//             return Some((nums.len() - 1) as u32);
-//         },
-//         _  => { None }
-//     }
-
-// }
 
 #[cfg(test)]
 mod tests {
@@ -2301,7 +2299,8 @@ mod tests {
             .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
         let blockhash = block_on(get_block_hash(&api, &url, 1000_000)).unwrap();
 
-        let results = block_on(get_extrinsics(1000_000, url, &api, blockhash));
+        let (_block_num, results) =
+            block_on(get_extrinsics(1000_000, url, &api, blockhash)).unwrap();
 
         let metad = block_on(get_desub_metadata(&url, None));
         if let Ok(extrinsic) =
