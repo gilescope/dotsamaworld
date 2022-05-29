@@ -1,12 +1,10 @@
 use super::polkadot;
 use crate::polkadot::runtime_types::xcm::VersionedXcm;
-use crate::ui::details::Success;
 use crate::ui::DotUrl;
 use crate::ABlocks;
 use crate::DataEntity;
 use crate::DataEvent;
 use crate::Details;
-use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
 use bevy::prelude::warn;
 use desub_current::value::*;
@@ -24,8 +22,6 @@ use subxt::rpc::ClientT;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
-// use subxt::EventDetails;
-// use subxt::RawEventDetails;
 
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
@@ -211,22 +207,6 @@ fn flattern<T>(
     }
 }
 
-// fn iter(composite: &desub_current::ValueDef<T>) {
-//     match composite.value {
-//         ValueDef::Composite(Composite::Named(named)) =>  {
-
-//         }
-//         ValueDef::Composite(Composite::Unnamed(unnamed))  => {
-
-//         }
-//         ValueDef::Variant(_) => todo!(),
-//         ValueDef::BitSequence(_) => { }, //not supported
-//         ValueDef::Primitive(_) => {
-//             //skipping
-//         },
-
-//     }
-// }
 lazy_static! {
     static ref PARA_ID_TO_NAME: RwLock<HashMap<(String, NonZeroU32), String>> =
         RwLock::new(HashMap::new());
@@ -372,7 +352,7 @@ pub fn get_cached_parachain_id(url: &str) -> Option<NonZeroU32> {
     }
 }
 
-pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>,()> {
+pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>, ()> {
     if let Some(cached_id) = get_cached_parachain_id(url) {
         return Ok(Some(cached_id));
     }
@@ -388,7 +368,7 @@ pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>,()> {
     }
     // Some(std::num::NonZeroU32::try_from(3).unwrap())
 }
-use sp_core::Hasher;
+
 async fn get_metadata_version<T: subxt::Config>(
     client: &subxt::Client<T>,
     url: &str,
@@ -571,38 +551,12 @@ pub async fn watch_blocks(
             parachain_name.clone(),
         );
     }
-    //     ""), None).await?;
-    // let parachain_doturl = DotUrl{ block_number: Some(block_number), ..parachain_doturl.clone() };
-    // Fetch the metadata
-    // let bytes: subxt::Bytes = self
-    //     .client
-    //     .request("parachainInfo_getChainId", rpc_params!["0x0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f"])
-    //     .await?;
-    // let meta: RuntimeMetadataPrefixed = Decode::decode(&mut &bytes[..])?;
-    // let metadata: Metadata = meta.try_into()?;
-
-    // let store_loc = "0x0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f";
-    // let fromto =hex::decode(&store_loc.trim_start_matches("0x")).unwrap();
-    // let fromto = sp_core::H256::from_slice(fromto.as_slice());
-    // let res = api.client.rpc().query_storage(vec![], fromto, None).await?;
-    // println!("{res:?}");
-
-    // let metad: subxt::Metadata = api.client.rpc().metadata().await.unwrap();
-    // // let metabytes = metad.encode();
-
-    // std::process::exit(-1);
-    // let bytes: Bytes = api.client.rpc()
-    //         //.client
-    //         .request("state_getMetadata", rpc_params![])
-    //         .await?;
-
-    // For non-finalised blocks use `.subscribe_finalized_blocks()`
 
     if let Some(as_of) = as_of {
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
-            while let Ok((relay_block_number, block_hash)) = recieve_channel.recv() {
+            while let Ok((_relay_block_number, block_hash)) = recieve_channel.recv() {
                 // println!("block hash recieved from relay chain num {}", relay_block_number);
                 // let as_of: u32 = as_of.parse().unwrap();
 
@@ -628,17 +582,8 @@ pub async fn watch_blocks(
                         continue;
                     }
                     let metad = metad.unwrap();
-                    // let block_num = blocknum;
-                    // let block_hash = blockhash;
-                    // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
-                    //TODO decode block
-                    // if let Ok(extrinsics) =
-                    //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
+
                     {
-                        //AllExtrinsicBytes::new(&bytes).unwrap();
-                        // for extrinsics in all {
-                        // for extrinsic in extrinsics {
-                        //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
                         let mut exts = vec![];
                         for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
                             // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
@@ -674,35 +619,20 @@ pub async fn watch_blocks(
                                 println!("can't decode block ext {}-{} {}", block_number, i, &url);
                             }
                         }
-                        let ext_clone = exts.clone();
                         let mut handle = tx.lock().unwrap();
 
                         // no need to pass sender here as not re-publishing events to other parachains
                         let events =
                             get_events_for_block(&api, &url, block_hash, &None, &block_doturl)
                                 .await?;
-                        let current = handle
-                            .0
-                            .entry(hex::encode(block_hash.as_bytes()))
-                            .or_insert(PolkaBlock {
-                                blocknum: Some(block_number),
-                                blockhash: block_hash,
-                                extrinsics: exts,
-                                events,
-                            });
-                        
+                        let current = PolkaBlock {
+                            blockurl: block_doturl,
+                            blockhash: block_hash,
+                            extrinsics: exts,
+                            events,
+                        };
 
-                        // if !current.events.is_empty()
-                        //- blocks sometimes have no events in them.
-                        {
-                            let mut current = handle
-                                .0
-                                .remove(&hex::encode(block_hash.as_bytes()))
-                                .unwrap();
-                            current.extrinsics = ext_clone;
-                            handle.1.push(current);
-                        }
-                        //
+                        handle.1.push(current);
                     }
                 }
             }
@@ -715,7 +645,8 @@ pub async fn watch_blocks(
                     block_number: Some(block_number),
                     ..parachain_doturl.clone()
                 };
-                let block_hash: Option<sp_core::H256> = get_block_hash(&api, &url, block_number).await;
+                let block_hash: Option<sp_core::H256> =
+                    get_block_hash(&api, &url, block_number).await;
 
                 if block_hash.is_none() {
                     eprintln!(
@@ -735,19 +666,10 @@ pub async fn watch_blocks(
                     let metad = async_std::task::block_on(get_desub_metadata(
                         &url,
                         Some((version.unwrap(), block_hash)),
-                    )).unwrap();
+                    ))
+                    .unwrap();
 
-                    // let block_num = blocknum;
-                    // let block_hash = blockhash;
-                    // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
-                    //TODO decode block
-                    // if let Ok(extrinsics) =
-                    //     desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice())
                     {
-                        //AllExtrinsicBytes::new(&bytes).unwrap();
-                        // for extrinsics in all {
-                        // for extrinsic in extrinsics {
-                        //     println!("HHOHOHOHOHOHOHOHO my extrinsic is {:?}", extrinsic);
                         let mut exts = vec![];
                         for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
                             // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
@@ -789,7 +711,7 @@ pub async fn watch_blocks(
                             .0
                             .entry(hex::encode(block_hash.as_bytes()))
                             .or_insert(PolkaBlock {
-                                blocknum: Some(block_number),
+                                blockurl: block_url.clone(),
                                 blockhash: block_hash,
                                 extrinsics: exts,
                                 events: vec![],
@@ -806,7 +728,7 @@ pub async fn watch_blocks(
                                 .0
                                 .remove(&hex::encode(block_hash.as_bytes()))
                                 .unwrap();
-                            current.blocknum = Some(block_number); // live events does not know block num.
+                            current.blockurl = block_url;
                             current.extrinsics = ext_clone;
                             handle.1.push(current);
                         }
@@ -853,31 +775,17 @@ pub async fn watch_blocks(
                                 println!("here be dragoons. can's do extrinsic in {}", &block_hash);
                             }
                         }
-                        let ext_clone = exts.clone();
+                        // let ext_clone = exts.clone();
                         let mut handle = tx.lock().unwrap();
-                        let current = handle
-                            .0
-                            .entry(hex::encode(block_hash.as_bytes()))
-                            .or_insert(PolkaBlock {
-                                blocknum: Some(block_number),
+                        let current =
+                           PolkaBlock {
+                                 blockurl:block_doturl.clone(),
                                 blockhash: block_hash,
                                 extrinsics: exts,
-                                events: vec![],
-                            });
-                        println!("got block oh yeeet, we live yoloing!!! {} {} ", ext_clone.len() ,hex::encode(block_hash.as_bytes()));
-                        if !current.events.is_empty()  //- blocks sometimes have no events in them.
-                        {
-                            let mut current = handle.0.remove(&hex::encode(block_hash.as_bytes())).unwrap();
-                            current.extrinsics = ext_clone;
-
-                            //patch block num as live events did not know it
-                            for event in current.events.iter_mut() {
-                                event.details.doturl.block_number = Some(block_number);
-                            }
-
-                            handle.1.push(current);
-                        }
-                       //TODO: assert_eq!(block_header.hash(), block.hash());
+                                events: get_events_for_block(&api, &url, block_hash, &sender, &block_doturl)
+                                .await?,
+                            };
+                          handle.1.push(current);
                     }
                 }
             }
@@ -1338,11 +1246,8 @@ async fn process_extrisic<'a>(
                 println!("SEND MSG v0 hash {}", msg_id);
                 start_link.push(msg_id);
             }
-             println!("first time seeen");
-            println!(
-                "v2 limited_teleport_assets from {:?} to {}",
-                para_id, dest
-            );
+            println!("first time seeen");
+            println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
         } else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
             let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
             let dest: NonZeroU32 = dest.parse().unwrap();
@@ -1352,11 +1257,8 @@ async fn process_extrisic<'a>(
                 println!("SEND MSG v0 hash {}", msg_id);
                 start_link.push(msg_id);
             }
-             println!("first time seeen");
-            println!(
-                "v1 limited_teleport_assets from {:?} to {}",
-                para_id, dest
-            );
+            println!("first time seeen");
+            println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
         } else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
             let to = flat1.get(".V0.0.X1.0.AccountId32.id");
             let dest: NonZeroU32 = dest.parse().unwrap();
@@ -1366,24 +1268,19 @@ async fn process_extrisic<'a>(
                 println!("SEND MSG v0 hash {}", msg_id);
                 start_link.push(msg_id);
             }
-            println!(
-                "v0 limited_teleport_assets from {:?} to {}",
-                para_id, dest
-            );
-        } 
+            println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
+        }
 
-
-
-// println!("FLATTERN {:#?}", flat1);
-// println!("BOB");
-//          print_val(&ext.call_data.arguments[0].value);
-//          println!("BOB");
-//         print_val(&ext.call_data.arguments[1].value);
+        // println!("FLATTERN {:#?}", flat1);
+        // println!("BOB");
+        //          print_val(&ext.call_data.arguments[0].value);
+        //          println!("BOB");
+        //         print_val(&ext.call_data.arguments[1].value);
     }
 
     // Anything that looks batch like we will assume is a batch
     if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
-        check_reserve_asset(&ext.call_data.arguments, &extrinsic_url, block_number, &mut start_link, para_id).await;
+        check_reserve_asset(&ext.call_data.arguments, &extrinsic_url, &mut start_link).await;
     }
     if variant.contains("batch") {
         for arg in &ext.call_data.arguments {
@@ -1417,13 +1314,25 @@ async fn process_extrisic<'a>(
                                                 },
                                             });
 
-                                            if inner_pallet == "XcmPallet" && name == "reserve_transfer_assets"{
-                                               match values {
-                                                    Composite::Named(named)  => {
-                                                        let vec: Vec<Value<TypeId>> = named.iter().map(|(n,v)|v.clone()).collect();
-                                                        check_reserve_asset(&vec, &extrinsic_url, block_number, &mut start_link, para_id).await;
+                                            if inner_pallet == "XcmPallet"
+                                                && name == "reserve_transfer_assets"
+                                            {
+                                                match values {
+                                                    Composite::Named(named) => {
+                                                        let vec: Vec<Value<TypeId>> = named
+                                                            .iter()
+                                                            .map(|(_n, v)| v.clone())
+                                                            .collect();
+                                                        check_reserve_asset(
+                                                            &vec,
+                                                            &extrinsic_url,
+                                                            &mut start_link,
+                                                        )
+                                                        .await;
                                                     }
-                                                     Composite::Unnamed(named)  => {panic!("unexpected");}
+                                                    Composite::Unnamed(_named) => {
+                                                        panic!("unexpected");
+                                                    }
                                                 }
                                             }
                                         }
@@ -1477,7 +1386,11 @@ async fn process_extrisic<'a>(
     // let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode extrinsic");
 }
 use desub_current::TypeId;
-async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &DotUrl, block_number: u32, start_link: &'b mut Vec<String>, para_id: Option<NonZeroU32>) {
+async fn check_reserve_asset<'a, 'b>(
+    args: &Vec<Value<TypeId>>,
+    extrinsic_url: &DotUrl,
+    start_link: &'b mut Vec<String>,
+) {
     let mut flat0 = HashMap::new();
     flattern(&args[0].value, "", &mut flat0);
     // println!("FLATTERN {:#?}", flat0);
@@ -1490,114 +1403,70 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
         println!("first time!");
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        // let name = if let Some(name) = PARA_ID_TO_NAME
-        //     .read()
-        //     .await
-        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        // {
-        //     name.clone()
-        // } else {
-        //     "unknown".to_string()
-        // };
-       
+
         if let Some(to) = to {
-            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            let msg_id = format!(
+                "{}-{}",
+                extrinsic_url.block_number.unwrap(),
+                please_hash(to)
+            );
             println!("SEND MSG v2 hash {}", msg_id);
             start_link.push(msg_id);
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
-            para_id, dest
+            extrinsic_url.para_id, dest
         );
-
-        // if ext.call_data.arguments.len() > 1 {
-        //     let mut results = HashMap::new();
-        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-        //     println!("FLATTERN DEST2 {:#?}", results);
-        //     println!("ARGS {:?}", ext.call_data.arguments);
-        // } else {
-        //     warn!("expected more params...");
-        // }
     }
     if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
         let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        // let name = if let Some(name) = PARA_ID_TO_NAME
-        //     .read()
-        //     .await
-        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        // {
-        //     name.clone()
-        // } else {
-        //     "unknown".to_string()
-        // };
-        
 
         if let Some(to) = to {
-            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            let msg_id = format!(
+                "{}-{}",
+                extrinsic_url.block_number.unwrap(),
+                please_hash(to)
+            );
             println!("SEND MSG v1 hash {}", msg_id);
             start_link.push(msg_id);
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
-            para_id, dest
+            extrinsic_url.para_id, dest
         );
-
-        // if ext.call_data.arguments.len() > 1 {
-        //     let mut results = HashMap::new();
-        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-        //     println!("FLATTERN DEST2 {:#?}", results);
-        //     println!("ARGS {:?}", ext.call_data.arguments);
-        // } else {
-        //     warn!("expected more params...");
-        // }
     }
     if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
         let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        // let name = if let Some(name) = PARA_ID_TO_NAME
-        //     .read()
-        //     .await
-        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        // {
-        //     name.clone()
-        // } else {
-        //     "unknown".to_string()
-        // };
-      
 
         if let Some(to) = to {
-            let msg_id = format!("{}-{}", block_number, please_hash(to));
+            let msg_id = format!(
+                "{}-{}",
+                extrinsic_url.block_number.unwrap(),
+                please_hash(to)
+            );
             println!("SEND MSG v0 hash {}", msg_id);
             start_link.push(msg_id);
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
-            para_id, dest
+            extrinsic_url.para_id, dest
         );
-
-        // if ext.call_data.arguments.len() > 1 {
-        //     let mut results = HashMap::new();
-        //     flattern(&ext.call_data.arguments[1].value, "",&mut results);
-        //     println!("FLATTERN DEST2 {:#?}", results);
-        //     println!("ARGS {:?}", ext.call_data.arguments);
-        // } else {
-        //     warn!("expected more params...");
-        // }
     }
 }
 
 pub struct PolkaBlock {
-    pub blocknum: Option<u32>,
+    pub blockurl: DotUrl,
+    // pub blocknum: Option<u32>,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
 }
-use core::slice::SlicePattern;
 
 async fn get_events_for_block(
     api: &polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
@@ -1623,7 +1492,8 @@ async fn get_events_for_block(
     } else {
         //TODO: Should use oldest metadata
         async_std::task::block_on(get_desub_metadata(&url, None))
-    }.unwrap();
+    }
+    .unwrap();
     // TODO: pass metadata into fn.
     let storage = decoder::decode_storage(&metad);
     let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
@@ -1662,7 +1532,8 @@ async fn get_events_for_block(
         let version = get_metadata_version(&api.client, &url, blockhash, blocknum)
             .await
             .unwrap();
-        let metad = async_std::task::block_on(get_desub_metadata(url, Some((version, blockhash)))).unwrap();
+        let metad =
+            async_std::task::block_on(get_desub_metadata(url, Some((version, blockhash)))).unwrap();
 
         if let Ok(val) =
             decoder::decode_value_by_id(&metad, &events_entry.ty, &mut events_raw.as_slice())
@@ -1910,157 +1781,157 @@ async fn get_events_for_block(
     Ok(data_events)
 }
 
-pub async fn watch_events(
-    tx: ABlocks,
-    url: &str,
-    as_of: Option<u32>,
-    parachain_url: DotUrl,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let urlhash = please_hash(&url);
-    let events_path = format!("target/{urlhash}.metadata.scale.events");
-    let _ = std::fs::create_dir(&events_path);
+// pub async fn watch_events(
+//     tx: ABlocks,
+//     url: &str,
+//     as_of: Option<u32>,
+//     parachain_url: DotUrl,
+// ) -> Result<(), Box<dyn std::error::Error>> {
+//     let urlhash = please_hash(&url);
+//     let events_path = format!("target/{urlhash}.metadata.scale.events");
+//     let _ = std::fs::create_dir(&events_path);
 
-    let client: subxt::Client<subxt::DefaultConfig> =
-        ClientBuilder::new().set_url(url).build().await?;
-    let api =
-        client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+//     let client: subxt::Client<subxt::DefaultConfig> =
+//         ClientBuilder::new().set_url(url).build().await?;
+//     let api =
+//         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
 
-    if let Some(_as_of) = as_of {
-        // This is done by the blocks.
-    } else {
-        // let api = client
-        //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-        {
-            if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
-                // let mut blocknum = 1;
-                while let Some(events) = event_sub.next().await {
-                    let events = events?;
-                    let blockhash = events.block_hash();
-                    // blocknum += 1;
+//     if let Some(_as_of) = as_of {
+//         // This is done by the blocks.
+//     } else {
+//         // let api = client
+//         //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+//         {
+//             if let Ok(mut event_sub) = api.events().subscribe_finalized().await {
+//                 // let mut blocknum = 1;
+//                 while let Some(events) = event_sub.next().await {
+//                     let events = events?;
+//                     let blockhash = events.block_hash();
+//                     // blocknum += 1;
 
-                    let mut data_events = vec![];
+//                     let mut data_events = vec![];
 
-                    for (event_index, ev_raw) in events.iter_raw().enumerate() {
-                        let start_link = vec![];
-                        let mut end_link = vec![];
-                        let mut details = Details::default();
-                        details.doturl = DotUrl {
-                            // block_number: Some(blocknum),
-                            event: Some(event_index as u32),
-                            ..parachain_url.clone()
-                        };
-                        if let Ok(ev) = &ev_raw {
-                            details.pallet = ev.pallet.clone();
-                            details.variant = ev.variant.clone();
+//                     for (event_index, ev_raw) in events.iter_raw().enumerate() {
+//                         let start_link = vec![];
+//                         let mut end_link = vec![];
+//                         let mut details = Details::default();
+//                         details.doturl = DotUrl {
+//                             // block_number: Some(blocknum),
+//                             event: Some(event_index as u32),
+//                             ..parachain_url.clone()
+//                         };
+//                         if let Ok(ev) = &ev_raw {
+//                             details.pallet = ev.pallet.clone();
+//                             details.variant = ev.variant.clone();
 
-                            if let subxt::Phase::ApplyExtrinsic(ext) = ev.phase {
-                                details.parent = Some(ext);
-                            }
+//                             if let subxt::Phase::ApplyExtrinsic(ext) = ev.phase {
+//                                 details.parent = Some(ext);
+//                             }
 
-                            if details.pallet == "XcmPallet" && details.variant == "Attempted" {
-                                // use crate::polkadot::runtime_types::xcm::v2::traits::Error;
-                                use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO version
-                                let result = <Outcome as Decode>::decode(&mut ev.data.as_slice());
-                                if let Ok(outcome) = &result {
-                                    match outcome {
-                                        Outcome::Complete(_) => details.success = Success::Happy,
-                                        Outcome::Incomplete(_, _) => {
-                                            details.success = Success::Worried
-                                        }
-                                        Outcome::Error(_) => details.success = Success::Sad,
-                                    }
-                                }
-                                details.flattern = format!("{:#?}", result);
-                            }
-                            if details.pallet == "XcmPallet"
-                                && details.variant == "ReserveAssetDeposited"
-                            {
-                                println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
-                                println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
-                                println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
-                                println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
-                                println!("got here rnrtnrtrtnrt");
-                                println!("{:#?}", details);
-                            }
+//                             if details.pallet == "XcmPallet" && details.variant == "Attempted" {
+//                                 // use crate::polkadot::runtime_types::xcm::v2::traits::Error;
+//                                 use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO version
+//                                 let result = <Outcome as Decode>::decode(&mut ev.data.as_slice());
+//                                 if let Ok(outcome) = &result {
+//                                     match outcome {
+//                                         Outcome::Complete(_) => details.success = Success::Happy,
+//                                         Outcome::Incomplete(_, _) => {
+//                                             details.success = Success::Worried
+//                                         }
+//                                         Outcome::Error(_) => details.success = Success::Sad,
+//                                     }
+//                                 }
+//                                 details.flattern = format!("{:#?}", result);
+//                             }
+//                             if details.pallet == "XcmPallet"
+//                                 && details.variant == "ReserveAssetDeposited"
+//                             {
+//                                 println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
+//                                 println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
+//                                 println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
+//                                 println!("got here WTTTTTTTTTTTTTTTTTTTTTTTtttdrnrtnrtrtnrt");
+//                                 println!("got here rnrtnrtrtnrt");
+//                                 println!("{:#?}", details);
+//                             }
 
-                            let ev = <polkadot::Event as Decode>::decode(&mut ev.data.as_slice());
-                            if let Ok(event) = ev {
-                                // println!("{:#?}", ev);
-                                // if let EventDetails { event, .. } = ev {
-                                if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
-                                    println!("got here rnrtnrtrtnrt");
-                                    println!("got here rnrtnrtrtnrt");
-                                    println!("got here rnrtnrtrtnrt");
-                                    println!("got here rnrtnrtrtnrt");
-                                    println!("got here rnrtnrtrtnrt");
-                                    println!("{:#?}", event);
+//                             let ev = <polkadot::Event as Decode>::decode(&mut ev.data.as_slice());
+//                             if let Ok(event) = ev {
+//                                 // println!("{:#?}", ev);
+//                                 // if let EventDetails { event, .. } = ev {
+//                                 if let polkadot::Event::Ump(polkadot::runtime_types::polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref msg, ..)) = event { //.pallet == "Ump" && ev.variant == "ExecutedUpward" {
+//                                     println!("got here rnrtnrtrtnrt");
+//                                     println!("got here rnrtnrtrtnrt");
+//                                     println!("got here rnrtnrtrtnrt");
+//                                     println!("got here rnrtnrtrtnrt");
+//                                     println!("got here rnrtnrtrtnrt");
+//                                     println!("{:#?}", event);
 
-                                    // Hypothesis: there's no sent_at because it would be the sent at of the individual chain.
-                                    // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
-                                    // TL/DR: we have to wait before we can match up things going upwards...
+//                                     // Hypothesis: there's no sent_at because it would be the sent at of the individual chain.
+//                                     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
+//                                     // TL/DR: we have to wait before we can match up things going upwards...
 
-                                    // blockhash of the recieving block would be incorrect.
-                                    let received_hash = format!("{}",hex::encode(msg));
-                                    println!("recieved UMP hash {}", &received_hash);
-                                    end_link.push(received_hash);
-                                    // // msg is a msg id! not decodable - match against hash of original
-                                    // if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
-                                    //     println!("decodearama {:#?}!!!!", ver_msg);
-                                    // } else {
-                                    //     println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
-                                    // }
-                                }
-                            }
-                            // }
-                        }
-                        data_events.push(DataEvent {
-                            // raw: ev_raw.unwrap(),
-                            start_link,
-                            end_link,
-                            details,
-                        })
-                    }
-                    println!(
-                        "got event oh yeeet, we yoloing!!! {}",
-                        hex::encode(blockhash.as_bytes())
-                    );
-                    // tx.lock().unwrap().0.insert(
-                    //     hex::encode(blockhash.as_bytes()),
-                    //     PolkaBlock {
-                    //         blocknum,
-                    //         blockhash,
-                    //         extrinsics: vec![],
-                    //         events: data_events,
-                    //     },
-                    // );
+//                                     // blockhash of the recieving block would be incorrect.
+//                                     let received_hash = format!("{}",hex::encode(msg));
+//                                     println!("recieved UMP hash {}", &received_hash);
+//                                     end_link.push(received_hash);
+//                                     // // msg is a msg id! not decodable - match against hash of original
+//                                     // if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(&mut msg.as_slice()) {
+//                                     //     println!("decodearama {:#?}!!!!", ver_msg);
+//                                     // } else {
+//                                     //     println!("booo didn't decode!!!! {}", hex::encode(msg.as_slice()));
+//                                     // }
+//                                 }
+//                             }
+//                             // }
+//                         }
+//                         data_events.push(DataEvent {
+//                             // raw: ev_raw.unwrap(),
+//                             start_link,
+//                             end_link,
+//                             details,
+//                         })
+//                     }
+//                     println!(
+//                         "got event oh yeeet, we yoloing!!! {}",
+//                         hex::encode(blockhash.as_bytes())
+//                     );
+//                     // tx.lock().unwrap().0.insert(
+//                     //     hex::encode(blockhash.as_bytes()),
+//                     //     PolkaBlock {
+//                     //         blocknum,
+//                     //         blockhash,
+//                     //         extrinsics: vec![],
+//                     //         events: data_events,
+//                     //     },
+//                     // );
 
-                    let mut handle = tx.lock().unwrap();
-                    let current =
-                        handle
-                            .0
-                            .entry(hex::encode(blockhash.as_bytes()))
-                            .or_insert(PolkaBlock {
-                                blocknum: None,
-                                blockhash,
-                                extrinsics: vec![],
-                                events: data_events.clone(),
-                            });
+//                     let mut handle = tx.lock().unwrap();
+//                     let current =
+//                         handle
+//                             .0
+//                             .entry(hex::encode(blockhash.as_bytes()))
+//                             .or_insert(PolkaBlock {
+//                                 blocknum: None,
+//                                 blockhash,
+//                                 extrinsics: vec![],
+//                                 events: data_events.clone(),
+//                             });
 
-                    if !current.extrinsics.is_empty()
-                    //- blocks sometimes have no events in them.
-                    {
-                        let mut current =
-                            handle.0.remove(&hex::encode(blockhash.as_bytes())).unwrap();
-                        current.events = data_events;
-                        handle.1.push(current);
-                    }
-                }
-            };
-        }
-    }
+//                     if !current.extrinsics.is_empty()
+//                     //- blocks sometimes have no events in them.
+//                     {
+//                         let mut current =
+//                             handle.0.remove(&hex::encode(blockhash.as_bytes())).unwrap();
+//                         current.events = data_events;
+//                         handle.1.push(current);
+//                     }
+//                 }
+//             };
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub fn associate_events(
     ext: Vec<DataEntity>,

@@ -72,7 +72,6 @@ type ABlocks = Arc<
 use crossbeam_channel::unbounded;
 
 mod networks;
-use color_eyre::eyre::Result;
 use networks::Env;
 
 pub struct DataSourceChangedEvent {
@@ -103,8 +102,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.add_plugin(SpaceMousePlugin);
 
     //app.add_plugins(DefaultPickingPlugins)
-     app.add_plugin(PickingPlugin)
-    .add_plugin(InteractablePickingPlugin)
+    app.add_plugin(PickingPlugin)
+        .add_plugin(InteractablePickingPlugin)
         // .add_plugin(HighlightablePickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         .add_plugin(InspectorPlugin::<Inspector>::new())
@@ -169,6 +168,7 @@ fn source_data(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut sovereigns: ResMut<Sovereigns>,
     details: Query<Entity, With<Details>>,
+    clean_me: Query<Entity, With<ClearMe>>,
 ) {
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
@@ -178,6 +178,9 @@ fn source_data(
         // 1. Stop existing event threads!
         // 2. remove all entities.
         for detail in details.iter() {
+            commands.entity(detail).despawn();
+        }
+        for detail in clean_me.iter() {
             commands.entity(detail).despawn();
         }
         RELAY_BLOCKS.store(0, Ordering::Relaxed);
@@ -228,7 +231,8 @@ fn source_data(
                     .finish();
 
                 // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).unwrap_or(Some(9999u32.try_into().unwrap()));
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url)
+                    .unwrap_or(Some(9999u32.try_into().unwrap()));
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
@@ -277,7 +281,8 @@ fn source_data(
             for (arc, chain_name) in relay {
                 let url = chain_name_to_url(&chain_name);
                 // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url).unwrap_or(Some(9999u32.try_into().unwrap()));
+                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url)
+                    .unwrap_or(Some(9999u32.try_into().unwrap()));
                 let (tx, rc) = unbounded();
                 relay2.push((arc, chain_name, para_id, rc));
                 if let Some(para_id) = para_id {
@@ -289,7 +294,7 @@ fn source_data(
             let mut send_map = Some(send_map); // take by only one.
 
             for (arc, chain_name, para_id, rc) in relay {
-                let lock_clone = arc.clone();
+                // let lock_clone = arc.clone();
                 let url = chain_name_to_url(&chain_name);
                 println!("url attaching to {}", url);
 
@@ -301,32 +306,6 @@ fn source_data(
                     None
                 };
 
-                // events are requested with blocks if not live.
-                if as_of.is_none() {
-                    let relay_url_clone = relay_url.clone();
-                    std::thread::spawn(move || {
-                        // let mut reconnects = 0;
-
-                        // while reconnects < 20 {
-                        println!("Connecting to {}", &url);
-                        let res = async_std::task::block_on(datasource::watch_events(
-                            lock_clone.clone(),
-                            &url,
-                            as_of,
-                            DotUrl {
-                                para_id,
-                                ..relay_url_clone
-                            },
-                            // /aybe_sender
-                        ));
-                        // if res.is_ok() { break; }
-                        // println!("Problem with {} events (retrys left {})", &url, reconnects);
-                        // std::thread::sleep(std::time::Duration::from_secs(20));
-                        // reconnects += 1;
-                        // }
-                        println!("giving up on {} for live events", url);
-                    });
-                }
 
                 // let chain_name = chain_name_clone;
                 let lock_clone = arc.clone();
@@ -362,49 +341,6 @@ fn source_data(
     }
 }
 
-// use bevy_hanabi::AccelModifier;
-// use bevy_hanabi::ColorOverLifetimeModifier;
-// use bevy_hanabi::EffectAsset;
-// use bevy_hanabi::Gradient;
-// use bevy_hanabi::ParticleEffect;
-// use bevy_hanabi::PositionSphereModifier;
-// use bevy_hanabi::Spawner;
-
-// fn setup_particles(mut effects: ResMut<Assets<EffectAsset>>) {
-//     // Define a color gradient from red to transparent black
-//     let mut gradient = Gradient::new();
-//     gradient.add_key(0.0, Vec4::new(1., 0., 0., 1.));
-//     gradient.add_key(1.0, Vec4::splat(0.));
-
-//     // Create the effect asset
-//     let effect = effects.add(
-//         EffectAsset {
-//             name: "MyEffect".to_string(),
-//             // Maximum number of particles alive at a time
-//             capacity: 32768,
-//             // Spawn at a rate of 5 particles per second
-//             spawner: Spawner::rate(5.0.into()),
-//             ..Default::default()
-//         }
-//         // On spawn, randomly initialize the position and velocity
-//         // of the particle over a sphere of radius 2 units, with a
-//         // radial initial velocity of 6 units/sec away from the
-//         // sphere center.
-//         .init(PositionSphereModifier {
-//             center: Vec3::ZERO,
-//             radius: 2.,
-//             dimension: ShapeDimension::Surface,
-//             speed: 6.0.into(),
-//         })
-//         // Every frame, add a gravity-like acceleration downward
-//         .update(AccelModifier {
-//             accel: Vec3::new(0., -3., 0.),
-//         })
-//         // Render the particles with a color gradient over their
-//         // lifetime.
-//         .render(ColorOverLifetimeModifier { gradient }),
-//     );
-// }
 
 enum BuildDirection {
     Up,
@@ -554,6 +490,9 @@ struct Sovereigns {
     pub relays: Vec<Vec<(ABlocks, String)>>,
 }
 
+#[derive(Component)]
+struct ClearMe;
+
 fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -572,7 +511,7 @@ fn render_block(
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
                     let block_num = if is_self_sovereign {
-                        block.blocknum.unwrap() as u32
+                        block.blockurl.block_number.unwrap() as u32
                     } else {
                         if rcount == 0 {
                             if chain == 0 {
@@ -604,7 +543,7 @@ fn render_block(
                         doturl: DotUrl {
                             extrinsic: None,
                             event: None,
-                            ..block.extrinsics.first().unwrap().details().doturl.clone()
+                            ..block.blockurl.clone()
                         },
 
                         url: format!(
@@ -632,7 +571,7 @@ fn render_block(
                             )),
                             ..Default::default()
                         })
-                        .insert(details.clone())
+                        .insert(details)
                         .insert(Name::new("Block"))
                         .with_children(|parent| {
                             let name = (*block_events)
@@ -681,8 +620,7 @@ fn render_block(
                                     ..default()
                                 })
                                 .insert(Name::new("BillboardDown"))
-                                .insert(details.clone())
-                                .insert_bundle(PickableBundle::default());
+                                .insert(ClearMe);
                             // by adding Details to the banners they are cleared down when we remove every entity with Details.
 
                             // create a new quad mesh. this is what we will apply the texture to
@@ -724,8 +662,7 @@ fn render_block(
                                     "BillboardUp {}",
                                     block_events.2.chain_name
                                 )))
-                                .insert(details)
-                                .insert_bundle(PickableBundle::default()); // TODO: should be able to add same component onto 3 different entities maybe?
+                                .insert(ClearMe); // TODO: should be able to add same component onto 3 different entities maybe?
 
                             block_events.2.inserted_pic = true;
                         })
@@ -874,14 +811,11 @@ fn add_blocks<'a>(
 
                 let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
-                let mut found = false;
-
                 let mut create_source = vec![];
                 for link in block.end_link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {
-                            found = true;
                             println!("creating rainbow!");
 
                             let mut vertices = vec![
@@ -899,19 +833,21 @@ fn add_blocks<'a>(
                             ];
                             for color in colors.into_iter() {
                                 // Create rainbow from entity to current extrinsic location.
-                                commands.spawn_bundle(PolylineBundle {
-                                    polyline: polylines.add(Polyline {
-                                        vertices: vertices.clone(),
+                                commands
+                                    .spawn_bundle(PolylineBundle {
+                                        polyline: polylines.add(Polyline {
+                                            vertices: vertices.clone(),
+                                            ..Default::default()
+                                        }),
+                                        material: polyline_materials.add(PolylineMaterial {
+                                            width: 10.0,
+                                            color,
+                                            perspective: true,
+                                            ..Default::default()
+                                        }),
                                         ..Default::default()
-                                    }),
-                                    material: polyline_materials.add(PolylineMaterial {
-                                        width: 10.0,
-                                        color,
-                                        perspective: true,
-                                        ..Default::default()
-                                    }),
-                                    ..Default::default()
-                                });
+                                    })
+                                    .insert(ClearMe);
 
                                 for v in vertices.iter_mut() {
                                     v.y += 0.5;
@@ -1362,7 +1298,7 @@ impl Inspectable for UrlBar {
                 ui.end_row();
                 if ui.button("Live").clicked() {
                     self.changed = true;
-                    self.location = "///".into();
+                    self.location = "dotsama:/1//".into();
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();
@@ -1372,35 +1308,6 @@ impl Inspectable for UrlBar {
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();
-                // ui.label("Method");
-                // changed |= self
-                //     .variant
-                //     .ui(ui, StringAttributes { multiline: false }, context);
-                // ui.end_row();
-                // changed |= self
-                //     .parent.unwrap_or_default()
-                //     .ui(ui, NumberAttributes::default(), context);
-                // ui.end_row();
-                // changed |= self
-                //     .hover
-                //     .ui(ui, StringAttributes { multiline: true }, context);
-                // ui.end_row();
-                // changed |= self
-                //     .flattern
-                //     .ui(ui, StringAttributes { multiline: true }, context);
-                // ui.end_row();
-                // ui.label("Rotation");
-                // changed |= self.rotation.ui(ui, Default::default(), context);
-                // self.rotation = self.rotation.normalize();
-                // ui.end_row();
-
-                // ui.label("Scale");
-                // let scale_attributes = NumberAttributes {
-                //     min: Some(Vec3::splat(0.0)),
-                //     ..Default::default()
-                // };
-                // changed |= self.scale.ui(ui, scale_attributes, context);
-                // ui.end_row();
             });
         });
         changed

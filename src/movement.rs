@@ -13,7 +13,7 @@ use bevy::window::Windows;
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
 #[cfg(feature = "normalmouse")]
-use bevy_flycam::{FlyCam, MovementSettings};
+use bevy_flycam::MovementSettings;
 
 pub struct MouseCapture(pub bool);
 
