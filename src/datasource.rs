@@ -522,12 +522,6 @@ pub async fn watch_blocks(
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // use core::slice::SlicePattern;
-    // use scale_info::form::PortableForm;
-    // use std::hash::Hasher;
-    // let mut hasher = DefaultHasher::default();
-    // url.hash(&mut hasher);
-    // let metad = get_desub_metadata(&url, None).await;
     let para_id = parachain_doturl.para_id.clone();
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
 
@@ -557,94 +551,11 @@ pub async fn watch_blocks(
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
             while let Ok((_relay_block_number, block_hash)) = recieve_channel.recv() {
-                // println!("block hash recieved from relay chain num {}", relay_block_number);
-                // let as_of: u32 = as_of.parse().unwrap();
-
-                // let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number).await.unwrap();
-
-                if let Ok((block_number, extrinsics)) = get_extrinsics(&url, &api, block_hash).await
-                {
-                    let block_doturl = DotUrl {
-                        block_number: Some(block_number),
-                        ..parachain_doturl.clone()
-                    };
-
-                    let version =
-                        get_metadata_version(&api.client, &url, block_hash, block_number).await;
-                    let metad = if let Some(version) = version {
-                        get_desub_metadata(&url, Some((version, block_hash))).await
-                    } else {
-                        //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
-                        get_desub_metadata(&url, None).await
-                    };
-                    if metad.is_none() {
-                        //println!("skip")
-                        continue;
-                    }
-                    let metad = metad.unwrap();
-
-                    {
-                        let mut exts = vec![];
-                        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
-                            // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-                            let ex_slice =
-                                <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                                    .unwrap()
-                                    .0;
-
-                            // let ex_slice = &ext_bytes.0;
-                            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(
-                                &metad,
-                                &mut ex_slice.as_slice(),
-                            ) {
-                                // let ext_bytes = ext_bytes.encode();
-                                let entity = process_extrisic(
-                                    // &relay_id,
-                                    // &metad,
-                                    // para_id,
-                                    // block_number,
-                                    // block_hash,
-                                    (ex_slice).clone(),
-                                    &extrinsic,
-                                    DotUrl {
-                                        extrinsic: Some(i as u32),
-                                        ..block_doturl.clone()
-                                    },
-                                )
-                                .await;
-                                if let Some(entity) = entity {
-                                    exts.push(entity);
-                                }
-                            } else {
-                                println!("can't decode block ext {}-{} {}", block_number, i, &url);
-                            }
-                        }
-                        let mut handle = tx.lock().unwrap();
-
-                        // no need to pass sender here as not re-publishing events to other parachains
-                        let events =
-                            get_events_for_block(&api, &url, block_hash, &None, &block_doturl)
-                                .await?;
-                        let current = PolkaBlock {
-                            blockurl: block_doturl,
-                            blockhash: block_hash,
-                            extrinsics: exts,
-                            events,
-                        };
-
-                        handle.1.push(current);
-                    }
-                }
+                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender).await;
             }
         } else {
             // Relay chain
-
-            //let as_of: u32 = as_of.parse().unwrap();
             for block_number in as_of.. {
-                let block_url = DotUrl {
-                    block_number: Some(block_number),
-                    ..parachain_doturl.clone()
-                };
                 let block_hash: Option<sp_core::H256> =
                     get_block_hash(&api, &url, block_number).await;
 
@@ -656,84 +567,7 @@ pub async fn watch_blocks(
                     continue;
                 }
                 let block_hash = block_hash.unwrap();
-                if let Ok((got_block_num, extrinsics)) =
-                    get_extrinsics(&url, &api, block_hash).await
-                {
-                    assert_eq!(block_number, got_block_num);
-
-                    let version =
-                        get_metadata_version(&api.client, &url, block_hash, block_number).await;
-                    let metad = async_std::task::block_on(get_desub_metadata(
-                        &url,
-                        Some((version.unwrap(), block_hash)),
-                    ))
-                    .unwrap();
-
-                    {
-                        let mut exts = vec![];
-                        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
-                            // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-                            let ex_slice =
-                                <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                                    .unwrap()
-                                    .0;
-
-                            // let ex_slice = &ext_bytes.0;
-                            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(
-                                &metad,
-                                &mut ex_slice.as_slice(),
-                            ) {
-                                // let ext_bytes = ext_bytes.encode();
-                                let entity = process_extrisic(
-                                    // &relay_id,
-                                    // &metad,
-                                    // para_id,
-                                    // block_number,
-                                    // block_hash,
-                                    (ex_slice).clone(),
-                                    &extrinsic,
-                                    DotUrl {
-                                        extrinsic: Some(i as u32),
-                                        ..block_url.clone()
-                                    },
-                                )
-                                .await;
-                                if let Some(entity) = entity {
-                                    exts.push(entity);
-                                }
-                            } else {
-                                println!("can't decode block ext {}-{} {}", block_number, i, &url);
-                            }
-                        }
-                        let ext_clone = exts.clone();
-                        let mut handle = tx.lock().unwrap();
-                        let current = handle
-                            .0
-                            .entry(hex::encode(block_hash.as_bytes()))
-                            .or_insert(PolkaBlock {
-                                blockurl: block_url.clone(),
-                                blockhash: block_hash,
-                                extrinsics: exts,
-                                events: vec![],
-                            });
-
-                        current.events =
-                            get_events_for_block(&api, &url, block_hash, &sender, &block_url)
-                                .await?;
-
-                        // if !current.events.is_empty()
-                        //- blocks sometimes have no events in them.
-                        {
-                            let mut current = handle
-                                .0
-                                .remove(&hex::encode(block_hash.as_bytes()))
-                                .unwrap();
-                            current.blockurl = block_url;
-                            current.extrinsics = ext_clone;
-                            handle.1.push(current);
-                        }
-                    }
-                }
+                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender).await;
                 std::thread::sleep(std::time::Duration::from_secs(6));
             }
         }
@@ -782,7 +616,7 @@ pub async fn watch_blocks(
                                  blockurl:block_doturl.clone(),
                                 blockhash: block_hash,
                                 extrinsics: exts,
-                                events: get_events_for_block(&api, &url, block_hash, &sender, &block_doturl)
+                                events: get_events_for_block( &api, &url, block_hash, &sender, &block_doturl)
                                 .await?,
                             };
                           handle.1.push(current);
@@ -793,12 +627,86 @@ pub async fn watch_blocks(
             reconnects += 1;
             client = ClientBuilder::new().set_url(&url).build().await?;
             api = client
-                .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
-                );
+                .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
         }
     }
     Ok(())
 }
+
+async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H256, url: &str, 
+    api: &RuntimeApi<
+        DefaultConfig,
+        DefaultExtraWithTxPayment<
+            DefaultConfig,
+            subxt::extrinsic::ChargeTransactionPayment<DefaultConfig>,
+        >,
+    >, sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>) -> Result<(),()>{
+    if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await
+    {
+        blockurl.block_number = Some(got_block_num);
+        let block_number = blockurl.block_number.unwrap();
+
+        let version =
+            get_metadata_version(&api.client, &url, block_hash, block_number).await;
+        let metad = if let Some(version) = version {
+            get_desub_metadata(&url, Some((version, block_hash))).await
+        } else {
+            //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
+            get_desub_metadata(&url, None).await
+        };
+        if metad.is_none() {
+            //println!("skip")
+            return Err(());
+        }
+        let metad = metad.unwrap();
+
+        let mut exts = vec![];
+        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+            // let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
+            let ex_slice =
+                <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                    .unwrap()
+                    .0;
+
+            // let ex_slice = &ext_bytes.0;
+            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(
+                &metad,
+                &mut ex_slice.as_slice(),
+            ) {
+                let entity = process_extrisic(
+                    (ex_slice).clone(),
+                    &extrinsic,
+                    DotUrl {
+                        extrinsic: Some(i as u32),
+                        ..blockurl.clone()
+                    },
+                )
+                .await;
+                if let Some(entity) = entity {
+                    exts.push(entity);
+                }
+            } else {
+                println!("can't decode block ext {}-{} {}", block_number, i, &url);
+            }
+        }
+        let events = get_events_for_block(&api, &url, block_hash, &sender, &blockurl)
+                .await.or(Err(()))?;
+        
+        let mut handle = tx.lock().unwrap();
+        let current = PolkaBlock {
+                blockurl,
+                blockhash: block_hash,
+                extrinsics: exts,
+                events,
+            };
+
+        //- blocks sometimes have no events in them.
+        handle.1.push(current);
+    }
+    Ok(())
+}
+
+
 
 // fetches extrinsics from node for a block number (wrapped by a file cache).
 async fn get_extrinsics(

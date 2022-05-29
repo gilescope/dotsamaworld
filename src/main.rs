@@ -306,7 +306,6 @@ fn source_data(
                     None
                 };
 
-
                 // let chain_name = chain_name_clone;
                 let lock_clone = arc.clone();
                 let relay_url_clone = relay_url.clone();
@@ -340,7 +339,6 @@ fn source_data(
         }
     }
 }
-
 
 enum BuildDirection {
     Up,
