@@ -239,7 +239,7 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
     hasher.finish()
 }
 
-async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Metadata {
+async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Option<Metadata> {
     let hash = please_hash(&url);
     let mut params = None;
 
@@ -294,8 +294,11 @@ async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Metad
         .unwrap()
     };
 
-    Metadata::from_bytes(&metadata_bytes)
-        .expect(&format!("should be able to get metadata from {}", &url))
+    let result = Metadata::from_bytes(&metadata_bytes);
+    if result.is_err() {
+        eprintln!("should be able to get metadata from {}", &url);
+    }
+    result.ok()
 }
 
 pub async fn get_parachain_id<T: subxt::Config>(
@@ -620,6 +623,11 @@ pub async fn watch_blocks(
                         //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
                         get_desub_metadata(&url, None).await
                     };
+                    if metad.is_none() {
+                        //println!("skip")
+                        continue;
+                    }
+                    let metad = metad.unwrap();
                     // let block_num = blocknum;
                     // let block_hash = blockhash;
                     // if let Ok(extrinsics) = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice())
@@ -707,13 +715,16 @@ pub async fn watch_blocks(
                     block_number: Some(block_number),
                     ..parachain_doturl.clone()
                 };
-                let block_hash: sp_core::H256 = get_block_hash(&api, &url, block_number)
-                    .await
-                    .expect(&format!(
-                        "should be able to get hash for block num {} of url {}",
-                        block_number, &url
-                    ));
+                let block_hash: Option<sp_core::H256> = get_block_hash(&api, &url, block_number).await;
 
+                if block_hash.is_none() {
+                    eprintln!(
+                        "should be able to get from relay chain hash for block num {} of url {}",
+                        block_number, &url
+                    );
+                    continue;
+                }
+                let block_hash = block_hash.unwrap();
                 if let Ok((got_block_num, extrinsics)) =
                     get_extrinsics(&url, &api, block_hash).await
                 {
@@ -724,7 +735,7 @@ pub async fn watch_blocks(
                     let metad = async_std::task::block_on(get_desub_metadata(
                         &url,
                         Some((version.unwrap(), block_hash)),
-                    ));
+                    )).unwrap();
 
                     // let block_num = blocknum;
                     // let block_hash = blockhash;
@@ -822,6 +833,9 @@ pub async fn watch_blocks(
                     let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
                     let metad =
                         async_std::task::block_on(get_desub_metadata(&url, Some((version.unwrap(), block_hash))));
+                    if metad.is_none() { continue; }
+                    let metad = metad.unwrap();
+
                     if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
                         // println!("block hash! {}", block_hash.to_string());
                         let mut exts = vec![];
@@ -1308,72 +1322,68 @@ async fn process_extrisic<'a>(
         }
     }
 
+    if pallet == "XcmPallet" && variant == "limited_teleport_assets" {
+        let mut flat0 = HashMap::new();
+        flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
+        // println!("FLATTERN {:#?}", flat0);
+        let mut flat1 = HashMap::new();
+        flattern(&ext.call_data.arguments[1].value, "", &mut flat1);
+
+        if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+            let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+            let dest: NonZeroU32 = dest.parse().unwrap();
+
+            if let Some(to) = to {
+                let msg_id = format!("{}-{}", block_number, please_hash(to));
+                println!("SEND MSG v0 hash {}", msg_id);
+                start_link.push(msg_id);
+            }
+             println!("first time seeen");
+            println!(
+                "v2 limited_teleport_assets from {:?} to {}",
+                para_id, dest
+            );
+        } else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+            let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
+            let dest: NonZeroU32 = dest.parse().unwrap();
+
+            if let Some(to) = to {
+                let msg_id = format!("{}-{}", block_number, please_hash(to));
+                println!("SEND MSG v0 hash {}", msg_id);
+                start_link.push(msg_id);
+            }
+             println!("first time seeen");
+            println!(
+                "v1 limited_teleport_assets from {:?} to {}",
+                para_id, dest
+            );
+        } else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+            let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+            let dest: NonZeroU32 = dest.parse().unwrap();
+
+            if let Some(to) = to {
+                let msg_id = format!("{}-{}", block_number, please_hash(to));
+                println!("SEND MSG v0 hash {}", msg_id);
+                start_link.push(msg_id);
+            }
+            println!(
+                "v0 limited_teleport_assets from {:?} to {}",
+                para_id, dest
+            );
+        } 
+
+
+
+// println!("FLATTERN {:#?}", flat1);
+// println!("BOB");
+//          print_val(&ext.call_data.arguments[0].value);
+//          println!("BOB");
+//         print_val(&ext.call_data.arguments[1].value);
+    }
+
     // Anything that looks batch like we will assume is a batch
     if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
         check_reserve_asset(&ext.call_data.arguments, &extrinsic_url, block_number, &mut start_link, para_id).await;
-
-        //                                 print_val(&ext.call_data.arguments[0].value);
-        //                                 println!("Got here!!!!!");
-        //                                 println!("{:#?}", &ext.call_data.arguments[0].value);
-
-        //                                 let v = &ext.call_data.arguments[0];
-        //                                 match &v.value {
-        //                                     // ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
-        //                                     //     for v in chars_vals {
-        //                                     //         match &v.value {
-        //                                     //             ValueDef::Variant(Variant {
-        //                                     //                 ref name,//V1
-        //                                     //                 values: Composite::Unnamed(chars_vals),
-        //                                     //             }) => {
-        //                                     //                 for v in chars_vals {
-        //                                     //                     match &v.value {
-        //                                     //                         ValueDef::Variant(Variant {
-        //                                     //                             name,
-        //                                     //                             values,
-        //                                     //                         }) => {
-        //                                     //                             println!("{pallet} {variant} has it {name}");
-        //                                     //                         }
-        //                                     //                         _ => {
-        //                                     //                             println!("miss3");
-        //                                     //                         }
-        //                                     //                     }
-        //                                     //                 }
-
-        //                                     //             }
-        //                                     //             _ => {
-        //                                     //                  println!("inner miss");
-        //                                     //                  print_val(&v.value);
-        //                                     //             }
-        //                                     //         }
-        //                                     //     }
-        //                                     // },
-        //                                     ValueDef::Variant(Variant{ name, values:Composite::Unnamed(values)})  => {
-        //                                         // println!("{} but expecetd V1", var.name);
-        //                                         // if let ValueDef::Composite(()) = values {
-        //                                         for v in values {
-        //                                             match &v.value {
-        //                                                 ValueDef::Variant(Variant {
-        //                                                     name,
-        //                                                     values,
-        //                                                 }) => {
-        //                                                     println!("{pallet} {variant} has it {name}");
-        //                                                 }
-        //                                                 _ => {
-        //                                                     println!("misshchg3");
-        //                                                 }
-        //                                             }
-        //                                         }
-        //                                     // }
-        //                                     }
-        //                                     _ => {
-        //                                          println!("inner misshh");
-        //                                          print_val(&v.value);
-        //                                     }
-        //                                 }
-
-        //                                 panic!(
-        // "op"
-        //                                 );
     }
     if variant.contains("batch") {
         for arg in &ext.call_data.arguments {
@@ -1408,22 +1418,13 @@ async fn process_extrisic<'a>(
                                             });
 
                                             if inner_pallet == "XcmPallet" && name == "reserve_transfer_assets"{
-                                                println!("HELL YEAH");
-                                                match values {
+                                               match values {
                                                     Composite::Named(named)  => {
-//                                                        for (name, values) in named {
-                                                            // print_val(&values.value);
-                                                            let vec: Vec<Value<TypeId>> = named.iter().map(|(n,v)|v.clone()).collect();
-                                                        check_reserve_asset(&vec,
-                                                         &extrinsic_url, block_number, &mut start_link, para_id).await;
-   //                                                     }
+                                                        let vec: Vec<Value<TypeId>> = named.iter().map(|(n,v)|v.clone()).collect();
+                                                        check_reserve_asset(&vec, &extrinsic_url, block_number, &mut start_link, para_id).await;
                                                     }
-                                                     Composite::Unnamed(named)  => {println!("oo");for values in named {print_val(&values.value);}}
+                                                     Composite::Unnamed(named)  => {panic!("unexpected");}
                                                 }
-                                                
-                                                //if let Composite::Named()values.value
-                                                
-                                                println!("HELL YEAH");
                                             }
                                         }
                                         _ => {
@@ -1489,15 +1490,15 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
         println!("first time!");
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        let name = if let Some(name) = PARA_ID_TO_NAME
-            .read()
-            .await
-            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        {
-            name.clone()
-        } else {
-            "unknown".to_string()
-        };
+        // let name = if let Some(name) = PARA_ID_TO_NAME
+        //     .read()
+        //     .await
+        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        // {
+        //     name.clone()
+        // } else {
+        //     "unknown".to_string()
+        // };
        
         if let Some(to) = to {
             let msg_id = format!("{}-{}", block_number, please_hash(to));
@@ -1505,8 +1506,8 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
             start_link.push(msg_id);
         }
         println!(
-            "Reserve_transfer_assets from {:?} to {} ({})",
-            para_id, dest, name
+            "Reserve_transfer_assets from {:?} to {}",
+            para_id, dest
         );
 
         // if ext.call_data.arguments.len() > 1 {
@@ -1523,15 +1524,15 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
 
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        let name = if let Some(name) = PARA_ID_TO_NAME
-            .read()
-            .await
-            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        {
-            name.clone()
-        } else {
-            "unknown".to_string()
-        };
+        // let name = if let Some(name) = PARA_ID_TO_NAME
+        //     .read()
+        //     .await
+        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        // {
+        //     name.clone()
+        // } else {
+        //     "unknown".to_string()
+        // };
         
 
         if let Some(to) = to {
@@ -1540,8 +1541,8 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
             start_link.push(msg_id);
         }
         println!(
-            "Reserve_transfer_assets from {:?} to {} ({})",
-            para_id, dest, name
+            "Reserve_transfer_assets from {:?} to {}",
+            para_id, dest
         );
 
         // if ext.call_data.arguments.len() > 1 {
@@ -1558,15 +1559,15 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
 
         //TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
         let dest: NonZeroU32 = dest.parse().unwrap();
-        let name = if let Some(name) = PARA_ID_TO_NAME
-            .read()
-            .await
-            .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
-        {
-            name.clone()
-        } else {
-            "unknown".to_string()
-        };
+        // let name = if let Some(name) = PARA_ID_TO_NAME
+        //     .read()
+        //     .await
+        //     .get(&(extrinsic_url.sovereign.unwrap().to_string(), dest))
+        // {
+        //     name.clone()
+        // } else {
+        //     "unknown".to_string()
+        // };
       
 
         if let Some(to) = to {
@@ -1575,8 +1576,8 @@ async fn check_reserve_asset<'a, 'b>(args: &Vec<Value<TypeId>>, extrinsic_url: &
             start_link.push(msg_id);
         }
         println!(
-            "Reserve_transfer_assets from {:?} to {} ({})",
-            para_id, dest, name
+            "Reserve_transfer_assets from {:?} to {}",
+            para_id, dest
         );
 
         // if ext.call_data.arguments.len() > 1 {
@@ -1622,7 +1623,7 @@ async fn get_events_for_block(
     } else {
         //TODO: Should use oldest metadata
         async_std::task::block_on(get_desub_metadata(&url, None))
-    };
+    }.unwrap();
     // TODO: pass metadata into fn.
     let storage = decoder::decode_storage(&metad);
     let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
@@ -1661,7 +1662,7 @@ async fn get_events_for_block(
         let version = get_metadata_version(&api.client, &url, blockhash, blocknum)
             .await
             .unwrap();
-        let metad = async_std::task::block_on(get_desub_metadata(url, Some((version, blockhash))));
+        let metad = async_std::task::block_on(get_desub_metadata(url, Some((version, blockhash)))).unwrap();
 
         if let Ok(val) =
             decoder::decode_value_by_id(&metad, &events_entry.ty, &mut events_raw.as_slice())

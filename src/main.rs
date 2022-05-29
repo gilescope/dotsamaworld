@@ -102,7 +102,10 @@ async fn main() -> color_eyre::eyre::Result<()> {
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
 
-    app.add_plugins(DefaultPickingPlugins)
+    //app.add_plugins(DefaultPickingPlugins)
+     app.add_plugin(PickingPlugin)
+    .add_plugin(InteractablePickingPlugin)
+        // .add_plugin(HighlightablePickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .register_inspectable::<Details>()
@@ -1320,7 +1323,7 @@ pub struct Inspector {
 impl Default for UrlBar {
     fn default() -> Self {
         Self {
-            location: "dotsama:/1//10504595".to_string(),
+            location: "dotsama:/1//10504599".to_string(),
             changed: false,
         }
     }
