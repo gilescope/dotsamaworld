@@ -5,12 +5,10 @@ use crate::ABlocks;
 use crate::DataEntity;
 use crate::DataEvent;
 use crate::Details;
-use async_std::sync::RwLock;
 use bevy::prelude::warn;
 use desub_current::value::*;
 use desub_current::ValueDef;
 use desub_current::{decoder, Metadata};
-use lazy_static::lazy_static;
 use parity_scale_codec::Decode;
 use parity_scale_codec::Encode;
 use sp_core::H256;
@@ -207,11 +205,6 @@ fn flattern<T>(
     }
 }
 
-lazy_static! {
-    static ref PARA_ID_TO_NAME: RwLock<HashMap<(String, NonZeroU32), String>> =
-        RwLock::new(HashMap::new());
-}
-
 fn please_hash<T: Hash>(val: &T) -> u64 {
     use std::hash::Hasher;
     let mut hasher = DefaultHasher::default();
@@ -366,7 +359,6 @@ pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>, ()> {
         eprintln!("COULD NOT GET CLIENT FOR URL {}", url);
         Err(())
     }
-    // Some(std::num::NonZeroU32::try_from(3).unwrap())
 }
 
 async fn get_metadata_version<T: subxt::Config>(
@@ -375,7 +367,6 @@ async fn get_metadata_version<T: subxt::Config>(
     hash: T::Hash,
     block_number: u32,
 ) -> Option<String>
-// where <T as subxt::Config>::Hash: From<std::vec::Vec<u8>>
 {
     let urlhash = please_hash(&url);
     let path = format!("target/{urlhash}.metadata.scale.events");
@@ -536,16 +527,6 @@ pub async fn watch_blocks(
         parachain_info.2.chain_id = para_id
     }
 
-    if let Some(para_id) = para_id {
-        PARA_ID_TO_NAME.write().await.insert(
-            (
-                parachain_doturl.sovereign.unwrap().clone().to_string(),
-                para_id,
-            ),
-            parachain_name.clone(),
-        );
-    }
-
     if let Some(as_of) = as_of {
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
@@ -572,55 +553,11 @@ pub async fn watch_blocks(
             }
         }
     } else {
-        // TODO this could get out of date too...
-        // let metad = get_desub_metadata(&url, None).await; // No better metadata than the latest for live blocks.
         let mut reconnects = 0;
         while reconnects < 20 {
-            if let Ok(mut block_headers)//: Subscription<Header<u32, BlakeTwo256>> 
-            =
-                api.client.rpc().subscribe_finalized_blocks().await {
-
+            if let Ok(mut block_headers) = api.client.rpc().subscribe_finalized_blocks().await {
                 while let Some(Ok(block_header)) = block_headers.next().await {
-                    let block_number = block_header.number;
-                    let block_hash = block_header.hash();
-
-                    let block_doturl = DotUrl{ block_number: Some(block_number), ..parachain_doturl.clone() };
-
-                    let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
-                    let metad =
-                        async_std::task::block_on(get_desub_metadata(&url, Some((version.unwrap(), block_hash))));
-                    if metad.is_none() { continue; }
-                    let metad = metad.unwrap();
-
-                    if let Ok(Some(block_body)) = api.client.rpc().block(Some(block_hash)).await {
-                        // println!("block hash! {}", block_hash.to_string());
-                        let mut exts = vec![];
-                        for (i, ext_bytes) in block_body.block.extrinsics.iter().enumerate() {
-                            let encoded_extrinsic = ext_bytes.encode();
-                            let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-                                    .unwrap()
-                                    .0;
-                            if let Ok(extrinsic) = decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-                            {
-                                let entity = process_extrisic(
-                                      ex_slice,&extrinsic,DotUrl{ extrinsic:Some(i as u32), ..block_doturl.clone()}).await;
-                                if let Some(entity) = entity { exts.push(entity); }
-                            } else {
-                                println!("here be dragoons. can's do extrinsic in {}", &block_hash);
-                            }
-                        }
-                        // let ext_clone = exts.clone();
-                        let mut handle = tx.lock().unwrap();
-                        let current =
-                           PolkaBlock {
-                                 blockurl:block_doturl.clone(),
-                                blockhash: block_hash,
-                                extrinsics: exts,
-                                events: get_events_for_block( &api, &url, block_hash, &sender, &block_doturl)
-                                .await?,
-                            };
-                          handle.1.push(current);
-                    }
+                    let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_header.hash(), &url, &api, &None).await;
                 }
             }
             std::thread::sleep(std::time::Duration::from_secs(20));
@@ -1638,53 +1575,30 @@ async fn get_events_for_block(
                 }
 
                 if !inclusions.is_empty() {
-                    let sender2 = sender.as_ref().unwrap();
-                    for (para_id, hash) in inclusions {
-                        let mailbox = sender2.get(&para_id);
-                        if let Some(mailbox) = mailbox {
-                            let hash = H256::from_slice(hash.as_slice());
-                            if let Err(err) = mailbox.send((blocknum, hash)) {
-                                println!(
-                                    "block hash failed to send at {} error: {}",
-                                    blocknum, err
-                                );
-                            } else {
-                                // println!("block hash sent at {} ", blocknum);
+                    // For live mode we listen to all parachains for blocks so sender will be none.
+                    if let Some(sender) = sender.as_ref() {
+                        for (para_id, hash) in inclusions {
+                            let mailbox = sender.get(&para_id);
+                            if let Some(mailbox) = mailbox {
+                                let hash = H256::from_slice(hash.as_slice());
+                                if let Err(err) = mailbox.send((blocknum, hash)) {
+                                    println!(
+                                        "block hash failed to send at {} error: {}",
+                                        blocknum, err
+                                    );
+                                } else {
+                                    // println!("block hash sent at {} ", blocknum);
+                                }
                             }
                         }
                     }
                 }
-
-                // let mut handle = tx.lock().unwrap();
-                // let current = handle.0.entry(
-                //     hex::encode(blockhash.as_bytes())).or_insert(
-                //     PolkaBlock {
-                //         blocknum,
-                //         blockhash,
-                //         extrinsics: vec![],
-                //         events: data_events.clone(),
-                //     },
-                // );
-
-                // if !current.extrinsics.is_empty()
-                // //- blocks sometimes have no events in them.
-                // {
-                //     let mut current = handle.0.remove(&hex::encode(blockhash.as_bytes())).unwrap();
-                //     current.events = data_events;
-                //     handle.1.push(current);
-                // }
             }
         } else {
             println!("can't decode events {} / {}", &url, blocknum);
         };
-
-        // let para_id = <u32 as Decode>::decode(&mut events_raw.as_slice()).unwrap();
-        // println!("{} is para id {}", &url, para_id);
-
-        // Some(NonZeroU32::try_from(para_id).expect("para id should not be 0"))
     } else {
         warn!("could not find events {}", &blocknum);
-        // None
     };
     Ok(data_events)
 }

@@ -294,11 +294,9 @@ fn source_data(
             let mut send_map = Some(send_map); // take by only one.
 
             for (arc, chain_name, para_id, rc) in relay {
-                // let lock_clone = arc.clone();
                 let url = chain_name_to_url(&chain_name);
                 println!("url attaching to {}", url);
 
-                // let chain_name_clone = chain_name.clone();
                 let url_clone = url.clone();
                 let maybe_sender = if para_id.is_none() {
                     send_map.take()
@@ -314,7 +312,7 @@ fn source_data(
 
                     // while reconnects < 20 {
                     println!("Connecting to {}", &url_clone);
-                    let res = async_std::task::block_on(datasource::watch_blocks(
+                    let _res = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
                         url_clone.clone(),
                         as_of,
