@@ -580,6 +580,7 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
     >, sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>) -> Result<(),()>{
     if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await
     {
+        let mut timestamp = None;
         blockurl.block_number = Some(got_block_num);
         let block_number = blockurl.block_number.unwrap();
 
@@ -618,8 +619,15 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
                         ..blockurl.clone()
                     },
                 )
-                .await;
+                .await;                
                 if let Some(entity) = entity {
+                    if entity.pallet() == "Timestamp" && entity.variant() == "set"
+                    {
+                        if let ValueDef::Primitive(Primitive::U64(val)) = extrinsic.call_data.arguments[0].value {
+                            println!("ococooct u64 {}", val);
+                            timestamp = Some(val);
+                        }
+                    }
                     exts.push(entity);
                 }
             } else {
@@ -631,6 +639,7 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
         
         let mut handle = tx.lock().unwrap();
         let current = PolkaBlock {
+                timestamp,
                 blockurl,
                 blockhash: block_hash,
                 extrinsics: exts,
@@ -1306,6 +1315,7 @@ async fn check_reserve_asset<'a, 'b>(
 }
 
 pub struct PolkaBlock {
+    pub timestamp: Option<u64>,
     pub blockurl: DotUrl,
     // pub blocknum: Option<u32>,
     pub blockhash: H256,

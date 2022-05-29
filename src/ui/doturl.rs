@@ -44,6 +44,12 @@ impl DotUrl {
         }
         Ok(result)
     }
+
+    // Is cyberpunkusama?
+    pub fn is_darkside(&self) -> bool {
+        self.sovereign.unwrap_or(1) == 0
+    }
+
 }
 
 impl std::fmt::Display for DotUrl {

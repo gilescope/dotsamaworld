@@ -14,7 +14,7 @@ use bevy_mod_picking::*;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use bevy_kira_audio::Audio;
 use std::sync::Mutex;
@@ -24,6 +24,7 @@ mod movement;
 mod style;
 mod ui;
 use crate::ui::{Details, DotUrl};
+ use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_inspector_egui::RegisterInspectable;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
@@ -51,8 +52,8 @@ impl Default for MovementSettings {
     }
 }
 
-static RELAY_BLOCKS: AtomicU32 = AtomicU32::new(0);
-static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
+static BASETIME: AtomicU64 = AtomicU64::new(0);
+//static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Default)]
 pub struct ChainInfo {
@@ -112,9 +113,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
         // .add_plugin(DebugEventsPickingPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // .add_plugin(LogDiagnosticsPlugin::default())
-        // .add_plugin(WorldInspectorPlugin::new())
-         .add_plugin(AudioPlugin)
-        .add_startup_system(start_background_audio)
         .add_plugin(PolylinePlugin)
         // .add_system(movement::scroll)
         .add_startup_system(
@@ -145,9 +143,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
     app.run();
 
-    // app.insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
-    // .add_startup_system(add_people)
-    // .add_system(greet_people);
     Ok(())
 }
 
@@ -190,8 +185,7 @@ fn source_data(
         for detail in clean_me.iter() {
             commands.entity(detail).despawn();
         }
-        RELAY_BLOCKS.store(0, Ordering::Relaxed);
-        RELAY_BLOCKS2.store(0, Ordering::Relaxed);
+        BASETIME.store(0, Ordering::Relaxed);
 
         if event.source == "" {
             return;
@@ -245,11 +239,13 @@ fn source_data(
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
                         material: materials.add(
                             StandardMaterial {
-                                base_color: Color::rgba(0., 0., 0., 0.4),
+                                base_color: if relay_url.is_darkside() {Color::rgba(0., 0., 0., 0.4)}else{Color::rgba(0.5, 0.5, 0.5, 0.4)},
                                 alpha_mode: AlphaMode::Blend,
-                                perceptual_roughness: 0.08,
+                                perceptual_roughness: if relay_url.is_darkside() { 1.0 } else {0.08},
+                                reflectance: if relay_url.is_darkside() { 0.5 } else { 0.0 },
+                                unlit: relay_url.is_darkside(),
                                 ..default()
-                            }, //    Color::rgb(0.5, 0.5, 0.5).into()
+                            },
                         ),
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
@@ -513,29 +509,37 @@ fn render_block(
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
-                    let block_num = if is_self_sovereign {
-                        block.blockurl.block_number.unwrap() as u32
-                    } else {
-                        if rcount == 0 {
-                            if chain == 0 {
-                                //relay
-                                RELAY_BLOCKS.store(
-                                    RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-                                    Ordering::Relaxed,
-                                );
-                            }
-                            RELAY_BLOCKS.load(Ordering::Relaxed)
-                        } else {
-                            if chain == 0 {
-                                //relay
-                                RELAY_BLOCKS2.store(
-                                    RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-                                    Ordering::Relaxed,
-                                );
-                            }
-                            RELAY_BLOCKS2.load(Ordering::Relaxed)
-                        }
-                    };
+                    let mut base_time = BASETIME.load(Ordering::Relaxed);
+                    if base_time == 0 {
+                        BASETIME.store(block.timestamp.unwrap(), Ordering::Relaxed);
+                        base_time = block.timestamp.unwrap();
+                    }
+
+                    // let block_num = if is_self_sovereign {
+                    //     block.blockurl.block_number.unwrap() as u32
+                    // } else {
+                        
+                    //     if base_time == 0
+                    //     if rcount == 0 {
+                    //         if chain == 0 &&  {
+                    //             //relay
+                    //             RELAY_BLOCKS.store(
+                    //                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+                    //                 Ordering::Relaxed,
+                    //             );
+                    //         }
+                    //         RELAY_BLOCKS.load(Ordering::Relaxed)
+                    //     } else {
+                    //         if chain == 0 {
+                    //             //relay
+                    //             RELAY_BLOCKS2.store(
+                    //                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+                    //                 Ordering::Relaxed,
+                    //             );
+                    //         }
+                    //         RELAY_BLOCKS2.load(Ordering::Relaxed)
+                    //     }
+                    // };
 
                     let rflip = if rcount == 1 { -1.0 } else { 1.0 };
                     let encoded: String = url::form_urlencoded::Serializer::new(String::new())
@@ -557,6 +561,11 @@ fn render_block(
                         ..default()
                     };
 
+                    let block_num = block.timestamp.unwrap_or(base_time) as f64 - base_time as f64;
+                    //   miliseconds / = 14
+                    let block_num = (block_num / 500.) as f32;
+                    // println!("block num time becomes {}", block_num);
+
                     // Add the new block as a large rectangle on the ground:
                     commands
                         .spawn_bundle(PbrBundle {
@@ -565,10 +574,11 @@ fn render_block(
                                 base_color: Color::rgba(0., 0., 0., 0.7),
                                 alpha_mode: AlphaMode::Blend,
                                 perceptual_roughness: 0.08,
+                                unlit: if block.blockurl.is_darkside(){ true } else { false },
                                 ..default()
                             }),
                             transform: Transform::from_translation(Vec3::new(
-                                0. + (BLOCK_AND_SPACER * block_num as f32),
+                                0. + (block_num as f32),
                                 0.,
                                 (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             )),
@@ -619,6 +629,7 @@ fn render_block(
                                 .spawn_bundle(PbrBundle {
                                     mesh: quad_handle.clone(),
                                     material: material_handle.clone(),
+                                   
                                     transform,
                                     ..default()
                                 })
@@ -637,7 +648,7 @@ fn render_block(
                             let material_handle = materials.add(StandardMaterial {
                                 base_color_texture: Some(texture_handle.clone()),
                                 alpha_mode: AlphaMode::Blend,
-                                unlit: !block_events.2.inserted_pic,
+                                unlit: true,// !block_events.2.inserted_pic,
                                 ..default()
                             });
 
@@ -734,7 +745,7 @@ fn render_block(
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
 fn add_blocks<'a>(
     chain_info: &ChainInfo,
-    block_num: u32,
+    block_num: f32,
     chain: usize,
     block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
     commands: &mut Commands,
@@ -769,7 +780,7 @@ fn add_blocks<'a>(
     let mut mat_map = HashMap::new();
 
     let (base_x, base_y, base_z) = (
-        0. + (BLOCK_AND_SPACER * block_num as f32) - 4.,
+        0. + ( block_num) - 4.,
         0.5,
         RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
@@ -800,10 +811,19 @@ fn add_blocks<'a>(
             for block in std::iter::once(block).chain(block.contains().iter()) {
                 let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT;
+                let dark = block.details().doturl.is_darkside();
                 let style = style::style_event(&block);
                 let material = mat_map
                     .entry(style.clone())
-                    .or_insert_with(|| materials.add(style.color.clone().into()));
+                    .or_insert_with(|| materials.add(
+                        if dark {StandardMaterial{
+                     base_color: style.color.clone(), 
+                      emissive: style.color.clone(),
+                      perceptual_roughness: 0.3,
+                      metallic:1.0,
+                     ..default()
+                    }} else {  style.color.clone().into() }
+                ));
                 let mesh = if content::is_message(&block) {
                     mesh_xcm.clone()
                 } else if matches!(block, DataEntity::Extrinsic { .. }) {
@@ -894,7 +914,7 @@ fn add_blocks<'a>(
                     .insert(Rainable {
                         dest: target_y * build_direction,
                     })
-                    .insert(Name::new("BlockEvent"));
+                    .insert(Name::new("Extrinsic"));
 
                 for source in create_source {
                     bun.insert(source);
@@ -917,6 +937,7 @@ fn add_blocks<'a>(
                 // variant: event.raw.variant.to_string(),
                 ..event.details.clone()
             };
+            let dark = details.doturl.is_darkside();
             let entity = DataEvent {
                 details,
                 ..event.clone()
@@ -924,7 +945,16 @@ fn add_blocks<'a>(
             let style = style::style_data_event(&entity);
             let material = mat_map
                 .entry(style.clone())
-                .or_insert_with(|| materials.add(style.color.clone().into()));
+                .or_insert_with(|| 
+                    
+                    
+                    materials.add(if dark {StandardMaterial{
+                     base_color: style.color.clone(), 
+                      emissive: style.color.clone(),
+                      perceptual_roughness: 0.3,
+                      metallic:1.0,
+                     ..default()
+        }} else {  style.color.clone().into() }));
 
             let mesh = if content::is_event_message(&entity) {
                 mesh_xcm.clone()
@@ -1197,9 +1227,23 @@ fn setup(
                 ..default()
             }, //    Color::rgb(0.5, 0.5, 0.5).into()
         ),
-        ..Default::default()
+        transform: Transform { translation: Vec3::new(0., 0., -25000.), ..default() },
+        ..default()
     });
-
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
+        material: materials.add(
+            StandardMaterial {
+                base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.08,
+                unlit:true,
+                ..default()
+            }, //    Color::rgb(0.5, 0.5, 0.5).into()
+        ),
+        transform: Transform { translation: Vec3::new(0., 0., 25000.), ..default() },
+        ..default()
+    });
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
     // camera

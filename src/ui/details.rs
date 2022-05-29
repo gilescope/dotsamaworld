@@ -29,6 +29,7 @@ pub struct Details {
     // #[inspectable(label = "Url:")]
     pub url: String,
 }
+
 use egui::Grid;
 impl Inspectable for Details {
     type Attributes = ();

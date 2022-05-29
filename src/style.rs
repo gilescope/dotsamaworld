@@ -35,6 +35,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 use palette::FromColor;
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {
+    let darkside = entry.details().doturl.is_darkside();
     let msg = crate::content::is_message(entry);
     match entry {
         DataEntity::Event(data_event @ DataEvent { .. }) => style_data_event(data_event),
@@ -54,7 +55,7 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
         // }
         DataEntity::Extrinsic { details, .. } => {
             let color = palette::Lchuv::new(
-                80.,
+                if darkside { 40. } else {80.},
                 80. + (calculate_hash(&details.variant) as f32 % 100.),
                 (calculate_hash(&details.pallet) as f32) % 360.,
             );
@@ -68,6 +69,8 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 }
 
 pub fn style_data_event(entry: &DataEvent) -> ExStyle {
+    let darkside = entry.details.doturl.is_darkside();
+
     // let msg = crate::content::is_event_message(entry);
     let raw = &entry.details;
     if matches!(
@@ -87,7 +90,7 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
     }
 
     let color = palette::Lchuv::new(
-        80.,
+        if darkside { 40. } else {80.},
         80. + (calculate_hash(&raw.variant) as f32 % 100.),
         (calculate_hash(&raw.pallet) as f32) % 360.,
     );
