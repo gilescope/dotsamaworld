@@ -132,8 +132,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
-            dynamic: true, // Set to false since we aren't changing the sky's appearance
-            sky_radius: 10.0,
+            dynamic: false, // Set to false since we aren't changing the sky's appearance
+            sky_radius: 1000.0,
         })
         .add_system(render_block)
         .add_system_to_stage(CoreStage::PostUpdate, print_events);
