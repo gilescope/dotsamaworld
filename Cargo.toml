@@ -54,7 +54,7 @@ frame-metadata = "*"
 scale-info = { version = "*", features = ["serde"] }
 desub = { git = "https://github.com/paritytech/desub/" }
 desub-current = { git = "https://github.com/paritytech/desub/" }
-bevy_kira_audio = "*"
+# bevy_kira_audio = "*"
 
 # Dependencies for native only.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

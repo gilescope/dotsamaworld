@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-use bevy_kira_audio::AudioPlugin;
+//use bevy_kira_audio::AudioPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use bevy_kira_audio::Audio;
+//use bevy_kira_audio::Audio;
 use std::sync::Mutex;
 mod content;
 mod datasource;
@@ -159,9 +159,9 @@ fn chain_name_to_url(chain_name: &str) -> String {
     }
 }
 
-fn start_background_audio(asset_server: Res<AssetServer>, audio: Res<Audio>) {
-    audio.play_looped(asset_server.load("sounds/backtrack.ogg"));
-}
+// fn start_background_audio(asset_server: Res<AssetServer>, audio: Res<Audio>) {
+//     audio.play_looped(asset_server.load("sounds/backtrack.ogg"));
+// }
 
 fn source_data(
     mut datasouce_events: EventReader<DataSourceChangedEvent>,
