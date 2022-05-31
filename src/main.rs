@@ -511,8 +511,8 @@ fn render_block(
                 if let Some(block) = (*block_events).1.pop() {
                     let mut base_time = BASETIME.load(Ordering::Relaxed);
                     if base_time == 0 {
-                        BASETIME.store(block.timestamp.unwrap(), Ordering::Relaxed);
                         base_time = block.timestamp.unwrap();
+                        BASETIME.store(base_time, Ordering::Relaxed);
                     }
 
                     // let block_num = if is_self_sovereign {
