@@ -1826,6 +1826,78 @@ pub fn associate_events(
     //leftovers in events should be utils..
 }
 
+
+
+use crate::polkadot::runtime_types::frame_system::AccountInfo;
+async fn watch_addresses(tx: &ABlocks, url:&str, parachain_doturl: DotUrl) -> Result<(), Box<dyn std::error::Error>> {
+     let mut client = ClientBuilder::new().set_url(url).build().await?;
+    let mut api =
+        client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
+
+    let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+
+
+    // let storage_key =
+    //     hex::decode(&("26aa394eea5630e07c48ae0c9558cef7".to_string() + "b99d880ec681799c0cf30e8886371da9" + "39358f6e6a083b53a55ab46a8012eac1ccdce2bc61518838d34314c620b7c88040c38c784e0eabe838c17192be7ed91c")).unwrap();
+    // let call = api.client
+    //     .storage()
+    //     .fetch_raw(sp_core::storage::StorageKey(storage_key), None)
+    //     .await
+    //     .unwrap();
+
+    // if let Some(sp_core::storage::StorageData(val)) = call {
+    //     let para_id = <AccountInfo<'a, 'b> as Decode>::decode(&mut val.as_slice()).unwrap();
+    //     println!("is para id {:?}", para_id);
+        
+    // } else {
+    //     // This is expected for relay chains...
+    //     warn!("could not find para id for");
+       
+    // }
+
+       let metad = async_std::task::block_on(get_desub_metadata(
+            "wss://kusama.api.onfinality.io/public-ws",
+            None,
+        ));
+
+        //Statemint
+        // let encoded_events =
+            // "0800000000000000000000000000000002000000010000000000109aa80700000000020000";
+        // let bin = hex::decode(encoded_events).unwrap();
+
+        let storage = decoder::decode_storage(&metad);
+
+        let key = &("26aa394eea5630e07c48ae0c9558cef7".to_string() + "b99d880ec681799c0cf30e8886371da9" + "39358f6e6a083b53a55ab46a8012eac1ccdce2bc61518838d34314c620b7c88040c38c784e0eabe838c17192be7ed91c");
+        let storage_key = hex::decode(key).unwrap();
+
+        let entry = storage
+            .decode_key(&metad, &mut storage_key.as_slice())
+            .expect("can decode storage");
+
+        let val = decoder::decode_value_by_id(&metad, &entry.ty, &mut bin.as_slice()).unwrap();
+
+
+
+    let mut handle = tx.lock().unwrap();
+    let current = PolkaBlock {
+            data_epoc: our_data_epoc,
+            timestamp: None,
+            blockurl: parachain_doturl,
+            blockhash: H256::from_slice(&[0u8;64]),
+            extrinsics: vec![],
+            events: vec![],
+        };
+
+    //- blocks sometimes have no events in them.
+    handle.1.push(current);
+    Ok(())
+}
+
+
+
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

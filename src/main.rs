@@ -1336,10 +1336,11 @@ impl Inspectable for UrlBar {
         ui.vertical_centered(|ui| {
             Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
                 // ui.label("Pallet");
-                changed |= self
+                changed |= 
+                // TODO; dropdown with examples...                
+                self
                     .location
                     .ui(ui, StringAttributes { multiline: false }, context);
-
                 ui.end_row();
 
                 if ui.button("Time travel").clicked() {
@@ -1348,14 +1349,21 @@ impl Inspectable for UrlBar {
                 };
                 ui.end_row();
                 if ui.button("Live").clicked() {
-                    self.changed = true;
+                    
                     self.location = "dotsama:/1//".into();
+                    self.changed = true;
+                    println!("clicked {}", &self.location);
+                };
+                ui.end_row();
+                if ui.button("Wallet").clicked() {                    
+                    self.location = "address:HCvuL1hybw5fAMqi6RMvVxAEQ75Chb7EAZTYhJFUCm9uk3N".into();
+                    self.changed = true;
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();
                 if ui.button("Clear").clicked() {
-                    self.changed = true;
                     self.location = "".into();
+                    self.changed = true;
                     println!("clicked {}", &self.location);
                 };
                 ui.end_row();
