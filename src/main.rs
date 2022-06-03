@@ -14,7 +14,7 @@ use bevy_mod_picking::*;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 //use bevy_kira_audio::Audio;
 use std::sync::Mutex;
@@ -52,7 +52,12 @@ impl Default for MovementSettings {
     }
 }
 
+/// The time by which all times should be placed relative to each other on the x axis.
 static BASETIME: AtomicU64 = AtomicU64::new(0);
+
+/// Bump this to tell the current datasources to stop.
+static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
+
 //static RELAY_BLOCKS2: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Default)]
@@ -175,6 +180,9 @@ fn source_data(
     for event in datasouce_events.iter() {
         println!("data source chaneg to {}", event.source);
 
+        // Stop previous data sources...
+        DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
+
         // Clear
 
         // 1. Stop existing event threads!
@@ -187,7 +195,8 @@ fn source_data(
         }
         BASETIME.store(0, Ordering::Relaxed);
 
-        if event.source == "" {
+        if event.source.is_empty() {
+            println!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
             return;
         }
         let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
@@ -509,6 +518,11 @@ fn render_block(
         for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
+                    // Skip data we no longer care about...
+                    if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+                        continue;
+                    }
+
                     let mut base_time = BASETIME.load(Ordering::Relaxed);
                     if base_time == 0 {
                         base_time = block.timestamp.unwrap();
@@ -730,16 +744,6 @@ fn render_block(
             }
         }
     }
-
-    //                 "Balances" => {
-    //                     match event.raw_event.variant.as_str() {
-    //                         "Deposit" => {
-    //                             use crate::polkadot::balances::events::Deposit;
-    //                             use codec::Decode;
-    //                             use  bevy::prelude::shape::CapsuleUvProfile;
-    //                             let deposit = Deposit::decode(&mut event.raw_event.data.to_vec().as_slice()).unwrap();
-    //                             println!("{:?}", deposit);
-    //                             //use num_integer::roots::Roots;
 }
 
 // TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?

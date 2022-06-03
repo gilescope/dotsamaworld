@@ -1,4 +1,5 @@
 use super::polkadot;
+use crate::DATASOURCE_EPOC;
 use crate::polkadot::runtime_types::xcm::VersionedXcm;
 use crate::ui::DotUrl;
 use crate::ABlocks;
@@ -16,6 +17,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::Hash;
 use std::num::NonZeroU32;
+use std::sync::atomic::Ordering;
 use subxt::rpc::ClientT;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
@@ -527,12 +529,17 @@ pub async fn watch_blocks(
         parachain_info.2.chain_id = para_id
     }
 
+    let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+
     if let Some(as_of) = as_of {
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
             while let Ok((_relay_block_number, block_hash)) = recieve_channel.recv() {
-                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender).await;
+                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender, our_data_epoc).await;
+                 if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+                     return Ok(());
+                }
             }
         } else {
             // Relay chain
@@ -548,8 +555,12 @@ pub async fn watch_blocks(
                     continue;
                 }
                 let block_hash = block_hash.unwrap();
-                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender).await;
+                let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_hash, &url, &api, &sender, our_data_epoc).await;
                 std::thread::sleep(std::time::Duration::from_secs(6));
+                // check for stop signal
+                if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
             }
         }
     } else {
@@ -557,7 +568,11 @@ pub async fn watch_blocks(
         while reconnects < 20 {
             if let Ok(mut block_headers) = api.client.rpc().subscribe_finalized_blocks().await {
                 while let Some(Ok(block_header)) = block_headers.next().await {
-                    let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_header.hash(), &url, &api, &None).await;
+                    let _ = process_extrinsics(&tx, parachain_doturl.clone(), block_header.hash(), &url, &api, &None, our_data_epoc).await;
+                    // check for stop signal
+                    if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+                        return Ok(());
+                   }
                 }
             }
             std::thread::sleep(std::time::Duration::from_secs(20));
@@ -577,7 +592,7 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
             DefaultConfig,
             subxt::extrinsic::ChargeTransactionPayment<DefaultConfig>,
         >,
-    >, sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>) -> Result<(),()>{
+    >, sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>, our_data_epoc: u32) -> Result<(),()>{
     if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await
     {
         let mut timestamp = None;
@@ -624,7 +639,6 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
                     if entity.pallet() == "Timestamp" && entity.variant() == "set"
                     {
                         if let ValueDef::Primitive(Primitive::U64(val)) = extrinsic.call_data.arguments[0].value {
-                            println!("ococooct u64 {}", val);
                             timestamp = Some(val);
                         }
                     }
@@ -639,6 +653,7 @@ async fn process_extrinsics( tx: &ABlocks, mut blockurl: DotUrl, block_hash: H25
         
         let mut handle = tx.lock().unwrap();
         let current = PolkaBlock {
+                data_epoc: our_data_epoc,
                 timestamp,
                 blockurl,
                 blockhash: block_hash,
@@ -1315,6 +1330,7 @@ async fn check_reserve_asset<'a, 'b>(
 }
 
 pub struct PolkaBlock {
+    pub data_epoc: u32,
     pub timestamp: Option<u64>,
     pub blockurl: DotUrl,
     // pub blocknum: Option<u32>,
