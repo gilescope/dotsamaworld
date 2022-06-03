@@ -40,6 +40,7 @@ palette = "0.6"              # why: perceptual color scheme LCH: https://lea.ver
 fastrand = "*"
 bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
+serde_json = "*"
 #rayon = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="5a5879132c191a66c7486eb232d303b33ebad3bd", optional = true }
 serde = "*"

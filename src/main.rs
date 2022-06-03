@@ -525,7 +525,7 @@ fn render_block(
 
                     let mut base_time = BASETIME.load(Ordering::Relaxed);
                     if base_time == 0 {
-                        base_time = block.timestamp.unwrap();
+                        base_time = block.timestamp.unwrap_or(0);
                         BASETIME.store(base_time, Ordering::Relaxed);
                     }
 
@@ -577,7 +577,7 @@ fn render_block(
 
                     let block_num = block.timestamp.unwrap_or(base_time) as f64 - base_time as f64;
                     //   miliseconds / = 14
-                    let block_num = (block_num / 500.) as f32;
+                    let block_num = (block_num / 400.) as f32;
                     // println!("block num time becomes {}", block_num);
 
                     // Add the new block as a large rectangle on the ground:

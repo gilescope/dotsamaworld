@@ -70,6 +70,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     // Ordering should really be done on who won the auction first!
                     "kusama-rpc.polkadot.io",
                     "statemine-rpc.dwellir.com",
+                    "kusama.api.encointer.org",
                     //
                     // Auction Batch 1
                     "karura-rpc.dwellir.com",             // 1st
