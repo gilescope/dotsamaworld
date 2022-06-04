@@ -120,7 +120,7 @@ mod tests {
             ))
         );
 
-        // Track forwards to the restaunt at the end of the universe:
+        // Track forwards to the restaurant at the end of the universe:
         assert_eq!(
             None,
             block_on(get_block_number_near_timestamp(
