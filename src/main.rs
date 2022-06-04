@@ -178,22 +178,9 @@ fn source_data(
     clean_me: Query<Entity, With<ClearMe>>,
 ) {
     for event in datasouce_events.iter() {
-        println!("data source chaneg to {}", event.source);
+        println!("data source changes to {}", event.source);
 
-        // Stop previous data sources...
-        DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
-
-        // Clear
-
-        // 1. Stop existing event threads!
-        // 2. remove all entities.
-        for detail in details.iter() {
-            commands.entity(detail).despawn();
-        }
-        for detail in clean_me.iter() {
-            commands.entity(detail).despawn();
-        }
-        BASETIME.store(0, Ordering::Relaxed);
+        clear_world(&details, &mut commands, &clean_me);
 
         if event.source.is_empty() {
             println!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -204,11 +191,7 @@ fn source_data(
         println!("dot url {:?}", &dot_url);
         let as_of = dot_url.block_number;
         println!("Block number selected for relay chains: {:?}", as_of);
-        // let mut as_of = Some("10000000");
 
-        // if let Env::Local = selected_env {
-        // as_of = Some("10000000"); // If local show from the first block...
-        // }
 
         let relays = networks::get_network(&selected_env);
         // let is_self_sovereign = selected_env.is_self_sovereign();
@@ -345,6 +328,19 @@ fn source_data(
             }
         }
     }
+}
+
+fn clear_world(details: &Query<Entity, With<Details>>, commands: &mut Commands, clean_me: &Query<Entity, With<ClearMe>>) {
+    // Stop previous data sources...
+    DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
+
+    for detail in details.iter() {
+        commands.entity(detail).despawn();
+    }
+    for detail in clean_me.iter() {
+        commands.entity(detail).despawn();
+    }
+    BASETIME.store(0, Ordering::Relaxed);
 }
 
 enum BuildDirection {
