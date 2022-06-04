@@ -217,7 +217,13 @@ fn source_data(
             .map(|relay| {
                 relay
                     .iter()
-                    .map(|chain_name| (ABlocks::default(), chain_name.to_string()))
+                    .map(|chain_name| {
+                        let url = chain_name_to_url(&chain_name);
+                        (ABlocks::default(), chain_name.to_string(), 
+                        datasource::get_parachain_id_from_url(&url)
+                            .unwrap_or(Some(9999u32.try_into().unwrap())),
+                            url
+                )})
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -235,14 +241,10 @@ fn source_data(
             };
 
             for (chain, chain_deets) in chains.iter().enumerate() {
-                let url = chain_name_to_url(&chain_deets.1);
                 let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-                    .append_pair("rpc", &url)
+                    .append_pair("rpc", &chain_deets.3)
                     .finish();
 
-                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url)
-                    .unwrap_or(Some(9999u32.try_into().unwrap()));
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
@@ -267,7 +269,7 @@ fn source_data(
                     })
                     .insert(Details {
                         doturl: DotUrl {
-                            para_id,
+                            para_id: chain_deets.2,
                             block_number: None,
                             ..relay_url.clone()
                         },
@@ -290,13 +292,9 @@ fn source_data(
                 NonZeroU32,
                 crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
             > = Default::default();
-            for (arc, chain_name) in relay {
-                let url = chain_name_to_url(&chain_name);
-                // let mut client = ClientBuilder::new().set_url(&url).build().await.unwrap();
-                let para_id: Option<NonZeroU32> = datasource::get_parachain_id_from_url(&url)
-                    .unwrap_or(Some(9999u32.try_into().unwrap()));
+            for (arc, _chain_name, para_id, url) in relay {
                 let (tx, rc) = unbounded();
-                relay2.push((arc, chain_name, para_id, rc));
+                relay2.push((arc, para_id, url, rc));
                 if let Some(para_id) = para_id {
                     send_map.insert(para_id, tx);
                 }
@@ -305,9 +303,8 @@ fn source_data(
             let relay = relay2;
             let mut send_map = Some(send_map); // take by only one.
 
-            for (arc, chain_name, para_id, rc) in relay {
-                let url = chain_name_to_url(&chain_name);
-                println!("url attaching to {}", url);
+            for (arc,  para_id, url, rc) in relay {
+                println!("listening to {}", url);
 
                 let url_clone = url.clone();
                 let maybe_sender = if para_id.is_none() {
@@ -343,7 +340,7 @@ fn source_data(
                     // std::thread::sleep(std::time::Duration::from_secs(20));
                     // reconnects += 1;
                     // }
-                    println!("giving up on {} blocks", url_clone);
+                    println!("finished listening to {}", url_clone);
                 });
             }
         }
@@ -495,7 +492,8 @@ const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 25.;
 
 struct Sovereigns {
-    pub relays: Vec<Vec<(ABlocks, String)>>,
+    //                            name    para_id             url
+    pub relays: Vec<Vec<(ABlocks, String, Option<NonZeroU32>, String)>>,
 }
 
 #[derive(Component)]
@@ -515,7 +513,7 @@ fn render_block(
 ) {
     let is_self_sovereign = false; //TODO!
     for (rcount, relay) in relays.relays.iter().enumerate() {
-        for (chain, (lock, _chain_name)) in relay.iter().enumerate() {
+        for (chain, (lock, _chain_name, _para_id, _url)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
                     // Skip data we no longer care about...
