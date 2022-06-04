@@ -24,8 +24,8 @@ mod movement;
 mod style;
 mod ui;
 use crate::ui::{Details, DotUrl};
- use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy_inspector_egui::RegisterInspectable;
+use bevy_inspector_egui::WorldInspectorPlugin;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
@@ -183,7 +183,10 @@ fn source_data(
         clear_world(&details, &mut commands, &clean_me);
 
         if event.source.is_empty() {
-            println!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
+            println!(
+                "Datasources cleared epoc {}",
+                DATASOURCE_EPOC.load(Ordering::Relaxed)
+            );
             return;
         }
         let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
@@ -191,7 +194,6 @@ fn source_data(
         println!("dot url {:?}", &dot_url);
         let as_of = dot_url.block_number;
         println!("Block number selected for relay chains: {:?}", as_of);
-
 
         let relays = networks::get_network(&selected_env);
         // let is_self_sovereign = selected_env.is_self_sovereign();
@@ -202,11 +204,14 @@ fn source_data(
                     .iter()
                     .map(|chain_name| {
                         let url = chain_name_to_url(&chain_name);
-                        (ABlocks::default(), chain_name.to_string(), 
-                        datasource::get_parachain_id_from_url(&url)
-                            .unwrap_or(Some(9999u32.try_into().unwrap())),
-                            url
-                )})
+                        (
+                            ABlocks::default(),
+                            chain_name.to_string(),
+                            datasource::get_parachain_id_from_url(&url)
+                                .unwrap_or(Some(9999u32.try_into().unwrap())),
+                            url,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -231,16 +236,18 @@ fn source_data(
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                        material: materials.add(
-                            StandardMaterial {
-                                base_color: if relay_url.is_darkside() {Color::rgba(0., 0., 0., 0.4)}else{Color::rgba(0.5, 0.5, 0.5, 0.4)},
-                                alpha_mode: AlphaMode::Blend,
-                                perceptual_roughness: if relay_url.is_darkside() { 1.0 } else {0.08},
-                                reflectance: if relay_url.is_darkside() { 0.5 } else { 0.0 },
-                                unlit: relay_url.is_darkside(),
-                                ..default()
+                        material: materials.add(StandardMaterial {
+                            base_color: if relay_url.is_darkside() {
+                                Color::rgba(0., 0., 0., 0.4)
+                            } else {
+                                Color::rgba(0.5, 0.5, 0.5, 0.4)
                             },
-                        ),
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: if relay_url.is_darkside() { 1.0 } else { 0.08 },
+                            reflectance: if relay_url.is_darkside() { 0.5 } else { 0.0 },
+                            unlit: relay_url.is_darkside(),
+                            ..default()
+                        }),
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
                             0.,
@@ -286,7 +293,7 @@ fn source_data(
             let relay = relay2;
             let mut send_map = Some(send_map); // take by only one.
 
-            for (arc,  para_id, url, rc) in relay {
+            for (arc, para_id, url, rc) in relay {
                 println!("listening to {}", url);
 
                 let url_clone = url.clone();
@@ -330,7 +337,11 @@ fn source_data(
     }
 }
 
-fn clear_world(details: &Query<Entity, With<Details>>, commands: &mut Commands, clean_me: &Query<Entity, With<ClearMe>>) {
+fn clear_world(
+    details: &Query<Entity, With<Details>>,
+    commands: &mut Commands,
+    clean_me: &Query<Entity, With<ClearMe>>,
+) {
     // Stop previous data sources...
     DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
 
@@ -526,7 +537,7 @@ fn render_block(
                     // let block_num = if is_self_sovereign {
                     //     block.blockurl.block_number.unwrap() as u32
                     // } else {
-                        
+
                     //     if base_time == 0
                     //     if rcount == 0 {
                     //         if chain == 0 &&  {
@@ -582,7 +593,11 @@ fn render_block(
                                 base_color: Color::rgba(0., 0., 0., 0.7),
                                 alpha_mode: AlphaMode::Blend,
                                 perceptual_roughness: 0.08,
-                                unlit: if block.blockurl.is_darkside(){ true } else { false },
+                                unlit: if block.blockurl.is_darkside() {
+                                    true
+                                } else {
+                                    false
+                                },
                                 ..default()
                             }),
                             transform: Transform::from_translation(Vec3::new(
@@ -637,7 +652,7 @@ fn render_block(
                                 .spawn_bundle(PbrBundle {
                                     mesh: quad_handle.clone(),
                                     material: material_handle.clone(),
-                                   
+
                                     transform,
                                     ..default()
                                 })
@@ -656,7 +671,7 @@ fn render_block(
                             let material_handle = materials.add(StandardMaterial {
                                 base_color_texture: Some(texture_handle.clone()),
                                 alpha_mode: AlphaMode::Blend,
-                                unlit: true,// !block_events.2.inserted_pic,
+                                unlit: true, // !block_events.2.inserted_pic,
                                 ..default()
                             });
 
@@ -778,7 +793,7 @@ fn add_blocks<'a>(
     let mut mat_map = HashMap::new();
 
     let (base_x, base_y, base_z) = (
-        0. + ( block_num) - 4.,
+        0. + (block_num) - 4.,
         0.5,
         RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
@@ -811,17 +826,19 @@ fn add_blocks<'a>(
                 next_y[event_num % 81] += DOT_HEIGHT;
                 let dark = block.details().doturl.is_darkside();
                 let style = style::style_event(&block);
-                let material = mat_map
-                    .entry(style.clone())
-                    .or_insert_with(|| materials.add(
-                        if dark {StandardMaterial{
-                     base_color: style.color.clone(), 
-                      emissive: style.color.clone(),
-                      perceptual_roughness: 0.3,
-                      metallic:1.0,
-                     ..default()
-                    }} else {  style.color.clone().into() }
-                ));
+                let material = mat_map.entry(style.clone()).or_insert_with(|| {
+                    materials.add(if dark {
+                        StandardMaterial {
+                            base_color: style.color.clone(),
+                            emissive: style.color.clone(),
+                            perceptual_roughness: 0.3,
+                            metallic: 1.0,
+                            ..default()
+                        }
+                    } else {
+                        style.color.clone().into()
+                    })
+                });
                 let mesh = if content::is_message(&block) {
                     mesh_xcm.clone()
                 } else if matches!(block, DataEntity::Extrinsic { .. }) {
@@ -941,18 +958,19 @@ fn add_blocks<'a>(
                 ..event.clone()
             };
             let style = style::style_data_event(&entity);
-            let material = mat_map
-                .entry(style.clone())
-                .or_insert_with(|| 
-                    
-                    
-                    materials.add(if dark {StandardMaterial{
-                     base_color: style.color.clone(), 
-                      emissive: style.color.clone(),
-                      perceptual_roughness: 0.3,
-                      metallic:1.0,
-                     ..default()
-        }} else {  style.color.clone().into() }));
+            let material = mat_map.entry(style.clone()).or_insert_with(|| {
+                materials.add(if dark {
+                    StandardMaterial {
+                        base_color: style.color.clone(),
+                        emissive: style.color.clone(),
+                        perceptual_roughness: 0.3,
+                        metallic: 1.0,
+                        ..default()
+                    }
+                } else {
+                    style.color.clone().into()
+                })
+            });
 
             let mesh = if content::is_event_message(&entity) {
                 mesh_xcm.clone()
@@ -1225,7 +1243,10 @@ fn setup(
                 ..default()
             }, //    Color::rgb(0.5, 0.5, 0.5).into()
         ),
-        transform: Transform { translation: Vec3::new(0., 0., -25000.), ..default() },
+        transform: Transform {
+            translation: Vec3::new(0., 0., -25000.),
+            ..default()
+        },
         ..default()
     });
     commands.spawn_bundle(PbrBundle {
@@ -1235,11 +1256,14 @@ fn setup(
                 base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: 0.08,
-                unlit:true,
+                unlit: true,
                 ..default()
             }, //    Color::rgb(0.5, 0.5, 0.5).into()
         ),
-        transform: Transform { translation: Vec3::new(0., 0., 25000.), ..default() },
+        transform: Transform {
+            translation: Vec3::new(0., 0., 25000.),
+            ..default()
+        },
         ..default()
     });
     //somehow this can change the color
