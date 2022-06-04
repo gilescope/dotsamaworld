@@ -25,7 +25,7 @@ mod style;
 mod ui;
 use crate::ui::{Details, DotUrl};
 use bevy_inspector_egui::RegisterInspectable;
-use bevy_inspector_egui::WorldInspectorPlugin;
+// use bevy_inspector_egui::WorldInspectorPlugin;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use sp_core::H256;
@@ -192,12 +192,11 @@ fn source_data(
         let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
         let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
         println!("dot url {:?}", &dot_url);
-        let as_of = dot_url.block_number;
-        println!("Block number selected for relay chains: {:?}", as_of);
+        let as_of = Some(dot_url.clone());
+        println!("Block number selected for relay chains: {:?}", &as_of);
 
-        let relays = networks::get_network(&selected_env);
         // let is_self_sovereign = selected_env.is_self_sovereign();
-        let relays = relays
+        let relays = networks::get_network(&selected_env)
             .into_iter()
             .map(|relay| {
                 relay
@@ -212,32 +211,28 @@ fn source_data(
                             url,
                         )
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<(_, String, Option<NonZeroU32>, _)>>()
             })
             .collect::<Vec<_>>();
 
-        sovereigns.relays = relays.clone();
-
+        sovereigns.relays = relays;
 
         let darkside = materials.add(StandardMaterial {
-                            base_color: 
-                                Color::rgba(0., 0., 0., 0.4)
-                           ,
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness:  1.0 ,
-                            reflectance:  0.5,
-                            unlit: true,
-                            ..default()
-                        });
+            base_color: Color::rgba(0., 0., 0., 0.4),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            reflectance: 0.5,
+            unlit: true,
+            ..default()
+        });
         let lightside = materials.add(StandardMaterial {
-                            base_color:  Color::rgba(0.5, 0.5, 0.5, 0.4)
-                            ,
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: 0.08 ,
-                            reflectance:  0.0 ,
-                            unlit: false,
-                            ..default()
-                        });
+            base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 0.08,
+            reflectance: 0.0,
+            unlit: false,
+            ..default()
+        });
 
         for (rcount, chains) in sovereigns.relays.iter().enumerate() {
             let rfip = if rcount == 1 { -1. } else { 1. };
@@ -250,11 +245,15 @@ fn source_data(
                 let encoded: String = url::form_urlencoded::Serializer::new(String::new())
                     .append_pair("rpc", &chain_deets.3)
                     .finish();
-                    
+
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                        material: if relay_url.is_darkside() { darkside.clone() } else { lightside.clone() },
+                        material: if relay_url.is_darkside() {
+                            darkside.clone()
+                        } else {
+                            lightside.clone()
+                        },
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
                             0.,
@@ -279,28 +278,27 @@ fn source_data(
             }
         }
 
-        for (relay_id, relay) in relays.into_iter().enumerate() {
+        for (relay_id, relay) in sovereigns.relays.iter().enumerate() {
             let relay_url = DotUrl {
                 sovereign: Some(relay_id as u32),
                 ..dot_url.clone()
             };
-            let mut relay2: Vec<_> = vec![];
+            let mut relay2: Vec<(_, Option<NonZeroU32>, String, _)> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
                 crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
             > = Default::default();
             for (arc, _chain_name, para_id, url) in relay {
                 let (tx, rc) = unbounded();
-                relay2.push((arc, para_id, url, rc));
+                relay2.push((arc, (*para_id).clone(), url.to_string(), rc));
                 if let Some(para_id) = para_id {
-                    send_map.insert(para_id, tx);
+                    send_map.insert(*para_id, tx);
                 }
             }
 
-            let relay = relay2;
             let mut send_map = Some(send_map); // take by only one.
 
-            for (arc, para_id, url, rc) in relay {
+            for (arc, para_id, url, rc) in relay2 {
                 println!("listening to {}", url);
 
                 let url_clone = url.clone();
@@ -310,9 +308,9 @@ fn source_data(
                     None
                 };
 
-                // let chain_name = chain_name_clone;
                 let lock_clone = arc.clone();
                 let relay_url_clone = relay_url.clone();
+                let as_of = as_of.clone();
                 std::thread::spawn(move || {
                     // let mut reconnects = 0;
 

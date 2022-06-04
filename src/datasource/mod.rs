@@ -5,7 +5,9 @@ use crate::ABlocks;
 use crate::DataEntity;
 use crate::DataEvent;
 use crate::Details;
+use crate::BASETIME;
 use crate::DATASOURCE_EPOC;
+use async_std::task::block_on;
 use bevy::prelude::warn;
 use desub_current::value::*;
 use desub_current::ValueDef;
@@ -18,6 +20,8 @@ use std::convert::TryFrom;
 use std::hash::Hash;
 use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
+use std::thread;
+use std::time::Duration;
 use subxt::rpc::ClientT;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
@@ -458,8 +462,6 @@ where
         Some(para_name.to_string())
     } else {
         println!("cache miss parachain name!");
-        // let mut api = client
-        //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
         let parachain_name: String = api.client.rpc().system_chain().await.unwrap();
         std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
         Some(parachain_name)
@@ -498,8 +500,7 @@ pub type RelayBlockNumber = u32;
 pub async fn watch_blocks(
     tx: ABlocks,
     url: String,
-    // relay_id: String,
-    as_of: Option<u32>,
+    as_of: Option<DotUrl>,
     parachain_doturl: DotUrl,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
@@ -540,8 +541,38 @@ pub async fn watch_blocks(
                 }
             }
         } else {
-            // Relay chain
-            for block_number in as_of.. {
+            // Relay chain.
+            let mut as_of = as_of.clone();
+
+            // Is the as of the block number of a different relay chain?
+            if as_of.sovereign != parachain_doturl.sovereign {
+                // if so, we have to wait till we know what the time is of that block to proceed.
+                // then we can figure out our nearest block based on that timestamp...
+                while BASETIME.load(Ordering::Relaxed) == 0 {
+                    thread::sleep(Duration::from_millis(250));
+                }
+
+                let basetime = BASETIME.load(Ordering::Relaxed);
+                let time_for_blocknum = |blocknum: u32| {
+                    let block_hash: sp_core::H256 =
+                        block_on(get_block_hash(&api, &url, blocknum)).unwrap();
+
+                    block_on(find_timestamp(
+                        parachain_doturl.clone(),
+                        block_hash,
+                        &url,
+                        &api,
+                    ))
+                };
+                as_of.block_number = dbg!(time_predictor::get_block_number_near_timestamp(
+                    basetime,
+                    10000,
+                    &time_for_blocknum,
+                    None,
+                ));
+            }
+
+            for block_number in as_of.block_number.unwrap().. {
                 let block_hash: Option<sp_core::H256> =
                     get_block_hash(&api, &url, block_number).await;
 
@@ -682,6 +713,58 @@ async fn process_extrinsics(
         handle.1.push(current);
     }
     Ok(())
+}
+
+// Find the timestamp for a block (cut down version of `process_extrinsics`)
+async fn find_timestamp(
+    mut blockurl: DotUrl,
+    block_hash: H256,
+    url: &str,
+    api: &RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
+) -> Option<u64> {
+    if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await {
+        blockurl.block_number = Some(got_block_num);
+        let block_number = blockurl.block_number.unwrap();
+
+        let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
+        let metad = if let Some(version) = version {
+            get_desub_metadata(&url, Some((version, block_hash))).await
+        } else {
+            //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
+            get_desub_metadata(&url, None).await
+        }
+        .unwrap_or_else(|| block_on(get_desub_metadata(&url, None)).unwrap());
+
+        for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+            let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
+                .unwrap()
+                .0;
+            if let Ok(extrinsic) =
+                decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+            {
+                let entity = process_extrisic(
+                    (ex_slice).clone(),
+                    &extrinsic,
+                    DotUrl {
+                        extrinsic: Some(i as u32),
+                        ..blockurl.clone()
+                    },
+                    url,
+                )
+                .await;
+                if let Some(entity) = entity {
+                    if entity.pallet() == "Timestamp" && entity.variant() == "set" {
+                        if let ValueDef::Primitive(Primitive::U64(val)) =
+                            extrinsic.call_data.arguments[0].value
+                        {
+                            return Some(val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 // fetches extrinsics from node for a block number (wrapped by a file cache).
