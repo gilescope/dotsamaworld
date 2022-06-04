@@ -29,20 +29,20 @@ fn get_block_number_near_timestamp_helper(
 
     let start_time = time_for_blocknum(start_block.try_into().unwrap_or(1))? as i64;
 
-    let time_distance = dbg!(start_time) - search_timestamp;
+    let time_distance = start_time - search_timestamp;
     let block_distance = time_distance / average_blocktime_in_ms;
 
     let guess = start_block - block_distance;
 
-    let guess_time = time_for_blocknum(dbg!(guess).try_into().unwrap_or(1))? as i64;
+    let guess_time = time_for_blocknum(guess.try_into().unwrap_or(1))? as i64;
 
-    let actual_blocktime = (dbg!(start_time) - dbg!(guess_time)) / (start_block - guess);
-    if dbg!(actual_blocktime) == 0 {
+    let actual_blocktime = (start_time - guess_time) / (start_block - guess);
+    if actual_blocktime == 0 {
         return None;
     } // Suspicious.
     let calibrated_block_distance = time_distance / actual_blocktime;
     let calibrated_guess = start_block - calibrated_block_distance;
-    let calibrated_guess = dbg!(calibrated_guess).try_into().unwrap_or(1);
+    let calibrated_guess = calibrated_guess.try_into().unwrap_or(1);
     let calibrated_guess_time = time_for_blocknum(calibrated_guess)? as i64;
     if (calibrated_guess_time.abs_diff(search_timestamp) as i64) < actual_blocktime * 2 {
         return Some(calibrated_guess as i64);
