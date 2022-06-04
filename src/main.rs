@@ -216,12 +216,30 @@ fn source_data(
             })
             .collect::<Vec<_>>();
 
-        let clone_chains = relays.clone();
-        let clone_chains_for_lanes = relays.clone();
+        sovereigns.relays = relays.clone();
 
-        sovereigns.relays = clone_chains;
 
-        for (rcount, chains) in clone_chains_for_lanes.iter().enumerate() {
+        let darkside = materials.add(StandardMaterial {
+                            base_color: 
+                                Color::rgba(0., 0., 0., 0.4)
+                           ,
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness:  1.0 ,
+                            reflectance:  0.5,
+                            unlit: true,
+                            ..default()
+                        });
+        let lightside = materials.add(StandardMaterial {
+                            base_color:  Color::rgba(0.5, 0.5, 0.5, 0.4)
+                            ,
+                            alpha_mode: AlphaMode::Blend,
+                            perceptual_roughness: 0.08 ,
+                            reflectance:  0.0 ,
+                            unlit: false,
+                            ..default()
+                        });
+
+        for (rcount, chains) in sovereigns.relays.iter().enumerate() {
             let rfip = if rcount == 1 { -1. } else { 1. };
             let relay_url = DotUrl {
                 sovereign: Some(rcount as u32),
@@ -232,22 +250,11 @@ fn source_data(
                 let encoded: String = url::form_urlencoded::Serializer::new(String::new())
                     .append_pair("rpc", &chain_deets.3)
                     .finish();
-
+                    
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                        material: materials.add(StandardMaterial {
-                            base_color: if relay_url.is_darkside() {
-                                Color::rgba(0., 0., 0., 0.4)
-                            } else {
-                                Color::rgba(0.5, 0.5, 0.5, 0.4)
-                            },
-                            alpha_mode: AlphaMode::Blend,
-                            perceptual_roughness: if relay_url.is_darkside() { 1.0 } else { 0.08 },
-                            reflectance: if relay_url.is_darkside() { 0.5 } else { 0.0 },
-                            unlit: relay_url.is_darkside(),
-                            ..default()
-                        }),
+                        material: if relay_url.is_darkside() { darkside.clone() } else { lightside.clone() },
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
                             0.,
