@@ -35,8 +35,7 @@ use egui_datepicker::DatePicker;
 use sp_core::H256;
 use std::convert::AsRef;
 use std::convert::TryInto;
-// #[subxt::subxt(runtime_metadata_path = "wss://kusama-rpc.polkadot.io:443")]
-// pub mod polkadot {}
+
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
 
@@ -220,36 +219,19 @@ fn source_data(
                     .iter()
                     .map(|chain_name| {
                         let url = chain_name_to_url(&chain_name);
-                        (
-                            ABlocks::default(),
-                            chain_name.to_string(),
-                            datasource::get_parachain_id_from_url(&url)
+                        Chain {
+                            shared: ABlocks::default(),
+                            name: chain_name.to_string(),
+                            para_id: datasource::get_parachain_id_from_url(&url)
                                 .unwrap_or(Some(9999u32.try_into().unwrap())),
                             url,
-                        )
+                        }
                     })
-                    .collect::<Vec<(_, String, Option<NonZeroU32>, _)>>()
+                    .collect::<Vec<Chain>>()
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<Vec<Chain>>>();
 
         sovereigns.relays = relays;
-
-        let darkside = materials.add(StandardMaterial {
-            base_color: Color::rgba(0., 0., 0., 0.4),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            reflectance: 0.5,
-            unlit: true,
-            ..default()
-        });
-        let lightside = materials.add(StandardMaterial {
-            base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.08,
-            reflectance: 0.0,
-            unlit: false,
-            ..default()
-        });
 
         for (rcount, chains) in sovereigns.relays.iter().enumerate() {
             let rfip = if rcount == 1 { -1. } else { 1. };
@@ -258,41 +240,16 @@ fn source_data(
                 ..dot_url.clone()
             };
 
-            for (chain, chain_deets) in chains.iter().enumerate() {
-                let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-                    .append_pair("rpc", &chain_deets.3)
-                    .finish();
-
-                let is_relay = chain_deets.2.is_none();
-                commands
-                    .spawn_bundle(PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-                        material: if relay_url.is_darkside() {
-                            darkside.clone()
-                        } else {
-                            lightside.clone()
-                        },
-                        transform: Transform::from_translation(Vec3::new(
-                            (10000. / 2.) - 5.,
-                            if is_relay { 0. } else { LAYER_GAP },
-                            ((RELAY_CHAIN_CHASM_WIDTH - 5.)
-                                + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
-                                * rfip,
-                        )),
-                        ..Default::default()
-                    })
-                    .insert(Details {
-                        doturl: DotUrl {
-                            para_id: chain_deets.2,
-                            block_number: None,
-                            ..relay_url.clone()
-                        },
-                        flattern: chain_deets.1.clone(),
-                        url: format!("https://polkadot.js.org/apps/?{}", &encoded),
-                        ..default()
-                    })
-                    .insert(Name::new("Blockchain"))
-                    .insert_bundle(PickableBundle::default());
+            for (chain_index, chain_deets) in chains.iter().enumerate() {
+                draw_chain_rect(
+                    chain_deets,
+                    &mut commands,
+                    &mut meshes,
+                    &relay_url,
+                    &mut materials,
+                    chain_index,
+                    rfip,
+                );
             }
         }
 
@@ -301,32 +258,32 @@ fn source_data(
                 sovereign: Some(relay_id as u32),
                 ..dot_url.clone()
             };
-            let mut relay2: Vec<(_, Option<NonZeroU32>, String, _)> = vec![];
+            let mut relay2: Vec<(Chain, _)> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
                 crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
             > = Default::default();
-            for (arc, _chain_name, para_id, url) in relay {
+            for chain in relay.iter() {
                 let (tx, rc) = unbounded();
-                relay2.push((arc, (*para_id).clone(), url.to_string(), rc));
-                if let Some(para_id) = para_id {
-                    send_map.insert(*para_id, tx);
+                if let Some(para_id) = chain.para_id {
+                    send_map.insert(para_id, tx);
                 }
+                relay2.push(((*chain).clone(), rc));
             }
 
             let mut send_map = Some(send_map); // take by only one.
 
-            for (arc, para_id, url, rc) in relay2 {
-                println!("listening to {}", url);
+            for (chain, rc) in relay2 {
+                println!("listening to {}", chain.url);
 
-                let url_clone = url.clone();
-                let maybe_sender = if para_id.is_none() {
+                let url_clone = chain.url.clone();
+                let maybe_sender = if chain.para_id.is_none() {
                     send_map.take()
                 } else {
                     None
                 };
 
-                let lock_clone = arc.clone();
+                let lock_clone = chain.shared.clone();
                 let relay_url_clone = relay_url.clone();
                 let as_of = as_of.clone();
                 std::thread::spawn(move || {
@@ -339,7 +296,7 @@ fn source_data(
                         url_clone.clone(),
                         as_of,
                         DotUrl {
-                            para_id,
+                            para_id: chain.para_id,
                             ..relay_url_clone
                         },
                         rc,
@@ -358,6 +315,63 @@ fn source_data(
             }
         }
     }
+}
+
+fn draw_chain_rect(
+    chain_deets: &Chain,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    relay_url: &DotUrl,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    chain_index: usize,
+    rfip: f32,
+) {
+    let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("rpc", &chain_deets.url)
+        .finish();
+    let is_relay = chain_deets.para_id.is_none();
+    commands
+        .spawn_bundle(PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+            material: if relay_url.is_darkside() {
+                materials.add(StandardMaterial {
+                    base_color: Color::rgba(0., 0., 0., 0.4),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.5,
+                    unlit: true,
+                    ..default()
+                })
+            } else {
+                materials.add(StandardMaterial {
+                    base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: 0.08,
+                    reflectance: 0.0,
+                    unlit: false,
+                    ..default()
+                })
+            },
+            transform: Transform::from_translation(Vec3::new(
+                (10000. / 2.) - 5.,
+                if is_relay { 0. } else { LAYER_GAP },
+                ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32))
+                    * rfip,
+            )),
+            ..Default::default()
+        })
+        .insert(Details {
+            doturl: DotUrl {
+                para_id: chain_deets.para_id,
+                block_number: None,
+                ..relay_url.clone()
+            },
+            flattern: chain_deets.name.clone(),
+            url: format!("https://polkadot.js.org/apps/?{}", &encoded),
+            ..default()
+        })
+        .insert(Name::new("Blockchain"))
+        .insert_bundle(PickableBundle::default());
 }
 
 fn clear_world(
@@ -521,9 +535,17 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 25.;
 
+#[derive(Clone)]
+struct Chain {
+    shared: ABlocks,
+    name: String,
+    para_id: Option<NonZeroU32>,
+    url: String,
+}
+
 struct Sovereigns {
     //                            name    para_id             url
-    pub relays: Vec<Vec<(ABlocks, String, Option<NonZeroU32>, String)>>,
+    pub relays: Vec<Vec<Chain>>,
 }
 
 #[derive(Component)]
@@ -543,8 +565,8 @@ fn render_block(
 ) {
     let is_self_sovereign = false; //TODO!
     for (rcount, relay) in relays.relays.iter().enumerate() {
-        for (chain, (lock, _chain_name, para_id, _url)) in relay.iter().enumerate() {
-            if let Ok(ref mut block_events) = lock.try_lock() {
+        for (chain_index, chain) in relay.iter().enumerate() {
+            if let Ok(ref mut block_events) = chain.shared.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
                     // Skip data we no longer care about...
                     if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
@@ -588,7 +610,7 @@ fn render_block(
                         .append_pair("rpc", &block_events.2.chain_ws)
                         .finish();
 
-                    let is_relay = para_id.is_none();
+                    let is_relay = chain.para_id.is_none();
                     let details = Details {
                         doturl: DotUrl {
                             extrinsic: None,
@@ -627,7 +649,7 @@ fn render_block(
                             transform: Transform::from_translation(Vec3::new(
                                 0. + (block_num as f32),
                                 if is_relay { 0. } else { LAYER_GAP },
-                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32) * rflip,
                             )),
                             ..Default::default()
                         })
@@ -743,7 +765,7 @@ fn render_block(
                     add_blocks(
                         &block_events.2,
                         block_num,
-                        chain,
+                        chain_index,
                         fun,
                         &mut commands,
                         &mut meshes,
@@ -760,7 +782,7 @@ fn render_block(
                     add_blocks(
                         &block_events.2,
                         block_num,
-                        chain,
+                        chain_index,
                         boring,
                         &mut commands,
                         &mut meshes,
@@ -816,7 +838,11 @@ fn add_blocks<'a>(
     let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
     let mut mat_map = HashMap::new();
 
-    let layer = if chain_info.chain_id.is_none() { 0. } else { 1. };
+    let layer = if chain_info.chain_id.is_none() {
+        0.
+    } else {
+        1.
+    };
     let (base_x, base_y, base_z) = (
         0. + (block_num) - 4.,
         0.5 + LAYER_GAP * layer,
@@ -1066,32 +1092,6 @@ pub struct Rainable {
 
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
-
-// // A unit struct to help identify the color-changing Text component
-// #[derive(Component)]
-// pub struct ColorText;
-
-// #[derive(]
-// struct Data {
-//     should_render: bool,
-//     text: String,
-//     #[inspectable(min = 42.0, max = 100.0)]
-//     size: f32,
-// }
-// macro_rules! decode_ex {
-//     ($value:ident, $details:ident, $event:ty) => {
-//         if $details.raw.pallet == <$event>::PALLET {
-//             if $details.raw.variant == <$event>::EVENT {
-//                 // The macro will expand into the contents of this block.
-//                 if let Ok(decoded) = <$eventt::decode(&mut $details.raw.data.to_vec().as_slice()) {
-//                     $value.push_str(&format!("{:#?}", decoded));
-//                 } else {
-//                     $value.push_str("(missing metadata to decode)");
-//                 }
-//             }
-//         }
-//     };
-// }
 
 // https://stackoverflow.com/questions/53706611/rust-max-of-multiple-floats
 macro_rules! max {

@@ -226,7 +226,7 @@ async fn get_desub_metadata(url: &str, version: Option<(String, H256)>) -> Optio
 
     let mut metadata_path = format!("target/{hash}.metadata.scale");
     if let Some((version, hash)) = version {
-        metadata_path = format!("target/{hash}.metadata.scale.{}", version);
+        metadata_path = format!("{}.{}", metadata_path, version);
 
         params = Some(jsonrpsee_types::ParamsSer::Array(vec![
             serde_json::Value::String(hex::encode(hash.as_bytes())),
@@ -554,6 +554,8 @@ pub async fn watch_blocks(
                     thread::sleep(Duration::from_millis(250));
                 }
 
+                // Timestamp is unlikely to change so we can use generic metadata
+                let metad_current = get_desub_metadata(&url, None).await.unwrap();
                 let basetime = BASETIME.load(Ordering::Relaxed);
                 let time_for_blocknum = |blocknum: u32| {
                     let block_hash: sp_core::H256 =
@@ -564,6 +566,7 @@ pub async fn watch_blocks(
                         block_hash,
                         &url,
                         &api,
+                        &metad_current,
                     ))
                 };
                 as_of.block_number = dbg!(time_predictor::get_block_number_near_timestamp(
@@ -697,7 +700,7 @@ async fn process_extrinsics(
                 println!("can't decode block ext {}-{} {}", block_number, i, &url);
             }
         }
-        let events = get_events_for_block(&api, &url, block_hash, &sender, &blockurl)
+        let events = get_events_for_block(&api, &url, block_hash, &sender, &blockurl, &metad)
             .await
             .or(Err(()))?;
 
@@ -723,19 +726,11 @@ async fn find_timestamp(
     block_hash: H256,
     url: &str,
     api: &RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
+    metad: &Metadata,
 ) -> Option<u64> {
     if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await {
         blockurl.block_number = Some(got_block_num);
-        let block_number = blockurl.block_number.unwrap();
-
-        let version = get_metadata_version(&api.client, &url, block_hash, block_number).await;
-        let metad = if let Some(version) = version {
-            get_desub_metadata(&url, Some((version, block_hash))).await
-        } else {
-            //TODO: This is unlikely to work. we should try the oldest metadata we have instead...
-            get_desub_metadata(&url, None).await
-        }
-        .unwrap_or_else(|| block_on(get_desub_metadata(&url, None)).unwrap());
+        //let block_number = blockurl.block_number.unwrap();
 
         for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
             let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
@@ -1440,27 +1435,13 @@ async fn get_events_for_block(
     blockhash: H256,
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
     block_url: &DotUrl,
+    metad: &Metadata,
 ) -> Result<Vec<DataEvent>, Box<dyn std::error::Error>> {
     let mut data_events = vec![];
-    let version = get_metadata_version(
-        &api.client,
-        &url,
-        blockhash,
-        block_url.block_number.unwrap(),
-    )
-    .await;
     let urlhash = please_hash(&url);
     let events_path = format!("target/{urlhash}.metadata.scale.events");
     let blocknum = block_url.block_number.unwrap();
 
-    let metad = if let Some(version) = version {
-        async_std::task::block_on(get_desub_metadata(&url, Some((version, blockhash))))
-    } else {
-        //TODO: Should use oldest metadata
-        async_std::task::block_on(get_desub_metadata(&url, None))
-    }
-    .unwrap();
-    // TODO: pass metadata into fn.
     let storage = decoder::decode_storage(&metad);
     let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
     let storage_key = hex::decode(events_key).unwrap();
@@ -1493,14 +1474,6 @@ async fn get_events_for_block(
     };
 
     if let Some(events_raw) = bytes {
-        // println!("{} len {}", blocknum, events_raw.len());
-
-        let version = get_metadata_version(&api.client, &url, blockhash, blocknum)
-            .await
-            .unwrap();
-        let metad =
-            async_std::task::block_on(get_desub_metadata(url, Some((version, blockhash)))).unwrap();
-
         if let Ok(val) =
             decoder::decode_value_by_id(&metad, &events_entry.ty, &mut events_raw.as_slice())
         {
