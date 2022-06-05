@@ -12,10 +12,12 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
+use scale_info::build;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
 //use bevy_kira_audio::Audio;
 use std::sync::Mutex;
@@ -176,7 +178,7 @@ fn chain_name_to_url(chain_name: &str) -> String {
 // }
 
 fn source_data(
-    mut datasouce_events: EventReader<DataSourceChangedEvent>,
+    mut datasource_events: EventReader<DataSourceChangedEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -184,7 +186,7 @@ fn source_data(
     details: Query<Entity, With<Details>>,
     clean_me: Query<Entity, With<ClearMe>>,
 ) {
-    for event in datasouce_events.iter() {
+    for event in datasource_events.iter() {
         println!(
             "data source changes to {} {:?}",
             event.source, event.timestamp
@@ -355,7 +357,8 @@ fn draw_chain_rect(
             transform: Transform::from_translation(Vec3::new(
                 (10000. / 2.) - 5.,
                 if is_relay { 0. } else { LAYER_GAP },
-                ((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32))
+                ((RELAY_CHAIN_CHASM_WIDTH - 5.)
+                    + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32))
                     * rfip,
             )),
             ..Default::default()
@@ -390,6 +393,8 @@ fn clear_world(
     }
     BASETIME.store(0, Ordering::Relaxed);
 }
+
+#[derive(Clone, Copy)]
 
 enum BuildDirection {
     Up,
@@ -447,7 +452,7 @@ pub enum DataEntity {
         args: Vec<String>,
         contains: Vec<DataEntity>,
         raw: Vec<u8>,
-        /// psudo-unique id to link to some other node(s).
+        /// pseudo-unique id to link to some other node(s).
         /// There can be multiple destinations per block! (TODO: need better resolution)
         /// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
         start_link: Vec<String>,
@@ -649,7 +654,8 @@ fn render_block(
                             transform: Transform::from_translation(Vec3::new(
                                 0. + (block_num as f32),
                                 if is_relay { 0. } else { LAYER_GAP },
-                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32) * rflip,
+                                (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32)
+                                    * rflip,
                             )),
                             ..Default::default()
                         })
@@ -818,7 +824,7 @@ fn add_blocks<'a>(
     polylines: &mut ResMut<Assets<Polyline>>,
     encoded: &str,
 ) {
-    let build_direction = if let BuildDirection::Up = build_direction {
+    let build_dir = if let BuildDirection::Up = build_direction {
         1.0
     } else {
         -1.0
@@ -844,15 +850,15 @@ fn add_blocks<'a>(
         1.
     };
     let (base_x, base_y, base_z) = (
-        0. + (block_num) - 4.,
-        0.5 + LAYER_GAP * layer,
+        (block_num) - 4.,
+        LAYER_GAP * layer,
         RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
 
     const DOT_HEIGHT: f32 = 1.;
     const HIGH: f32 = 100.;
     let mut rain_height: [f32; 81] = [HIGH; 81];
-    let mut next_y: [f32; 81] = [base_y; 81]; // Always positive.
+    let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
 
     let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
@@ -868,8 +874,7 @@ fn add_blocks<'a>(
             (base_z + z as f32),
         );
 
-        let transform =
-            Transform::from_translation(Vec3::new(px, py * build_direction, pz * rflip));
+        let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
 
         if let Some(block @ DataEntity::Extrinsic { .. }) = block {
             for block in std::iter::once(block).chain(block.contains().iter()) {
@@ -909,7 +914,7 @@ fn add_blocks<'a>(
 
                             let mut vertices = vec![
                                 source_global.translation,
-                                Vec3::new(px, target_y * build_direction, pz * rflip),
+                                Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
                             ];
                             rainbow(&mut vertices, 50);
 
@@ -978,7 +983,8 @@ fn add_blocks<'a>(
                         variant: block.variant().to_string(),
                     })
                     .insert(Rainable {
-                        dest: target_y * build_direction,
+                        dest: base_y + target_y * build_dir,
+                        build_direction,
                     })
                     .insert(Name::new("Extrinsic"));
 
@@ -1027,7 +1033,7 @@ fn add_blocks<'a>(
 
             let t = Transform::from_translation(Vec3::new(
                 px,
-                rain_height[event_num % 81] * build_direction,
+                rain_height[event_num % 81] * build_dir,
                 pz * rflip,
             ));
 
@@ -1041,7 +1047,8 @@ fn add_blocks<'a>(
                 .insert_bundle(PickableBundle::default())
                 .insert(entity.details.clone())
                 .insert(Rainable {
-                    dest: target_y * build_direction,
+                    dest: base_y + target_y * build_dir,
+                    build_direction,
                 })
                 .insert(Name::new("BlockEvent"));
 
@@ -1088,6 +1095,7 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
 #[derive(Component)]
 pub struct Rainable {
     dest: f32,
+    build_direction: BuildDirection,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -1132,7 +1140,7 @@ pub fn rain(
     let delta = 1.;
     if timer.timer.tick(time.delta()).just_finished() {
         for (entity, mut transform, rainable) in drops.iter_mut() {
-            if rainable.dest > 0. {
+            if let BuildDirection::Up = rainable.build_direction {
                 if transform.translation.y > rainable.dest {
                     let todo = transform.translation.y - rainable.dest;
                     let delta = min!(1., delta * (todo / rainable.dest));
