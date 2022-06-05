@@ -38,7 +38,7 @@ If you right click on an extrinsic it will open the polkadot-js decode screen fo
 ## Prerequisites
 
 There's probably some prerequites but if you have nix or run nixos then you can just 
-`nix-shell ./shell.nix` to install whatever is needed.
+`nix-shell` to install whatever is needed. I've seen it running on Linux and OSX. Not yet on windows.
 
 ## Build and serve WASM version
 
@@ -75,4 +75,4 @@ License: MIT/Apache2 just like rust.
 https://bevyengine.org/examples/3d/spherical-area-lights/
 https://github.com/therawmeatball/meme-cli
 
-When we go back to being able to run on web would be great to be able to start from any block and show forward and backward in time and be able to jump directly there using a dedicated url.
+When we go back to being able to run on web would be great to be able to be able to hyperlink to a point in time.

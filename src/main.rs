@@ -22,12 +22,15 @@ mod content;
 mod datasource;
 mod movement;
 mod style;
+use egui::Ui;
 mod ui;
 use crate::ui::{Details, DotUrl};
 use bevy_inspector_egui::RegisterInspectable;
 // use bevy_inspector_egui::WorldInspectorPlugin;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
+use chrono::prelude::*;
+use egui_datepicker::DatePicker;
 use sp_core::H256;
 use std::convert::AsRef;
 use std::convert::TryInto;
@@ -83,6 +86,7 @@ use networks::Env;
 
 pub struct DataSourceChangedEvent {
     source: String,
+    timestamp: Option<u64>,
 }
 
 #[async_std::main]
@@ -178,7 +182,10 @@ fn source_data(
     clean_me: Query<Entity, With<ClearMe>>,
 ) {
     for event in datasouce_events.iter() {
-        println!("data source changes to {}", event.source);
+        println!(
+            "data source changes to {} {:?}",
+            event.source, event.timestamp
+        );
 
         clear_world(&details, &mut commands, &clean_me);
 
@@ -189,7 +196,13 @@ fn source_data(
             );
             return;
         }
+
         let dot_url = DotUrl::parse(&event.source).unwrap_or(DotUrl::default());
+
+        if let Some(timestamp) = event.timestamp {
+            BASETIME.store(timestamp, Ordering::Relaxed);
+        }
+
         let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
         println!("dot url {:?}", &dot_url);
         let as_of = Some(dot_url.clone());
@@ -1158,9 +1171,11 @@ pub fn print_events(
 ) {
     if inspector.start_location.changed {
         inspector.start_location.changed = false;
+        let timestamp = inspector.timestamp.timestamp();
 
         custom.send(DataSourceChangedEvent {
             source: inspector.start_location.location.clone(),
+            timestamp,
         });
     }
     for event in events.iter() {
@@ -1326,8 +1341,45 @@ fn setup(
 pub struct Inspector {
     // #[inspectable(deletable = false)]
     start_location: UrlBar,
+    timestamp: DateTime,
     #[inspectable(deletable = false)]
     selected: Option<Details>,
+}
+
+struct DateTime(NaiveDateTime, bool);
+
+impl DateTime {
+    fn timestamp(&self) -> Option<u64> {
+        if self.1 {
+            Some(self.0.timestamp() as u64 * 1000)
+        } else {
+            None
+        }
+    }
+}
+
+impl Default for DateTime {
+    fn default() -> Self {
+        Self(chrono::offset::Utc::now().naive_utc(), false)
+    }
+}
+
+impl Inspectable for DateTime {
+    type Attributes = ();
+
+    fn ui(
+        &mut self,
+        ui: &mut Ui,
+        _: <Self as Inspectable>::Attributes,
+        _: &mut bevy_inspector_egui::Context<'_>,
+    ) -> bool {
+        ui.checkbox(&mut self.1, "Point in time:");
+        ui.add(
+            DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut self.0)
+                .highlight_weekend(true),
+        );
+        true // todo inefficient?
+    }
 }
 
 impl Default for UrlBar {

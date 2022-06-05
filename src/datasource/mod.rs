@@ -543,9 +543,11 @@ pub async fn watch_blocks(
         } else {
             // Relay chain.
             let mut as_of = as_of.clone();
+            let basetime = BASETIME.load(Ordering::Relaxed);
 
             // Is the as of the block number of a different relay chain?
-            if as_of.sovereign != parachain_doturl.sovereign {
+            // (datepicker could have set basetime)
+            if as_of.sovereign != parachain_doturl.sovereign || basetime > 0 {
                 // if so, we have to wait till we know what the time is of that block to proceed.
                 // then we can figure out our nearest block based on that timestamp...
                 while BASETIME.load(Ordering::Relaxed) == 0 {
@@ -566,7 +568,7 @@ pub async fn watch_blocks(
                 };
                 as_of.block_number = dbg!(time_predictor::get_block_number_near_timestamp(
                     basetime,
-                    10000,
+                    10_000_000,
                     &time_for_blocknum,
                     None,
                 ));

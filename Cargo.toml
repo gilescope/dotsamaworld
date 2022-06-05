@@ -23,7 +23,8 @@ futures = "0.3.13"
 jsonrpsee-types = "*"
 
 crossbeam-channel = "*"
-
+egui-datepicker = { git="https://github.com/HU90m/egui-datepicker.git", branch = "for-project-use", default-features = false }
+chrono= { version = "*", default-features = false }
 #wasm-bindgen-rayon = "1.0"
 #[target.'cfg(target_os = "linux")'.dependencies]
 

@@ -24,7 +24,6 @@ fn get_block_number_near_timestamp_helper(
     time_for_blocknum: &impl Fn(u32) -> Option<TIME>,
     average_blocktime_in_ms: Option<i64>,
 ) -> Option<i64> {
-    println!("aaaaaverage {} {}", search_timestamp, start_block);
     let average_blocktime_in_ms = average_blocktime_in_ms.unwrap_or(12_000);
 
     let start_time = time_for_blocknum(start_block.try_into().unwrap_or(1))? as i64;
