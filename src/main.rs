@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+// use ui::doturl;
 //use bevy_kira_audio::Audio;
 use std::sync::Mutex;
 mod content;
@@ -54,6 +55,9 @@ impl Default for MovementSettings {
         }
     }
 }
+
+/// Distance vertically between layer 0 and layer 1
+const LAYER_GAP: f32 = 10.;
 
 /// The time by which all times should be placed relative to each other on the x axis.
 static BASETIME: AtomicU64 = AtomicU64::new(0);
@@ -259,6 +263,7 @@ fn source_data(
                     .append_pair("rpc", &chain_deets.3)
                     .finish();
 
+                let is_relay = chain_deets.2.is_none();
                 commands
                     .spawn_bundle(PbrBundle {
                         mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
@@ -269,7 +274,7 @@ fn source_data(
                         },
                         transform: Transform::from_translation(Vec3::new(
                             (10000. / 2.) - 5.,
-                            0.,
+                            if is_relay { 0. } else { LAYER_GAP },
                             ((RELAY_CHAIN_CHASM_WIDTH - 5.)
                                 + (BLOCK / 2. + BLOCK_AND_SPACER * chain as f32))
                                 * rfip,
@@ -538,7 +543,7 @@ fn render_block(
 ) {
     let is_self_sovereign = false; //TODO!
     for (rcount, relay) in relays.relays.iter().enumerate() {
-        for (chain, (lock, _chain_name, _para_id, _url)) in relay.iter().enumerate() {
+        for (chain, (lock, _chain_name, para_id, _url)) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = lock.try_lock() {
                 if let Some(block) = (*block_events).1.pop() {
                     // Skip data we no longer care about...
@@ -583,6 +588,7 @@ fn render_block(
                         .append_pair("rpc", &block_events.2.chain_ws)
                         .finish();
 
+                    let is_relay = para_id.is_none();
                     let details = Details {
                         doturl: DotUrl {
                             extrinsic: None,
@@ -620,7 +626,7 @@ fn render_block(
                             }),
                             transform: Transform::from_translation(Vec3::new(
                                 0. + (block_num as f32),
-                                0.,
+                                if is_relay { 0. } else { LAYER_GAP },
                                 (RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32) * rflip,
                             )),
                             ..Default::default()
@@ -810,9 +816,10 @@ fn add_blocks<'a>(
     let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
     let mut mat_map = HashMap::new();
 
+    let layer = if chain_info.chain_id.is_none() { 0. } else { 1. };
     let (base_x, base_y, base_z) = (
         0. + (block_num) - 4.,
-        0.5,
+        0.5 + LAYER_GAP * layer,
         RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain as f32 - 4.,
     );
 
@@ -953,21 +960,14 @@ fn add_blocks<'a>(
                     bun.insert(source);
                 }
             }
-        } else {
-            // Remove the spacer as we did not add a block.
-            // next_y[event_num % 81] -= DOT_HEIGHT;
         }
 
         for event in events {
             let details = Details {
-                // hover: format!("{:#?}", event.raw),
-                // flattern: String::new(),
                 url: format!(
                     "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
                     &encoded, &hex_block_hash
                 ),
-                // pallet: event.raw.pallet.to_string(),
-                // variant: event.raw.variant.to_string(),
                 ..event.details.clone()
             };
             let dark = details.doturl.is_darkside();
@@ -1005,7 +1005,6 @@ fn add_blocks<'a>(
                 pz * rflip,
             ));
 
-            // t.translation.y += ;
             let mut x = commands.spawn_bundle(PbrBundle {
                 mesh,
                 material: material.clone(),
@@ -1045,7 +1044,7 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
     println!("center {:#?}", center);
     let r = end - center;
     println!("r {:#?}", r);
-    let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be aproximate
+    let radius = (r.x * r.x + r.y * r.y + r.z * r.z).sqrt(); // could be approximate
                                                              // println!("vertst {},{},{}", start.x, start.y, start.z);
                                                              // println!("verten {},{},{}", end.x, end.y, end.z);
     vertices.truncate(0);
