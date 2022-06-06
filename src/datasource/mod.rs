@@ -5,6 +5,7 @@ use crate::ABlocks;
 use crate::DataEntity;
 use crate::DataEvent;
 use crate::Details;
+use crate::LinkType;
 use crate::BASETIME;
 use crate::DATASOURCE_EPOC;
 use async_std::task::block_on;
@@ -700,11 +701,13 @@ async fn process_extrinsics(
                 println!("can't decode block ext {}-{} {}", block_number, i, &url);
             }
         }
-        let events = get_events_for_block(&api, &url, block_hash, &sender, &blockurl, &metad)
-            .await
-            .or(Err(()))?;
+        let (events, start_link) =
+            get_events_for_block(&api, &url, block_hash, &sender, &blockurl, &metad)
+                .await
+                .or(Err(()))?;
 
         let mut handle = tx.lock().unwrap();
+        let is_parachain = blockurl.para_id.is_some();
         let current = PolkaBlock {
             data_epoc: our_data_epoc,
             timestamp,
@@ -712,6 +715,12 @@ async fn process_extrinsics(
             blockhash: block_hash,
             extrinsics: exts,
             events,
+            start_link,
+            end_link: if is_parachain {
+                vec![(hex::encode(block_hash.as_bytes()), LinkType::ParaInclusion)]
+            } else {
+                vec![]
+            },
         };
 
         //- blocks sometimes have no events in them.
@@ -842,8 +851,8 @@ async fn process_extrisic<'a>(
     // ext_bytes.encode();
     let pallet = ext.call_data.pallet_name.to_string();
     let variant = ext.call_data.ty.name().to_owned();
-    let mut start_link = vec![];
-    let mut end_link = vec![];
+    let mut start_link: Vec<(String, LinkType)> = vec![];
+    let mut end_link: Vec<(String, LinkType)> = vec![];
 
     let mut args: Vec<_> = ext
         .call_data
@@ -1028,8 +1037,11 @@ async fn process_extrisic<'a>(
                                                                         "RECIEVE HASH v0 {}",
                                                                         msg_id
                                                                     );
-                                                                    end_link.push(msg_id.clone());
-                                                                    start_link.push(msg_id);
+                                                                    end_link.push((
+                                                                        msg_id.clone(),
+                                                                        LinkType::ReserveTransfer,
+                                                                    ));
+                                                                    start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
                                                                     // for reserve assets received.
                                                                 };
                                                             } else {
@@ -1088,8 +1100,11 @@ async fn process_extrisic<'a>(
                                                                         "RECIEVE HASH v1 {}",
                                                                         msg_id
                                                                     );
-                                                                    end_link.push(msg_id.clone());
-                                                                    start_link.push(msg_id);
+                                                                    end_link.push((
+                                                                        msg_id.clone(),
+                                                                        LinkType::ReserveTransfer,
+                                                                    ));
+                                                                    start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
                                                                     // for reserve assets received.
                                                                 };
                                                             } else {
@@ -1161,8 +1176,8 @@ async fn process_extrisic<'a>(
                                                                             msg_id
                                                                         );
                                                                         end_link
-                                                                            .push(msg_id.clone());
-                                                                        start_link.push(msg_id);
+                                                                            .push((msg_id.clone(), LinkType::ReserveTransfer));
+                                                                        start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
                                                                         // for reserve assets received.
                                                                     };
                                                                 } else {
@@ -1203,7 +1218,7 @@ async fn process_extrisic<'a>(
             if let Some(to) = to {
                 let msg_id = format!("{}-{}", block_number, please_hash(to));
                 println!("SEND MSG v0 hash {}", msg_id);
-                start_link.push(msg_id);
+                start_link.push((msg_id, LinkType::Teleport));
             }
             println!("first time seeen");
             println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
@@ -1214,7 +1229,7 @@ async fn process_extrisic<'a>(
             if let Some(to) = to {
                 let msg_id = format!("{}-{}", block_number, please_hash(to));
                 println!("SEND MSG v0 hash {}", msg_id);
-                start_link.push(msg_id);
+                start_link.push((msg_id, LinkType::Teleport));
             }
             println!("first time seeen");
             println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
@@ -1225,7 +1240,7 @@ async fn process_extrisic<'a>(
             if let Some(to) = to {
                 let msg_id = format!("{}-{}", block_number, please_hash(to));
                 println!("SEND MSG v0 hash {}", msg_id);
-                start_link.push(msg_id);
+                start_link.push((msg_id, LinkType::Teleport));
             }
             println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
         }
@@ -1348,7 +1363,7 @@ use desub_current::TypeId;
 async fn check_reserve_asset<'a, 'b>(
     args: &Vec<Value<TypeId>>,
     extrinsic_url: &DotUrl,
-    start_link: &'b mut Vec<String>,
+    start_link: &'b mut Vec<(String, LinkType)>,
 ) {
     let mut flat0 = HashMap::new();
     flattern(&args[0].value, "", &mut flat0);
@@ -1370,7 +1385,7 @@ async fn check_reserve_asset<'a, 'b>(
                 please_hash(to)
             );
             println!("SEND MSG v2 hash {}", msg_id);
-            start_link.push(msg_id);
+            start_link.push((msg_id, LinkType::ReserveTransfer));
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
@@ -1390,7 +1405,7 @@ async fn check_reserve_asset<'a, 'b>(
                 please_hash(to)
             );
             println!("SEND MSG v1 hash {}", msg_id);
-            start_link.push(msg_id);
+            start_link.push((msg_id, LinkType::ReserveTransfer));
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
@@ -1410,7 +1425,7 @@ async fn check_reserve_asset<'a, 'b>(
                 please_hash(to)
             );
             println!("SEND MSG v0 hash {}", msg_id);
-            start_link.push(msg_id);
+            start_link.push((msg_id, LinkType::ReserveTransfer));
         }
         println!(
             "Reserve_transfer_assets from {:?} to {}",
@@ -1423,10 +1438,13 @@ pub struct PolkaBlock {
     pub data_epoc: u32,
     pub timestamp: Option<u64>,
     pub blockurl: DotUrl,
-    // pub blocknum: Option<u32>,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
+
+    pub start_link: Vec<(String, LinkType)>,
+    /// list of links that we have finished
+    pub end_link: Vec<(String, LinkType)>,
 }
 
 async fn get_events_for_block(
@@ -1436,7 +1454,8 @@ async fn get_events_for_block(
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
     block_url: &DotUrl,
     metad: &Metadata,
-) -> Result<Vec<DataEvent>, Box<dyn std::error::Error>> {
+) -> Result<(Vec<DataEvent>, Vec<(String, LinkType)>), Box<dyn std::error::Error>> {
+    let mut start_links: Vec<(String, LinkType)> = vec![];
     let mut data_events = vec![];
     let urlhash = please_hash(&url);
     let events_path = format!("target/{urlhash}.metadata.scale.events");
@@ -1673,6 +1692,8 @@ async fn get_events_for_block(
                     // For live mode we listen to all parachains for blocks so sender will be none.
                     if let Some(sender) = sender.as_ref() {
                         for (para_id, hash) in inclusions {
+                            start_links
+                                .push((hex::encode(hash.as_slice()), LinkType::ParaInclusion));
                             let mailbox = sender.get(&para_id);
                             if let Some(mailbox) = mailbox {
                                 let hash = H256::from_slice(hash.as_slice());
@@ -1695,7 +1716,7 @@ async fn get_events_for_block(
     } else {
         warn!("could not find events {}", &blocknum);
     };
-    Ok(data_events)
+    Ok((data_events, start_links))
 }
 
 pub fn associate_events(

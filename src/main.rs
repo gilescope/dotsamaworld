@@ -455,9 +455,9 @@ pub enum DataEntity {
         /// pseudo-unique id to link to some other node(s).
         /// There can be multiple destinations per block! (TODO: need better resolution)
         /// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
-        start_link: Vec<String>,
+        start_link: Vec<(String, LinkType)>,
         /// list of links that we have finished
-        end_link: Vec<String>,
+        end_link: Vec<(String, LinkType)>,
         details: Details,
     },
 }
@@ -466,7 +466,7 @@ pub enum DataEntity {
 pub struct DataEvent {
     // raw: RawEventDetails,
     details: Details,
-    start_link: Vec<String>,
+    start_link: Vec<(String, LinkType)>,
     end_link: Vec<String>,
 }
 
@@ -475,6 +475,15 @@ pub struct DataEvent {
 pub struct MessageSource {
     /// Currently sending block id + hash of beneficiary address.
     pub id: String,
+    pub link_type: LinkType,
+}
+
+#[derive(Clone, Copy)]
+pub enum LinkType {
+    Teleport,
+    ReserveTransfer,
+    ReserveTransferMintDerivative,
+    ParaInclusion,
 }
 
 static EMPTY_SLICE: Vec<DataEntity> = vec![];
@@ -520,13 +529,13 @@ impl DataEntity {
         }
     }
 
-    pub fn start_link(&self) -> &Vec<String> {
+    pub fn start_link(&self) -> &Vec<(String, LinkType)> {
         match self {
             Self::Extrinsic { start_link, .. } => &start_link,
             Self::Event(DataEvent { .. }) => &EMPTY_VEC,
         }
     }
-    pub fn end_link(&self) -> &Vec<String> {
+    pub fn end_link(&self) -> &Vec<(String, LinkType)> {
         match self {
             Self::Extrinsic { end_link, .. } => &end_link,
             Self::Event(DataEvent { .. }) => &EMPTY_VEC,
@@ -534,7 +543,7 @@ impl DataEntity {
     }
 }
 
-static EMPTY_VEC: Vec<String> = vec![];
+static EMPTY_VEC: Vec<(String, LinkType)> = vec![];
 
 const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
@@ -637,8 +646,8 @@ fn render_block(
                     // println!("block num time becomes {}", block_num);
 
                     // Add the new block as a large rectangle on the ground:
-                    commands
-                        .spawn_bundle(PbrBundle {
+                    {
+                        let mut bun = commands.spawn_bundle(PbrBundle {
                             mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
                             material: materials.add(StandardMaterial {
                                 base_color: Color::rgba(0., 0., 0., 0.7),
@@ -658,104 +667,154 @@ fn render_block(
                                     * rflip,
                             )),
                             ..Default::default()
-                        })
-                        .insert(details)
-                        .insert(Name::new("Block"))
-                        .with_children(|parent| {
-                            let name = (*block_events)
-                                .2
-                                .chain_name
-                                .replace(" ", "-")
-                                .replace("-Testnet", "");
-                            let texture_handle =
-                                asset_server.load(&format!("branding/{}.jpeg", name));
-                            let aspect = 1. / 3.;
+                        });
 
-                            // create a new quad mesh. this is what we will apply the texture to
-                            let quad_width = BLOCK;
-                            let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-                                quad_width,
-                                quad_width * aspect,
-                            ))));
+                        bun.insert(details)
+                            .insert(Name::new("Block"))
+                            .with_children(|parent| {
+                                let name = (*block_events)
+                                    .2
+                                    .chain_name
+                                    .replace(" ", "-")
+                                    .replace("-Testnet", "");
+                                let texture_handle =
+                                    asset_server.load(&format!("branding/{}.jpeg", name));
+                                let aspect = 1. / 3.;
 
-                            // this material renders the texture normally
-                            let material_handle = materials.add(StandardMaterial {
-                                base_color_texture: Some(texture_handle.clone()),
-                                alpha_mode: AlphaMode::Blend,
-                                unlit: true, // !block_events.2.inserted_pic,
-                                ..default()
-                            });
+                                // create a new quad mesh. this is what we will apply the texture to
+                                let quad_width = BLOCK;
+                                let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+                                    Vec2::new(quad_width, quad_width * aspect),
+                                )));
 
-                            use std::f32::consts::PI;
-                            // textured quad - normal
-                            let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
-                                                                                               // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
-                            let transform = Transform {
-                                translation: Vec3::new(
-                                    -7., // + (BLOCK_AND_SPACER * block_num as f32),
-                                    0.1, //1.5
-                                    0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
-                                ),
-                                rotation: rot,
-                                ..default()
-                            };
-
-                            parent
-                                .spawn_bundle(PbrBundle {
-                                    mesh: quad_handle.clone(),
-                                    material: material_handle.clone(),
-
-                                    transform,
+                                // this material renders the texture normally
+                                let material_handle = materials.add(StandardMaterial {
+                                    base_color_texture: Some(texture_handle.clone()),
+                                    alpha_mode: AlphaMode::Blend,
+                                    unlit: true, // !block_events.2.inserted_pic,
                                     ..default()
-                                })
-                                .insert(Name::new("BillboardDown"))
-                                .insert(ClearMe);
-                            // by adding Details to the banners they are cleared down when we remove every entity with Details.
+                                });
 
-                            // create a new quad mesh. this is what we will apply the texture to
-                            let quad_width = BLOCK;
-                            let quad_handle = meshes.add(Mesh::from(shape::Quad::new(Vec2::new(
-                                quad_width,
-                                quad_width * aspect,
-                            ))));
-
-                            // this material renders the texture normally
-                            let material_handle = materials.add(StandardMaterial {
-                                base_color_texture: Some(texture_handle.clone()),
-                                alpha_mode: AlphaMode::Blend,
-                                unlit: true, // !block_events.2.inserted_pic,
-                                ..default()
-                            });
-
-                            // textured quad - normal
-                            let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-                                                                                               // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
-                            let transform = Transform {
-                                translation: Vec3::new(
-                                    -7., // + (BLOCK_AND_SPACER * block_num as f32),
-                                    0.1, //1.5
-                                    0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
-                                ),
-                                rotation: rot,
-                                ..default()
-                            };
-
-                            parent
-                                .spawn_bundle(PbrBundle {
-                                    mesh: quad_handle.clone(),
-                                    material: material_handle.clone(),
-                                    transform,
+                                use std::f32::consts::PI;
+                                // textured quad - normal
+                                let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+                                                                                                   // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                                let transform = Transform {
+                                    translation: Vec3::new(
+                                        -7., // + (BLOCK_AND_SPACER * block_num as f32),
+                                        0.1, //1.5
+                                        0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
+                                    ),
+                                    rotation: rot,
                                     ..default()
-                                })
-                                .insert(Name::new(format!(
-                                    "BillboardUp {}",
-                                    block_events.2.chain_name
-                                )))
-                                .insert(ClearMe); // TODO: should be able to add same component onto 3 different entities maybe?
+                                };
 
-                            block_events.2.inserted_pic = true;
-                        })
-                        .insert_bundle(PickableBundle::default());
+                                parent
+                                    .spawn_bundle(PbrBundle {
+                                        mesh: quad_handle.clone(),
+                                        material: material_handle.clone(),
+
+                                        transform,
+                                        ..default()
+                                    })
+                                    .insert(Name::new("BillboardDown"))
+                                    .insert(ClearMe);
+                                // by adding Details to the banners they are cleared down when we remove every entity with Details.
+
+                                // create a new quad mesh. this is what we will apply the texture to
+                                let quad_width = BLOCK;
+                                let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+                                    Vec2::new(quad_width, quad_width * aspect),
+                                )));
+
+                                // this material renders the texture normally
+                                let material_handle = materials.add(StandardMaterial {
+                                    base_color_texture: Some(texture_handle.clone()),
+                                    alpha_mode: AlphaMode::Blend,
+                                    unlit: true, // !block_events.2.inserted_pic,
+                                    ..default()
+                                });
+
+                                // textured quad - normal
+                                let rot = Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+                                                                                                   // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI / 2.0);
+                                let transform = Transform {
+                                    translation: Vec3::new(
+                                        -7., // + (BLOCK_AND_SPACER * block_num as f32),
+                                        0.1, //1.5
+                                        0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
+                                    ),
+                                    rotation: rot,
+                                    ..default()
+                                };
+
+                                parent
+                                    .spawn_bundle(PbrBundle {
+                                        mesh: quad_handle.clone(),
+                                        material: material_handle.clone(),
+                                        transform,
+                                        ..default()
+                                    })
+                                    .insert(Name::new(format!(
+                                        "BillboardUp {}",
+                                        block_events.2.chain_name
+                                    )))
+                                    .insert(ClearMe); // TODO: should be able to add same component onto 3 different entities maybe?
+
+                                block_events.2.inserted_pic = true;
+                            })
+                            .insert_bundle(PickableBundle::default());
+
+                        for (link, link_type) in block.start_link {
+                            println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            bun.insert(MessageSource {
+                                id: link.to_string(),
+                                link_type: link_type,
+                            });
+                        }
+                    }
+                    let mut to_remove = vec![];
+                    for (link, link_type) in block.end_link {
+                        for (entity, id, source_global) in links.iter() {
+                            if id.id == *link {
+                                let layer = if is_relay { 0. } else { 1. };
+                                let (base_x, base_y, base_z) = (
+                                    (block_num) - 4.,
+                                    LAYER_GAP * layer,
+                                    RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32
+                                        - 4.,
+                                );
+                                let mut vertices = vec![
+                                    source_global.translation,
+                                    Vec3::new(base_x, base_y, base_z * rflip),
+                                ];
+
+                                // Create rainbow from entity to current extrinsic location.
+                                commands
+                                    .spawn_bundle(PolylineBundle {
+                                        polyline: polylines.add(Polyline {
+                                            vertices: vertices.clone(),
+                                            ..Default::default()
+                                        }),
+                                        material: polyline_materials.add(PolylineMaterial {
+                                            width: 10.0,
+                                            color: Color::BLUE,
+                                            perspective: true,
+                                            ..Default::default()
+                                        }),
+                                        ..Default::default()
+                                    })
+                                    .insert(ClearMe);
+
+                                to_remove.push(entity);
+                            }
+                        }
+                    }
+
+                    for entity in to_remove {
+                        commands.entity(entity).remove::<MessageSource>();
+                    }
+
                     let ext_with_events =
                         datasource::associate_events(block.extrinsics, block.events);
 
@@ -807,7 +866,7 @@ fn render_block(
     }
 }
 
-// TODO allow different block building strateges. maybe dependent upon quanity of blocks in the space?
+// TODO allow different block building strategies. maybe dependent upon quantity of blocks in the space?
 fn add_blocks<'a>(
     chain_info: &ChainInfo,
     block_num: f32,
@@ -906,7 +965,7 @@ fn add_blocks<'a>(
                 let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
                 let mut create_source = vec![];
-                for link in block.end_link() {
+                for (link, link_type) in block.end_link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {
@@ -952,10 +1011,12 @@ fn add_blocks<'a>(
                         }
                     }
                 }
-                for link in block.start_link() {
+
+                for (link, link_type) in block.start_link() {
                     println!("inserting source of rainbow!");
                     create_source.push(MessageSource {
                         id: link.to_string(),
+                        link_type: *link_type,
                     });
                 }
 
@@ -1052,10 +1113,11 @@ fn add_blocks<'a>(
                 })
                 .insert(Name::new("BlockEvent"));
 
-            for link in &event.start_link {
+            for (link, link_type) in &event.start_link {
                 println!("inserting source of rainbow (an event)!");
                 event_bun.insert(MessageSource {
                     id: link.to_string(),
+                    link_type: *link_type,
                 });
             }
         }
