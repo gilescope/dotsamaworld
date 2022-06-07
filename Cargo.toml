@@ -43,7 +43,7 @@ bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 serde_json = "*"
 #rayon = "*"
-bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="5a5879132c191a66c7486eb232d303b33ebad3bd", optional = true }
+bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
 serde = "*"
 bevy_egui = "*"
 egui = "*"

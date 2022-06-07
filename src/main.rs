@@ -12,15 +12,18 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 use bevy_polyline::{prelude::*, PolylinePlugin};
+use bevy::window::PresentMode;
 use scale_info::build;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
+use bevy::window::RequestRedraw;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
 //use bevy_kira_audio::Audio;
 use std::sync::Mutex;
+use std::time::Duration;
 mod content;
 mod datasource;
 mod movement;
@@ -37,7 +40,7 @@ use egui_datepicker::DatePicker;
 use sp_core::H256;
 use std::convert::AsRef;
 use std::convert::TryInto;
-
+use bevy::winit::WinitSettings;
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
 
@@ -98,6 +101,8 @@ pub struct DataSourceChangedEvent {
 async fn main() -> color_eyre::eyre::Result<()> {
     color_eyre::install()?;
 
+    let low_power_mode = false;
+
     let mut app = App::new();
     app.insert_resource(Msaa { samples: 4 })
         .add_plugins(DefaultPlugins);
@@ -117,6 +122,26 @@ async fn main() -> color_eyre::eyre::Result<()> {
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
 
+
+    // Continuous rendering for games - bevy's default.
+    // app.insert_resource(WinitSettings::game())
+    // Power-saving reactive rendering for applications.
+    if low_power_mode {
+        app.insert_resource(WinitSettings::desktop_app());
+    }
+    // You can also customize update behavior with the fields of [`WinitConfig`]
+    // .insert_resource(WinitSettings {
+    //     focused_mode: bevy::winit::UpdateMode::ReactiveLowPower { max_wait: Duration::from_millis(20), },
+    //     unfocused_mode: bevy::winit::UpdateMode::ReactiveLowPower {
+    //         max_wait: Duration::from_millis(20),
+    //     },
+    //     ..default()
+    // })
+    // Turn off vsync to maximize CPU/GPU usage
+    // .insert_resource(WindowDescriptor {
+    //     present_mode: PresentMode::Immediate,
+    //     ..default()
+    // });
     //app.add_plugins(DefaultPickingPlugins)
     app.add_plugin(PickingPlugin)
         .add_plugin(InteractablePickingPlugin)
@@ -159,6 +184,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
     Ok(())
 }
+
 
 fn chain_name_to_url(chain_name: &str) -> String {
     let mut chain_name = chain_name.to_string();
@@ -470,12 +496,21 @@ pub struct DataEvent {
     end_link: Vec<String>,
 }
 
+
 /// A tag to identify an entity as being the source of a message.
 #[derive(Component)]
 pub struct MessageSource {
     /// Currently sending block id + hash of beneficiary address.
+    
     pub id: String,
     pub link_type: LinkType,
+}
+
+/// An entity can only have one component so this is now the set of
+/// unmatched sources.
+#[derive(Component)]
+pub struct UnmatchedSourceLinks {
+    pub unmatched: Vec<(String, LinkType)>
 }
 
 #[derive(Clone, Copy)]
@@ -574,8 +609,10 @@ fn render_block(
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
     links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+    links2: Query<(Entity, &UnmatchedSourceLinks, &GlobalTransform)>,
     mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
     mut polylines: ResMut<Assets<Polyline>>,
+    mut event: EventWriter<RequestRedraw>
 ) {
     let is_self_sovereign = false; //TODO!
     for (rcount, relay) in relays.relays.iter().enumerate() {
@@ -765,55 +802,54 @@ fn render_block(
                             })
                             .insert_bundle(PickableBundle::default());
 
-                        for (link, link_type) in block.start_link {
-                            println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                            bun.insert(MessageSource {
-                                id: link.to_string(),
-                                link_type: link_type,
-                            });
-                        }
+                        bun.insert(UnmatchedSourceLinks {
+                            unmatched: block.start_link.clone()
+                        });
+                        println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     }
-                    let mut to_remove = vec![];
+                    // let mut to_remove = vec![];
                     for (link, link_type) in block.end_link {
-                        for (entity, id, source_global) in links.iter() {
-                            if id.id == *link {
-                                let layer = if is_relay { 0. } else { 1. };
-                                let (base_x, base_y, base_z) = (
-                                    (block_num) - 4.,
-                                    LAYER_GAP * layer,
-                                    RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32
-                                        - 4.,
-                                );
-                                let mut vertices = vec![
-                                    source_global.translation,
-                                    Vec3::new(base_x, base_y, base_z * rflip),
-                                ];
+                        println!("END LINK !!! {}", links.iter().count());
+                        for (entity, links, source_global) in links2.iter() {
+                            for (id, _link_type) in &links.unmatched {
+                                if id.as_str() == link {
+                                    let layer = if is_relay { 0. } else { 1. };
+                                    let (base_x, base_y, base_z) = (
+                                        (block_num) - 4.,
+                                        LAYER_GAP * layer,
+                                        RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32
+                                            - 4.,
+                                    );
+                                    let mut vertices = vec![
+                                        source_global.translation,
+                                        Vec3::new(base_x, base_y, base_z * rflip),
+                                    ];
 
-                                // Create rainbow from entity to current extrinsic location.
-                                commands
-                                    .spawn_bundle(PolylineBundle {
-                                        polyline: polylines.add(Polyline {
-                                            vertices: vertices.clone(),
+                                    println!("END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                                    commands
+                                        .spawn_bundle(PolylineBundle {
+                                            polyline: polylines.add(Polyline {
+                                                vertices: vertices.clone(),
+                                                ..Default::default()
+                                            }),
+                                            material: polyline_materials.add(PolylineMaterial {
+                                                width: 10.0,
+                                                color: Color::BLUE,
+                                                perspective: true,
+                                                ..Default::default()
+                                            }),
                                             ..Default::default()
-                                        }),
-                                        material: polyline_materials.add(PolylineMaterial {
-                                            width: 10.0,
-                                            color: Color::BLUE,
-                                            perspective: true,
-                                            ..Default::default()
-                                        }),
-                                        ..Default::default()
-                                    })
-                                    .insert(ClearMe);
-
-                                to_remove.push(entity);
+                                        })
+                                        .insert(ClearMe);
+                                }
+                                // to_remove.push(entity);
                             }
                         }
                     }
 
-                    for entity in to_remove {
-                        commands.entity(entity).remove::<MessageSource>();
-                    }
+                    // for entity in to_remove {
+                    //     commands.remove_one::<MessageSource>(entity);
+                    // }
 
                     let ext_with_events =
                         datasource::associate_events(block.extrinsics, block.events);
@@ -860,10 +896,11 @@ fn render_block(
                         &mut polylines,
                         &encoded,
                     );
+                    event.send(RequestRedraw);
                 }
             }
         }
-    }
+    }    
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the space?
