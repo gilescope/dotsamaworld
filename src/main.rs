@@ -82,7 +82,6 @@ pub struct ChainInfo {
     pub chain_url: DotUrl,
 }
 
-// Wait in hashmap till both events and extrinsics together, then released into queue:
 type ABlocks = Arc<
     Mutex<(
         // Queue of new data to be processed.
