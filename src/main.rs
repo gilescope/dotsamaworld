@@ -11,12 +11,12 @@ use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
-use bevy_polyline::{prelude::*, PolylinePlugin};
 use bevy::window::PresentMode;
+use bevy::window::RequestRedraw;
+use bevy_polyline::{prelude::*, PolylinePlugin};
 use scale_info::build;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use bevy::window::RequestRedraw;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
@@ -33,6 +33,7 @@ mod ui;
 use crate::ui::{Details, DotUrl};
 use bevy_inspector_egui::RegisterInspectable;
 // use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy::winit::WinitSettings;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use chrono::prelude::*;
@@ -40,7 +41,6 @@ use egui_datepicker::DatePicker;
 use sp_core::H256;
 use std::convert::AsRef;
 use std::convert::TryInto;
-use bevy::winit::WinitSettings;
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
 
@@ -76,14 +76,18 @@ pub struct ChainInfo {
     pub chain_name: String,
     pub chain_ws: String,
     pub chain_id: Option<NonZeroU32>,
-    pub inserted_pic: bool,
+    pub chain_drawn: bool,
+    // Negative is other direction from center.
+    pub chain_index: isize,
+    pub chain_url: DotUrl,
 }
 
 // Wait in hashmap till both events and extrinsics together, then released into queue:
 type ABlocks = Arc<
     Mutex<(
-        HashMap<String, datasource::PolkaBlock>,
+        // Queue of new data to be processed.
         Vec<datasource::PolkaBlock>,
+        // Info about the chain. Possibly doesn't need to be in mutex.
         ChainInfo,
     )>,
 >;
@@ -121,7 +125,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
-
 
     // Continuous rendering for games - bevy's default.
     // app.insert_resource(WinitSettings::game())
@@ -184,7 +187,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
 
     Ok(())
 }
-
 
 fn chain_name_to_url(chain_name: &str) -> String {
     let mut chain_name = chain_name.to_string();
@@ -249,7 +251,7 @@ fn source_data(
                         let url = chain_name_to_url(&chain_name);
                         Chain {
                             shared: ABlocks::default(),
-                            name: chain_name.to_string(),
+                            // name: chain_name.to_string(),
                             para_id: datasource::get_parachain_id_from_url(&url)
                                 .unwrap_or(Some(9999u32.try_into().unwrap())),
                             url,
@@ -260,26 +262,6 @@ fn source_data(
             .collect::<Vec<Vec<Chain>>>();
 
         sovereigns.relays = relays;
-
-        for (rcount, chains) in sovereigns.relays.iter().enumerate() {
-            let rfip = if rcount == 1 { -1. } else { 1. };
-            let relay_url = DotUrl {
-                sovereign: Some(rcount as u32),
-                ..dot_url.clone()
-            };
-
-            for (chain_index, chain_deets) in chains.iter().enumerate() {
-                draw_chain_rect(
-                    chain_deets,
-                    &mut commands,
-                    &mut meshes,
-                    &relay_url,
-                    &mut materials,
-                    chain_index,
-                    rfip,
-                );
-            }
-        }
 
         for (relay_id, relay) in sovereigns.relays.iter().enumerate() {
             let relay_url = DotUrl {
@@ -299,7 +281,7 @@ fn source_data(
                 relay2.push(((*chain).clone(), rc));
             }
 
-            let mut send_map = Some(send_map); // take by only one.
+            let mut send_map = Some(send_map);
 
             for (chain, rc) in relay2 {
                 println!("listening to {}", chain.url);
@@ -346,22 +328,24 @@ fn source_data(
 }
 
 fn draw_chain_rect(
-    chain_deets: &Chain,
+    chain_url: &str,
+    chain_name: &str,
+    para_url: &DotUrl,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    relay_url: &DotUrl,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    chain_index: usize,
-    rfip: f32,
+    chain_index: isize,
 ) {
+    let rfip = if chain_index < 0 { -1. } else { 1. };
+    let chain_index = chain_index.abs() as usize;
     let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-        .append_pair("rpc", &chain_deets.url)
+        .append_pair("rpc", &chain_url)
         .finish();
-    let is_relay = chain_deets.para_id.is_none();
+    let is_relay = para_url.para_id.is_none();
     commands
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
-            material: if relay_url.is_darkside() {
+            material: if para_url.is_darkside() {
                 materials.add(StandardMaterial {
                     base_color: Color::rgba(0., 0., 0., 0.4),
                     alpha_mode: AlphaMode::Blend,
@@ -390,12 +374,8 @@ fn draw_chain_rect(
             ..Default::default()
         })
         .insert(Details {
-            doturl: DotUrl {
-                para_id: chain_deets.para_id,
-                block_number: None,
-                ..relay_url.clone()
-            },
-            flattern: chain_deets.name.clone(),
+            doturl: (*para_url).clone(),
+            flattern: chain_name.to_string(),
             url: format!("https://polkadot.js.org/apps/?{}", &encoded),
             ..default()
         })
@@ -496,12 +476,10 @@ pub struct DataEvent {
     end_link: Vec<String>,
 }
 
-
 /// A tag to identify an entity as being the source of a message.
 #[derive(Component)]
 pub struct MessageSource {
     /// Currently sending block id + hash of beneficiary address.
-    
     pub id: String,
     pub link_type: LinkType,
 }
@@ -510,7 +488,7 @@ pub struct MessageSource {
 /// unmatched sources.
 #[derive(Component)]
 pub struct UnmatchedSourceLinks {
-    pub unmatched: Vec<(String, LinkType)>
+    pub unmatched: Vec<(String, LinkType)>,
 }
 
 #[derive(Clone, Copy)]
@@ -587,7 +565,7 @@ const RELAY_CHAIN_CHASM_WIDTH: f32 = 25.;
 #[derive(Clone)]
 struct Chain {
     shared: ABlocks,
-    name: String,
+    //name: String,
     para_id: Option<NonZeroU32>,
     url: String,
 }
@@ -612,13 +590,26 @@ fn render_block(
     links2: Query<(Entity, &UnmatchedSourceLinks, &GlobalTransform)>,
     mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
     mut polylines: ResMut<Assets<Polyline>>,
-    mut event: EventWriter<RequestRedraw>
+    mut event: EventWriter<RequestRedraw>,
 ) {
     let is_self_sovereign = false; //TODO!
     for (rcount, relay) in relays.relays.iter().enumerate() {
         for (chain_index, chain) in relay.iter().enumerate() {
             if let Ok(ref mut block_events) = chain.shared.try_lock() {
-                if let Some(block) = (*block_events).1.pop() {
+                if let Some(block) = (*block_events).0.pop() {
+                    if !block_events.1.chain_drawn {
+                        block_events.1.chain_drawn = true;
+                        draw_chain_rect(
+                            &block_events.1.chain_ws,
+                            &block_events.1.chain_name,
+                            &block_events.1.chain_url,
+                            &mut commands,
+                            &mut meshes,
+                            &mut materials,
+                            block_events.1.chain_index,
+                        )
+                    }
+
                     // Skip data we no longer care about...
                     if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
                         continue;
@@ -656,9 +647,13 @@ fn render_block(
                     //     }
                     // };
 
-                    let rflip = if rcount == 1 { -1.0 } else { 1.0 };
+                    let rflip = if block_events.1.chain_index < 0 {
+                        -1.0
+                    } else {
+                        1.0
+                    };
                     let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-                        .append_pair("rpc", &block_events.2.chain_ws)
+                        .append_pair("rpc", &block_events.1.chain_ws)
                         .finish();
 
                     let is_relay = chain.para_id.is_none();
@@ -710,7 +705,7 @@ fn render_block(
                             .insert(Name::new("Block"))
                             .with_children(|parent| {
                                 let name = (*block_events)
-                                    .2
+                                    .1
                                     .chain_name
                                     .replace(" ", "-")
                                     .replace("-Testnet", "");
@@ -794,16 +789,16 @@ fn render_block(
                                     })
                                     .insert(Name::new(format!(
                                         "BillboardUp {}",
-                                        block_events.2.chain_name
+                                        block_events.1.chain_name
                                     )))
                                     .insert(ClearMe); // TODO: should be able to add same component onto 3 different entities maybe?
 
-                                block_events.2.inserted_pic = true;
+                                //block_events.2.inserted_pic = true;
                             })
                             .insert_bundle(PickableBundle::default());
 
                         bun.insert(UnmatchedSourceLinks {
-                            unmatched: block.start_link.clone()
+                            unmatched: block.start_link.clone(),
                         });
                         println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     }
@@ -817,7 +812,8 @@ fn render_block(
                                     let (base_x, base_y, base_z) = (
                                         (block_num) - 4.,
                                         LAYER_GAP * layer,
-                                        RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_index as f32
+                                        RELAY_CHAIN_CHASM_WIDTH
+                                            + BLOCK_AND_SPACER * chain_index as f32
                                             - 4.,
                                     );
                                     let mut vertices = vec![
@@ -864,7 +860,7 @@ fn render_block(
                         });
 
                     add_blocks(
-                        &block_events.2,
+                        &block_events.1,
                         block_num,
                         chain_index,
                         fun,
@@ -881,7 +877,7 @@ fn render_block(
                     );
 
                     add_blocks(
-                        &block_events.2,
+                        &block_events.1,
                         block_num,
                         chain_index,
                         boring,
@@ -900,7 +896,7 @@ fn render_block(
                 }
             }
         }
-    }    
+    }
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the space?
@@ -1002,7 +998,7 @@ fn add_blocks<'a>(
                 let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
                 let mut create_source = vec![];
-                for (link, link_type) in block.end_link() {
+                for (link, _link_type) in block.end_link() {
                     //if this id already exists then this is the destination, not the source...
                     for (entity, id, source_global) in links.iter() {
                         if id.id == *link {

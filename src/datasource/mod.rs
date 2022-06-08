@@ -295,7 +295,7 @@ pub async fn get_parachain_id<T: subxt::Config>(
     let _ = std::fs::create_dir(&path);
     let filename = format!("{}/.parachainid", path);
 
-    println!("cache miss parachain id! {}", filename);
+    println!("cache miss parachain id! {} {}", filename, &url);
     let result = fetch_parachain_id(client, url).await;
 
     if let Some(para_id) = result {
@@ -462,7 +462,7 @@ where
         let para_name = String::from_utf8_lossy(&contents);
         Some(para_name.to_string())
     } else {
-        println!("cache miss parachain name!");
+        println!("cache miss parachain name! {}", &url);
         let parachain_name: String = api.client.rpc().system_chain().await.unwrap();
         std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
         Some(parachain_name)
@@ -504,7 +504,7 @@ pub async fn watch_blocks(
     as_of: Option<DotUrl>,
     parachain_doturl: DotUrl,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
-    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
+    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
 ) -> Result<(), Box<dyn std::error::Error>> {
     let para_id = parachain_doturl.para_id.clone();
     let mut client = ClientBuilder::new().set_url(&url).build().await?;
@@ -515,9 +515,9 @@ pub async fn watch_blocks(
 
     {
         let mut parachain_info = tx.lock().unwrap();
-        parachain_info.2.chain_name = parachain_name.clone();
-        parachain_info.2.chain_ws = url.clone();
-        parachain_info.2.chain_id = para_id
+        parachain_info.1.chain_name = parachain_name.clone();
+        parachain_info.1.chain_ws = url.clone();
+        parachain_info.1.chain_id = para_id
     }
 
     let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
@@ -724,7 +724,7 @@ async fn process_extrinsics(
         };
 
         //- blocks sometimes have no events in them.
-        handle.1.push(current);
+        handle.0.push(current);
     }
     Ok(())
 }
