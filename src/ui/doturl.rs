@@ -4,7 +4,8 @@ use std::num::NonZeroU32;
 #[derive(Default, Debug, Clone)]
 pub struct DotUrl {
     pub env: Env,
-    pub sovereign: Option<u32>,
+    // 0 is the no mans land in the middle
+    pub sovereign: Option<i32>,
     pub para_id: Option<NonZeroU32>,
     pub block_number: Option<u32>,
     pub extrinsic: Option<u32>,
@@ -47,7 +48,28 @@ impl DotUrl {
 
     // Is cyberpunkusama?
     pub fn is_darkside(&self) -> bool {
-        self.sovereign.unwrap_or(1) == 0
+        self.sovereign.unwrap_or(1) == -1
+    }
+
+    pub fn rflip(&self) -> f32 {
+        if self.is_darkside() {
+            1.0
+        } else {
+            -1.0
+        }
+    }
+
+    pub fn is_relay(&self) -> bool {
+        self.para_id.is_none()
+    }
+
+    /// Are we layer zero (relay chain), layer one or...
+    pub fn layer(&self) -> usize {
+        if self.is_relay() {
+            0
+        } else {
+            1
+        }
     }
 }
 

@@ -104,7 +104,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "kusama.api.integritee.network",       // 21st
                     "crab-parachain-rpc.darwinia.network", // 22nd
                     "rpc.litmus-parachain.litentry.io",    // 23rd
-                    "ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
+                    //"ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
                     "rpc.api.kico.dico.io",                // 25th
                     //
                     // Auction Batch 6
@@ -146,7 +146,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "eden-rpc.dwellir.com",                     // noodle 11th
                     //
                     // Auction Batch 3
-                    "nde.pol.equilibrium.io",         // 12th
+                    "node.pol.equilibrium.io",         // 12th
                     "wss://api.phala.network:443/ws", //13th
                     "ws.unique.network",              // 14th
                     "rpc.litentry-parachain.litentry.io", // 15th

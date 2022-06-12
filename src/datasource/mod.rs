@@ -2,6 +2,7 @@ use super::polkadot;
 use crate::polkadot::runtime_types::xcm::VersionedXcm;
 use crate::ui::DotUrl;
 use crate::ABlocks;
+use crate::ChainInfo;
 use crate::DataEntity;
 use crate::DataEvent;
 use crate::Details;
@@ -32,187 +33,9 @@ use subxt::DefaultExtra;
 pub struct ExtrinsicVec(pub Vec<u8>);
 
 mod time_predictor;
-
-#[allow(dead_code)]
-fn print_val<T>(dbg: &desub_current::ValueDef<T>) {
-    match dbg {
-        desub_current::ValueDef::BitSequence(..) => {
-            println!("bit sequence");
-        }
-        desub_current::ValueDef::Composite(inner) => match inner {
-            Composite::Named(fields) => {
-                println!("named composit (");
-                for (n, f) in fields {
-                    print!("{n}");
-                    print_val(&f.value);
-                }
-                println!(")");
-            }
-            Composite::Unnamed(fields) => {
-                println!("un named composita(");
-
-                if fields
-                    .iter()
-                    .all(|f| matches!(f.value, ValueDef::Primitive(_)))
-                    && fields.len() > 1
-                {
-                    println!(" << primitive array >> ");
-                } else {
-                    for f in fields.iter() {
-                        print_val(&f.value);
-                    }
-                }
-                println!(")");
-            }
-        },
-        desub_current::ValueDef::Primitive(..) => {
-            println!("primitiv");
-        }
-        desub_current::ValueDef::Variant(Variant { name, values }) => {
-            println!("variatt {name} (");
-            match values {
-                Composite::Named(fields) => {
-                    println!("named composit (");
-                    for (n, f) in fields {
-                        print!("{n}");
-                        print_val(&f.value);
-                    }
-                    println!(")");
-                }
-                Composite::Unnamed(fields) => {
-                    println!("un named composita(");
-                    for f in fields.iter() {
-                        print_val(&f.value);
-                    }
-                    println!(")");
-                }
-            }
-            println!("variatt end {name} )");
-        }
-    }
-}
-
+mod utils;
 use std::collections::HashMap;
-
-// THere's better ways but crazy levels of matching...
-fn flattern<T>(
-    dbg: &desub_current::ValueDef<T>,
-    location: &str,
-    mut results: &mut HashMap<String, String>,
-) {
-    match dbg {
-        desub_current::ValueDef::BitSequence(..) => {
-            // println!("bitseq skipped");
-        }
-        desub_current::ValueDef::Composite(inner) => match inner {
-            Composite::Named(fields) => {
-                for (n, f) in fields {
-                    flattern(&f.value, &format!("{}.{}", location, n), &mut results);
-                }
-            }
-            Composite::Unnamed(fields) => {
-                if fields
-                    .iter()
-                    .all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_))))
-                    && fields.len() > 1
-                {
-                    results.insert(
-                        format!("{}", location),
-                        hex::encode(
-                            fields
-                                .iter()
-                                .map(|f| {
-                                    if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-                                        byte
-                                    } else {
-                                        panic!();
-                                    }
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    );
-                } else {
-                    for (n, f) in fields.iter().enumerate() {
-                        flattern(&f.value, &format!("{}.{}", location, n), &mut results);
-                    }
-                }
-            }
-        },
-        desub_current::ValueDef::Primitive(Primitive::U8(val)) => {
-            results.insert(location.to_string(), val.to_string());
-        }
-        desub_current::ValueDef::Primitive(Primitive::U32(val)) => {
-            results.insert(location.to_string(), val.to_string());
-        }
-        desub_current::ValueDef::Primitive(..) => {
-            // println!("primitiv skipped");
-        }
-        desub_current::ValueDef::Variant(Variant { name, values }) => match values {
-            Composite::Named(fields) => {
-                if fields
-                    .iter()
-                    .all(|(_name, f)| matches!(f.value, ValueDef::Primitive(Primitive::U8(_))))
-                    && fields.len() > 1
-                {
-                    results.insert(
-                        format!("{},{}", name, location),
-                        hex::encode(
-                            fields
-                                .iter()
-                                .map(|(_, f)| {
-                                    if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-                                        byte
-                                    } else {
-                                        panic!();
-                                    }
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    );
-                } else {
-                    for (n, f) in fields {
-                        flattern(
-                            &f.value,
-                            &format!("{}.{}.{}", location, name, n),
-                            &mut results,
-                        );
-                    }
-                }
-            }
-            Composite::Unnamed(fields) => {
-                if fields
-                    .iter()
-                    .all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_))))
-                    && fields.len() > 1
-                {
-                    results.insert(
-                        location.to_string(),
-                        hex::encode(
-                            fields
-                                .iter()
-                                .map(|f| {
-                                    if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-                                        byte
-                                    } else {
-                                        panic!();
-                                    }
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                    );
-                } else {
-                    for (n, f) in fields.iter().enumerate() {
-                        flattern(
-                            &f.value,
-                            &format!("{}.{}.{}", location, name, n),
-                            &mut results,
-                        );
-                    }
-                }
-            }
-        },
-    }
-}
+use utils::{flattern, print_val};
 
 fn please_hash<T: Hash>(val: &T) -> u64 {
     use std::hash::Hasher;
@@ -290,6 +113,9 @@ pub async fn get_parachain_id<T: subxt::Config>(
     if let Some(cached) = get_cached_parachain_id(url) {
         return Some(cached);
     }
+    if is_relay_chain(url) {
+        return None;
+    }
     let urlhash = please_hash(&url);
     let path = format!("target/{urlhash}.metadata.scale.events");
     let _ = std::fs::create_dir(&path);
@@ -342,7 +168,7 @@ pub fn get_cached_parachain_id(url: &str) -> Option<NonZeroU32> {
     let filename = format!("{}/.parachainid", path);
 
     // Relay chains do not have parachain ids.
-    if url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443" {
+    if is_relay_chain(url) {
         return None;
     }
 
@@ -352,6 +178,10 @@ pub fn get_cached_parachain_id(url: &str) -> Option<NonZeroU32> {
     } else {
         None
     }
+}
+
+pub fn is_relay_chain(url: &str) -> bool {
+    url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
 
 pub fn get_parachain_id_from_url(url: &str) -> Result<Option<NonZeroU32>, ()> {
@@ -426,7 +256,8 @@ async fn get_metadata_version<T: subxt::Config>(
                                  //     panic!("could not recover from error {:?}", err);
                                  // }
                 } else {
-                    panic!("could not recover from error2 {:?}", err);
+                    //panic!("could not recover from error2 {:?}", err);
+                    return None;
                 }
             }
         };
@@ -447,10 +278,29 @@ async fn get_metadata_version<T: subxt::Config>(
 use crate::polkadot::RuntimeApi;
 use subxt::Client;
 // use subxt::DefaultExtraWithTxPayment;
-async fn get_parachain_name<T: subxt::Config>(
-    api: &polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
-    url: &str,
-) -> Option<String>
+// async fn get_parachain_name<T: subxt::Config>(
+//     api: &polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
+//     url: &str,
+// ) -> Option<String>
+// where
+//     RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>: From<Client<T>>,
+// {
+//     let urlhash = please_hash(&url);
+//     let path = format!("target/{urlhash}.metadata.scale.events");
+
+//     let filename = format!("{}/.parachainname", path);
+//     if let Ok(contents) = std::fs::read(&filename) {
+//         let para_name = String::from_utf8_lossy(&contents);
+//         Some(para_name.to_string())
+//     } else {
+//         println!("cache miss parachain name! {}", &url);
+//         let parachain_name: String = api.client.rpc().system_chain().await.unwrap();
+//         std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
+//         Some(parachain_name)
+//     }
+// }
+
+pub(crate) fn get_parachain_name_sync<T: subxt::Config>(url: &str) -> Option<String>
 where
     RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>: From<Client<T>>,
 {
@@ -462,10 +312,23 @@ where
         let para_name = String::from_utf8_lossy(&contents);
         Some(para_name.to_string())
     } else {
-        println!("cache miss parachain name! {}", &url);
-        let parachain_name: String = api.client.rpc().system_chain().await.unwrap();
-        std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
-        Some(parachain_name)
+        println!("CACHE MISS OF parachain name for {}", url);
+        let result: Result<subxt::Client<subxt::DefaultConfig>, _> =
+            async_std::task::block_on(ClientBuilder::new().set_url(url).build());
+        if let Ok(client) = result {
+            // let para_id: Option<NonZeroU32> =
+            //     async_std::task::block_on(get_parachain_id(&client, &url));
+            // Ok(para_id)
+
+            println!("cache miss parachain name! {}", &url);
+            let parachain_name: String = block_on(client.rpc().system_chain()).unwrap();
+            std::fs::write(&filename, &parachain_name.as_bytes())
+                .expect("Couldn't write event output");
+            Some(parachain_name)
+        } else {
+            eprintln!("COULD NOT GET CLIENT FOR URL {}", url);
+            None
+        }
     }
 }
 
@@ -500,27 +363,32 @@ pub type RelayBlockNumber = u32;
 
 pub async fn watch_blocks(
     tx: ABlocks,
-    url: String,
+    chain_info: ChainInfo,
     as_of: Option<DotUrl>,
-    parachain_doturl: DotUrl,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
-    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>
+    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let para_id = parachain_doturl.para_id.clone();
-    let mut client = ClientBuilder::new().set_url(&url).build().await?;
+    let url = &chain_info.chain_ws;
+    let para_id = chain_info.chain_url.para_id.clone();
+    let mut client = ClientBuilder::new().set_url(url).build().await?;
 
     let mut api =
         client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-    let parachain_name = get_parachain_name(&api, &url).await.unwrap();
 
-    {
-        let mut parachain_info = tx.lock().unwrap();
-        parachain_info.1.chain_name = parachain_name.clone();
-        parachain_info.1.chain_ws = url.clone();
-        parachain_info.1.chain_id = para_id
-    }
+    // {
+    // let mut parachain_info = tx.lock().unwrap();
+    // parachain_info.1.chain_name = parachain_name.clone();
+    // parachain_info.1.chain_ws = url.clone();
+    // parachain_info.1.chain_id = para_id
+    // }
 
     let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+
+    // Tell renderer to draw a new chain...
+    {
+        let mut handle = tx.lock().unwrap();
+        handle.push(DataUpdate::NewChain(chain_info.clone()));
+    }
 
     if let Some(as_of) = as_of {
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
@@ -529,9 +397,9 @@ pub async fn watch_blocks(
             while let Ok((_relay_block_number, block_hash)) = recieve_channel.recv() {
                 let _ = process_extrinsics(
                     &tx,
-                    parachain_doturl.clone(),
+                    chain_info.chain_url.clone(),
                     block_hash,
-                    &url,
+                    url,
                     &api,
                     &sender,
                     our_data_epoc,
@@ -548,7 +416,7 @@ pub async fn watch_blocks(
 
             // Is the as of the block number of a different relay chain?
             // (datepicker could have set basetime)
-            if as_of.sovereign != parachain_doturl.sovereign || basetime > 0 {
+            if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
                 // if so, we have to wait till we know what the time is of that block to proceed.
                 // then we can figure out our nearest block based on that timestamp...
                 while BASETIME.load(Ordering::Relaxed) == 0 {
@@ -556,16 +424,16 @@ pub async fn watch_blocks(
                 }
 
                 // Timestamp is unlikely to change so we can use generic metadata
-                let metad_current = get_desub_metadata(&url, None).await.unwrap();
+                let metad_current = get_desub_metadata(url, None).await.unwrap();
                 let basetime = BASETIME.load(Ordering::Relaxed);
                 let time_for_blocknum = |blocknum: u32| {
                     let block_hash: sp_core::H256 =
-                        block_on(get_block_hash(&api, &url, blocknum)).unwrap();
+                        block_on(get_block_hash(&api, url, blocknum)).unwrap();
 
                     block_on(find_timestamp(
-                        parachain_doturl.clone(),
+                        chain_info.chain_url.clone(),
                         block_hash,
-                        &url,
+                        url,
                         &api,
                         &metad_current,
                     ))
@@ -578,29 +446,49 @@ pub async fn watch_blocks(
                 ));
             }
 
+            let mut last_timestamp = None;
             for block_number in as_of.block_number.unwrap().. {
+                std::thread::sleep(std::time::Duration::from_secs(6));
                 let block_hash: Option<sp_core::H256> =
-                    get_block_hash(&api, &url, block_number).await;
+                    get_block_hash(&api, url, block_number).await;
 
                 if block_hash.is_none() {
                     eprintln!(
                         "should be able to get from relay chain hash for block num {} of url {}",
-                        block_number, &url
+                        block_number, url
                     );
+                    // TODO: timestamp probably incorrect
+                    tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
+                        data_epoc: our_data_epoc,
+                        // Place it in the aproximately right location...
+                        timestamp: last_timestamp.map(|t| t + 12_000_000),
+                        blockurl: DotUrl {
+                            block_number: Some(block_number),
+                            ..chain_info.chain_url.clone()
+                        },
+                        blockhash: sp_core::H256::default(),
+                        extrinsics: vec![],
+                        events: vec![],
+                        start_link: vec![],
+                        end_link: vec![],
+                    }));
+
                     continue;
                 }
                 let block_hash = block_hash.unwrap();
-                let _ = process_extrinsics(
+                if let Ok(timestamp) = process_extrinsics(
                     &tx,
-                    parachain_doturl.clone(),
+                    chain_info.chain_url.clone(),
                     block_hash,
-                    &url,
+                    url,
                     &api,
                     &sender,
                     our_data_epoc,
                 )
-                .await;
-                std::thread::sleep(std::time::Duration::from_secs(6));
+                .await
+                {
+                    last_timestamp = timestamp;
+                };
                 // check for stop signal
                 if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
                     return Ok(());
@@ -614,9 +502,9 @@ pub async fn watch_blocks(
                 while let Some(Ok(block_header)) = block_headers.next().await {
                     let _ = process_extrinsics(
                         &tx,
-                        parachain_doturl.clone(),
+                        chain_info.chain_url.clone(),
                         block_header.hash(),
-                        &url,
+                        url,
                         &api,
                         &None,
                         our_data_epoc,
@@ -630,7 +518,7 @@ pub async fn watch_blocks(
             }
             std::thread::sleep(std::time::Duration::from_secs(20));
             reconnects += 1;
-            client = ClientBuilder::new().set_url(&url).build().await?;
+            client = ClientBuilder::new().set_url(url).build().await?;
             api = client
                 .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
                 );
@@ -639,6 +527,7 @@ pub async fn watch_blocks(
     Ok(())
 }
 
+// Returns the timestamp of the block decoded.
 async fn process_extrinsics(
     tx: &ABlocks,
     mut blockurl: DotUrl,
@@ -647,9 +536,9 @@ async fn process_extrinsics(
     api: &RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>,
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
     our_data_epoc: u32,
-) -> Result<(), ()> {
+) -> Result<Option<u64>, ()> {
+    let mut timestamp = None;
     if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, &api, block_hash).await {
-        let mut timestamp = None;
         blockurl.block_number = Some(got_block_num);
         let block_number = blockurl.block_number.unwrap();
 
@@ -710,7 +599,7 @@ async fn process_extrinsics(
         let is_parachain = blockurl.para_id.is_some();
         let current = PolkaBlock {
             data_epoc: our_data_epoc,
-            timestamp,
+            timestamp: timestamp.clone(),
             blockurl,
             blockhash: block_hash,
             extrinsics: exts,
@@ -723,10 +612,10 @@ async fn process_extrinsics(
             },
         };
 
-        //- blocks sometimes have no events in them.
-        handle.0.push(current);
+        //FYI: blocks sometimes have no events in them.
+        handle.push(DataUpdate::NewBlock(current));
     }
-    Ok(())
+    Ok(timestamp)
 }
 
 // Find the timestamp for a block (cut down version of `process_extrinsics`)
@@ -1434,6 +1323,12 @@ async fn check_reserve_asset<'a, 'b>(
     }
 }
 
+pub enum DataUpdate {
+    NewBlock(PolkaBlock),
+    // Chain info and chain name.
+    NewChain(ChainInfo),
+}
+
 pub struct PolkaBlock {
     pub data_epoc: u32,
     pub timestamp: Option<u64>,
@@ -1501,7 +1396,7 @@ async fn get_events_for_block(
                 let mut ext_count_map = HashMap::new();
                 for event in events.iter() {
                     let start_link = vec![];
-                    let end_link = vec![];
+                    // let end_link = vec![];
                     let mut details = Details::default();
                     details.url = url.to_string();
                     details.doturl = DotUrl {
@@ -1683,7 +1578,7 @@ async fn get_events_for_block(
                     data_events.push(DataEvent {
                         // raw: ev_raw.unwrap(),
                         start_link,
-                        end_link,
+                        // end_link,
                         details,
                     })
                 }
