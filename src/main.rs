@@ -508,7 +508,7 @@ pub struct MessageSource {
 /// unmatched sources.
 #[derive(Component)]
 pub struct UnmatchedSourceLinks {
-    pub unmatched: Vec<(String, LinkType)>,
+    pub unmatched: Vec<(Vec<u8>, LinkType)>,
 }
 
 #[derive(Clone, Copy)]
@@ -771,7 +771,7 @@ fn render_block(
                                         let material_handle = materials.add(StandardMaterial {
                                             base_color_texture: Some(texture_handle.clone()),
                                             alpha_mode: AlphaMode::Blend,
-                                            unlit: true, // !block_events.2.inserted_pic,
+                                            unlit: true,
                                             ..default()
                                         });
 
@@ -803,17 +803,20 @@ fn render_block(
                                     })
                                     .insert_bundle(PickableBundle::default());
 
-                                bun.insert(UnmatchedSourceLinks {
-                                    unmatched: block.start_link.clone(),
-                                });
-                                println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                                if block.start_link.len() > 0 {
+                                    bun.insert(UnmatchedSourceLinks {
+                                        unmatched: block.start_link.clone(),
+                                    });
+                                    println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!! {}", block.start_link.len());
+                                }
                             }
                             // let mut to_remove = vec![];
+                            let mut drawn_count = 0.;
                             for (link, link_type) in block.end_link {
                                 println!("END LINK !!! {}", links.iter().count());
                                 for (entity, links, source_global) in links2.iter() {
                                     for (id, _link_type) in &links.unmatched {
-                                        if id.as_str() == link {
+                                        if *id == link {
                                             let layer = if is_relay { 0. } else { 1. };
                                             let (base_x, base_y, base_z) = (
                                                 (block_num) - 4.,
@@ -824,12 +827,17 @@ fn render_block(
                                                     - 4.,
                                             );
                                             let vertices = vec![
-                                                source_global.translation,
-                                                Vec3::new(base_x, base_y, base_z * rflip),
+                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y, source_global.translation.z), // Source
+                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y, base_z * rflip), // Source but z of dest
+                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y + 3., base_z * rflip),
+                                                Vec3::new(base_x, source_global.translation.y + 5., base_z * rflip),
+                                                Vec3::new(base_x, base_y, base_z * rflip), // Dest
+                                                
                                             ];
+                                            drawn_count += 2.5;
 
                                             println!(
-                                                "END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                                                "END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! {}", drawn_count
                                             );
                                             commands
                                                 .spawn_bundle(PolylineBundle {
@@ -840,7 +848,7 @@ fn render_block(
                                                     material: polyline_materials.add(
                                                         PolylineMaterial {
                                                             width: 10.0,
-                                                            color: Color::BLUE,
+                                                            color: Color::GREEN,
                                                             perspective: true,
                                                             ..Default::default()
                                                         },
@@ -1355,8 +1363,9 @@ pub fn right_click_system(
     {
         for (entity, hover) in click_query.iter() {
             if hover.hovered() {
-                // Open browser.
+                // Open browser.                
                 let details = query_details.get(entity).unwrap();
+                #[cfg(not(target_arch = "wasm32"))]
                 open::that(&details.url).unwrap();
                 // picking_events.send(PickingEvent::Clicked(entity));
             }

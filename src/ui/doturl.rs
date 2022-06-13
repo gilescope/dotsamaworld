@@ -22,6 +22,7 @@ impl DotUrl {
             "test" => Env::Test,
             "nfts" => Env::NFTs,
             "local" => Env::Local,
+            "cgp" => Env::CGP,
             "dotsama" | _ => Env::Prod,
         };
 
@@ -82,6 +83,7 @@ impl std::fmt::Display for DotUrl {
             Env::Test => "test",
             Env::NFTs => "nfts",
             Env::Local => "local",
+            Env::CGP => "cgp",
         };
 
         f.write_fmt(format_args!(

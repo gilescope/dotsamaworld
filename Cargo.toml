@@ -47,14 +47,13 @@ bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev
 serde = "*"
 bevy_egui = "*"
 egui = "*"
-open = "1"
 url = "*"
 color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
 # bevy_hanabi = "0.2"
 frame-metadata = "*"
 scale-info = { version = "*", features = ["serde"] }
-desub = { git = "https://github.com/paritytech/desub/" }
+# desub = { git = "https://github.com/paritytech/desub/" }
 desub-current = { git = "https://github.com/paritytech/desub/" }
 # bevy_kira_audio = "*"
 
@@ -62,7 +61,7 @@ desub-current = { git = "https://github.com/paritytech/desub/" }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "dynamic", "jpeg"] }
 subxt = { git = "https://github.com/paritytech/subxt.git", rev = "5c04b09c785c1b009ba6a0e18ab6bb5c516d6a71" }
-
+open = "1"
 
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]

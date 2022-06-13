@@ -8,6 +8,7 @@ pub enum Env {
     SelfSovereign,
     SelfSovereignTest,
     NFTs,
+    CGP
 }
 
 impl Env {
@@ -105,7 +106,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "crab-parachain-rpc.darwinia.network", // 22nd
                     "rpc.litmus-parachain.litentry.io",    // 23rd
                     //"ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
-                    "rpc.api.kico.dico.io",                // 25th
+                    "rpc.api.kico.dico.io", // 25th
                     //
                     // Auction Batch 6
                     "prod-kusama-collator-01.mangatafinance.cloud", // 26th
@@ -146,13 +147,27 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
                     "eden-rpc.dwellir.com",                     // noodle 11th
                     //
                     // Auction Batch 3
-                    "node.pol.equilibrium.io",         // 12th
+                    "node.pol.equilibrium.io",        // 12th
                     "wss://api.phala.network:443/ws", //13th
                     "ws.unique.network",              // 14th
                     "rpc.litentry-parachain.litentry.io", // 15th
                                                       // "mainnet.polkadex.trade", // 16th (not on line yet)
                                                       // 17th origin trail (not live yet)
                                                       // "k-ui.kapex.network",
+                ],
+            ]
+        }
+        // Common good parachains
+        Env::CGP => {
+            vec![
+                vec![
+                    "kusama-rpc.polkadot.io",
+                    "statemine-rpc.dwellir.com",
+                    "kusama.api.encointer.org",
+                ],
+                vec![
+                    "rpc.polkadot.io",
+                    "statemint-rpc.polkadot.io", //1st parachain.
                 ],
             ]
         }

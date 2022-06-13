@@ -606,7 +606,7 @@ async fn process_extrinsics(
             events,
             start_link,
             end_link: if is_parachain {
-                vec![(hex::encode(block_hash.as_bytes()), LinkType::ParaInclusion)]
+                vec![(block_hash.as_bytes().to_vec(), LinkType::ParaInclusion)]
             } else {
                 vec![]
             },
@@ -1337,9 +1337,9 @@ pub struct PolkaBlock {
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
 
-    pub start_link: Vec<(String, LinkType)>,
+    pub start_link: Vec<(Vec<u8>, LinkType)>,
     /// list of links that we have finished
-    pub end_link: Vec<(String, LinkType)>,
+    pub end_link: Vec<(Vec<u8>, LinkType)>,
 }
 
 async fn get_events_for_block(
@@ -1349,8 +1349,8 @@ async fn get_events_for_block(
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
     block_url: &DotUrl,
     metad: &Metadata,
-) -> Result<(Vec<DataEvent>, Vec<(String, LinkType)>), Box<dyn std::error::Error>> {
-    let mut start_links: Vec<(String, LinkType)> = vec![];
+) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
+    let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
     let mut data_events = vec![];
     let urlhash = please_hash(&url);
     let events_path = format!("target/{urlhash}.metadata.scale.events");
@@ -1585,10 +1585,12 @@ async fn get_events_for_block(
 
                 if !inclusions.is_empty() {
                     // For live mode we listen to all parachains for blocks so sender will be none.
+                    for (_, hash) in &inclusions {
+                        start_links
+                            .push((hash.as_slice().to_vec(), LinkType::ParaInclusion));
+                    }
                     if let Some(sender) = sender.as_ref() {
-                        for (para_id, hash) in inclusions {
-                            start_links
-                                .push((hex::encode(hash.as_slice()), LinkType::ParaInclusion));
+                        for (para_id, hash) in inclusions {                            
                             let mailbox = sender.get(&para_id);
                             if let Some(mailbox) = mailbox {
                                 let hash = H256::from_slice(hash.as_slice());
@@ -1597,8 +1599,6 @@ async fn get_events_for_block(
                                         "block hash failed to send at {} error: {}",
                                         blocknum, err
                                     );
-                                } else {
-                                    // println!("block hash sent at {} ", blocknum);
                                 }
                             }
                         }
