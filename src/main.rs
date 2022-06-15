@@ -260,56 +260,59 @@ fn source_data(
                     .enumerate()
                     .map(|(chain_index, chain_name)| {
                         let url = chain_name_to_url(&chain_name);
-                        let para_id = datasource::get_parachain_id_from_url(&url)
+                        let mut source = datasource::RawDataSource::new(&url);
+                        let para_id = datasource::get_parachain_id_from_url(&mut source, &url)
                             .unwrap_or(Some(9999u32.try_into().unwrap()));
-                        let parachain_name = datasource::get_parachain_name_sync(&url).unwrap();
+                        let parachain_name =
+                            datasource::get_parachain_name_sync(&url, &mut source).unwrap();
 
-                        Chain {
-                            shared: ABlocks::default(),
-                            // name: chain_name.to_string(),
-                            info: ChainInfo {
-                                chain_ws: url,
-                                // +2 to skip 0 and relay chain.
-                                chain_index: if relay_url.is_darkside() {
-                                    -((chain_index + 2) as isize)
-                                } else {
-                                    (chain_index + 2) as isize
+                        (
+                            Chain {
+                                shared: ABlocks::default(),
+                                // name: chain_name.to_string(),
+                                info: ChainInfo {
+                                    chain_ws: url,
+                                    // +2 to skip 0 and relay chain.
+                                    chain_index: if relay_url.is_darkside() {
+                                        -((chain_index + 2) as isize)
+                                    } else {
+                                        (chain_index + 2) as isize
+                                    },
+                                    chain_url: DotUrl {
+                                        para_id: para_id,
+                                        ..relay_url.clone()
+                                    },
+                                    chain_name: parachain_name,
                                 },
-                                chain_url: DotUrl {
-                                    para_id: para_id,
-                                    ..relay_url.clone()
-                                },
-                                chain_name: parachain_name,
                             },
-                        }
+                            source,
+                        )
                     })
-                    .collect::<Vec<Chain>>()
+                    .collect::<Vec<(Chain, datasource::RawDataSource)>>()
             })
-            .collect::<Vec<Vec<Chain>>>();
+            .collect::<Vec<Vec<_>>>();
 
-        sovereigns.relays = relays;
-
-        for relay in sovereigns.relays.iter() {
+        for relay in relays.into_iter() {
             // let relay_url = DotUrl {
             //     sovereign: Some(relay_id as u32),
             //     ..dot_url.clone()
             // };
-            let mut relay2: Vec<(Chain, _)> = vec![];
+            let mut relay2: Vec<((Chain, datasource::RawDataSource), _)> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
                 crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
             > = Default::default();
-            for chain in relay.iter() {
+            for (chain, source) in relay.into_iter() {
                 let (tx, rc) = unbounded();
                 if let Some(para_id) = chain.info.chain_url.para_id {
                     send_map.insert(para_id, tx);
                 }
-                relay2.push(((*chain).clone(), rc));
+                relay2.push(((chain, source), rc));
             }
 
             let mut send_map = Some(send_map);
-
-            for (chain, rc) in relay2 {
+            let mut sov_relay = vec![];
+            for ((chain, source), rc) in relay2 {
                 println!("listening to {}", chain.info.chain_ws);
 
                 let url_clone = chain.info.chain_ws.clone();
@@ -320,8 +323,8 @@ fn source_data(
                 };
 
                 let lock_clone = chain.shared.clone();
-                // let relay_url_clone = relay_url.clone();
                 let as_of = as_of.clone();
+                let chain_info = chain.info.clone();
                 std::thread::spawn(move || {
                     // let mut reconnects = 0;
 
@@ -329,12 +332,11 @@ fn source_data(
                     println!("Connecting to {}", &url_clone);
                     let _res = async_std::task::block_on(datasource::watch_blocks(
                         lock_clone.clone(),
-                        chain.info,
-                        // url_clone.clone(),
+                        chain_info,
                         as_of,
-                        // chain.info.chain_url,
                         rc,
                         maybe_sender,
+                        source,
                     ));
                     // if res.is_ok() { break; }
                     // println!(
@@ -346,8 +348,11 @@ fn source_data(
                     // }
                     println!("finished listening to {}", url_clone);
                 });
+                sov_relay.push(chain);
             }
+            sovereigns.relays.push(sov_relay);
         }
+        //TODO: sovereigns.relays = relays;
     }
 }
 
@@ -807,16 +812,17 @@ fn render_block(
                                     bun.insert(UnmatchedSourceLinks {
                                         unmatched: block.start_link.clone(),
                                     });
-                                    println!("START OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!! {}", block.start_link.len());
                                 }
                             }
-                            // let mut to_remove = vec![];
+                            //let mut to_remove = vec![];
                             let mut drawn_count = 0.;
-                            for (link, link_type) in block.end_link {
+                            for (link, _only_one_link_type_at_moment) in block.end_link {
                                 println!("END LINK !!! {}", links.iter().count());
                                 for (entity, links, source_global) in links2.iter() {
+                                    //let mut matched_ids = vec![];
                                     for (id, _link_type) in &links.unmatched {
                                         if *id == link {
+                                            //matched_ids.push(*id);
                                             let layer = if is_relay { 0. } else { 1. };
                                             let (base_x, base_y, base_z) = (
                                                 (block_num) - 4.,
@@ -827,18 +833,35 @@ fn render_block(
                                                     - 4.,
                                             );
                                             let vertices = vec![
-                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y, source_global.translation.z), // Source
-                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y, base_z * rflip), // Source but z of dest
-                                                Vec3::new(source_global.translation.x + drawn_count, source_global.translation.y + 3., base_z * rflip),
-                                                Vec3::new(base_x, source_global.translation.y + 5., base_z * rflip),
+                                                Vec3::new(
+                                                    source_global.translation.x + drawn_count,
+                                                    source_global.translation.y,
+                                                    source_global.translation.z,
+                                                ), // Source
+                                                Vec3::new(
+                                                    source_global.translation.x + drawn_count,
+                                                    source_global.translation.y,
+                                                    base_z * rflip,
+                                                ), // Source but z of dest
+                                                Vec3::new(
+                                                    source_global.translation.x + drawn_count,
+                                                    source_global.translation.y + 3.,
+                                                    base_z * rflip,
+                                                ),
+                                                Vec3::new(
+                                                    base_x,
+                                                    source_global.translation.y + 5.,
+                                                    base_z * rflip,
+                                                ),
                                                 Vec3::new(base_x, base_y, base_z * rflip), // Dest
-                                                
                                             ];
                                             drawn_count += 2.5;
 
                                             println!(
-                                                "END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! {}", drawn_count
+                                                "END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! {}",
+                                                drawn_count
                                             );
+                                            //TODO: we need to remove the links we have matched.
                                             commands
                                                 .spawn_bundle(PolylineBundle {
                                                     polyline: polylines.add(Polyline {
@@ -1363,7 +1386,7 @@ pub fn right_click_system(
     {
         for (entity, hover) in click_query.iter() {
             if hover.hovered() {
-                // Open browser.                
+                // Open browser.
                 let details = query_details.get(entity).unwrap();
                 #[cfg(not(target_arch = "wasm32"))]
                 open::that(&details.url).unwrap();
@@ -1514,6 +1537,8 @@ impl Inspectable for DateTime {
 impl Default for UrlBar {
     fn default() -> Self {
         Self {
+            //dotsama:/1//10504605 doesn't stop.
+            //dotsama:/1//10504599 stops after 12 blocks
             location: "dotsama:/1//10504599".to_string(),
             changed: false,
         }

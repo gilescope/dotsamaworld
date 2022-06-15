@@ -6,7 +6,7 @@ type TIME = u64;
 pub fn get_block_number_near_timestamp(
     search_timestamp: TIME,
     start_block: u32,
-    time_for_blocknum: &impl Fn(u32) -> Option<TIME>,
+    time_for_blocknum: &mut impl FnMut(u32) -> Option<TIME>,
     average_blocktime_in_ms: Option<u64>,
 ) -> Option<u32> {
     get_block_number_near_timestamp_helper(
@@ -21,7 +21,7 @@ pub fn get_block_number_near_timestamp(
 fn get_block_number_near_timestamp_helper(
     search_timestamp: i64,
     start_block: i64,
-    time_for_blocknum: &impl Fn(u32) -> Option<TIME>,
+    time_for_blocknum: &mut impl FnMut(u32) -> Option<TIME>,
     average_blocktime_in_ms: Option<i64>,
 ) -> Option<i64> {
     let average_blocktime_in_ms = average_blocktime_in_ms.unwrap_or(12_000);
@@ -58,7 +58,6 @@ fn get_block_number_near_timestamp_helper(
 mod tests {
     use super::get_block_number_near_timestamp;
     use super::TIME;
-    use async_std::task::block_on;
 
     #[test]
     fn real_polkadot_example() {
@@ -89,45 +88,45 @@ mod tests {
         // Track backwards in time:
         assert_eq!(
             Some(10000000),
-            block_on(get_block_number_near_timestamp(
+            get_block_number_near_timestamp(
                 1_650_715_386_009,
                 10500000,
-                &time_for_blocknum,
+                &mut time_for_blocknum,
                 None
-            ))
+            )
         );
 
         // // Track forwards in time:
         assert_eq!(
             Some(10500000),
-            block_on(get_block_number_near_timestamp(
+            get_block_number_near_timestamp(
                 1_653_739_872_004,
                 10000000,
-                &time_for_blocknum,
+                &mut time_for_blocknum,
                 None
-            ))
+            )
         );
 
         // Track backwards to genesis:
         assert_eq!(
             Some(1),
-            block_on(get_block_number_near_timestamp(
+            get_block_number_near_timestamp(
                 1_590_507_378_000,
                 10500000,
-                &time_for_blocknum,
+                &mut time_for_blocknum,
                 None
-            ))
+            )
         );
 
         // Track forwards to the restaurant at the end of the universe:
         assert_eq!(
             None,
-            block_on(get_block_number_near_timestamp(
+            get_block_number_near_timestamp(
                 1_653_739_872_004_000_000,
                 10000000,
-                &time_for_blocknum,
+                &mut time_for_blocknum,
                 None
-            ))
+            )
         );
     }
 }

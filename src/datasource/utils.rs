@@ -1,6 +1,4 @@
 use desub_current::value::*;
-#[allow(dead_code)]
-
 use std::collections::HashMap;
 
 pub fn print_val<T>(dbg: &desub_current::ValueDef<T>) {
