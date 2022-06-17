@@ -1444,7 +1444,7 @@ fn setup(
     // camera
 
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(-100.0, 100., 0.0).looking_at(Vec3::new(1000.,1.,0.), Vec3::Y),
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s
             far: 0.0001,
