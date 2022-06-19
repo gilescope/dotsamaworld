@@ -1,8 +1,6 @@
 #![feature(drain_filter)]
 #![feature(hash_drain_filter)]
 #![feature(slice_group_by)]
-#![feature(slice_pattern)]
-#![feature(async_closure)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 // use bevy::winit::WinitSettings;
@@ -177,7 +175,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.add_system(movement::player_move_arrows)
         .add_system(rain)
         .add_system(source_data)
-        .add_system(pad_system)
+        // .add_system(pad_system)
         .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_system(right_click_system)
@@ -273,7 +271,7 @@ fn source_data(
                         let para_id = datasource::get_parachain_id_from_url(&mut source, &url)
                             .unwrap_or(Some(9999u32.try_into().unwrap()));
                         let parachain_name =
-                            datasource::get_parachain_name_sync(&url, &mut source).unwrap();
+                            datasource::get_parachain_name_sync(&mut source).unwrap();
 
                         (
                             Chain {
@@ -627,12 +625,12 @@ static EXTRINSICS: AtomicU32 = AtomicU32::new(0);
 
 static EVENTS: AtomicU32 = AtomicU32::new(0);
 
-fn pad_system(gamepads: Res<Gamepads>) {
-    // iterates every active game pad
-    for gamepad in gamepads.iter() {
-        println!("pad found");
-    }
-}
+// fn pad_system(gamepads: Res<Gamepads>) {
+//     // iterates every active game pad
+//     for gamepad in gamepads.iter() {
+//         println!("pad found");
+//     }
+// }
 
 fn render_block(
     mut commands: Commands,
@@ -991,7 +989,7 @@ fn render_block(
 fn add_blocks<'a>(
     chain_info: &ChainInfo,
     block_num: f32,
-    mut block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
+    block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -1351,13 +1349,8 @@ macro_rules! min {
 
 pub fn rain(
     time: Res<Time>,
-    // world: &mut World,
     mut commands: Commands,
-    // mut events: EventReader<PickingEvent>,
-    // query: Query<&mut Selection>,
-    // mut query2: Query<&mut Details>,
     mut drops: Query<(Entity, &mut Transform, &Rainable)>,
-    // asset_server: Res<AssetServer>,
     mut timer: ResMut<UpdateTimer>,
 ) {
     //TODO: remove the Rainable component once it has landed for performance!

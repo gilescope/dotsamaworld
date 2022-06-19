@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use sp_core::H256;
-use core::slice::SlicePattern;
 use crate::datasource::raw_source::AgnosticBlock;
 
 pub struct CachedDataSource<S: Source> {

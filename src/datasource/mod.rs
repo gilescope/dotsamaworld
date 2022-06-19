@@ -112,24 +112,7 @@ pub async fn get_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<No
     if is_relay_chain(url) {
         return None;
     }
-    // let urlhash = please_hash(&url);
-    // let path = format!("target/{urlhash}.metadata.scale.events");
-    // let _ = std::fs::create_dir(&path);
-    // let filename = format!("{}/.parachainid", path);
-
-    // println!("cache miss parachain id! {} {}", filename, &url);
-    let result = fetch_parachain_id::<S>(source, url).await;
-
-    if let Some(para_id) = result {
-        // std::fs::write(&filename, &para_id.to_string().as_bytes())
-            // .expect(&format!("Couldn't write event output to {}", filename));
-        // println!("cache parachain id wrote to {}", filename);
-        Some(para_id)
-    } else {
-        // This is expected for relay chains...
-        // warn!("could not find para id for {}", &url);
-        None
-    }
+    fetch_parachain_id::<S>(source, url).await
 }
 
 pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<NonZeroU32> {
@@ -153,25 +136,6 @@ pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<
     }
 }
 
-// pub fn get_cached_parachain_id(url: &str) -> Option<NonZeroU32> {
-//     let urlhash = please_hash(&url);
-//     let path = format!("target/{urlhash}.metadata.scale.events");
-//     let _ = std::fs::create_dir(&path);
-//     let filename = format!("{}/.parachainid", path);
-
-//     // Relay chains do not have parachain ids.
-//     if is_relay_chain(url) {
-//         return None;
-//     }
-
-//     if let Ok(contents) = std::fs::read(&filename) {
-//         let para_id: NonZeroU32 = String::from_utf8_lossy(&contents).parse().unwrap();
-//         Some(para_id)
-//     } else {
-//         None
-//     }
-// }
-
 pub fn is_relay_chain(url: &str) -> bool {
     url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
@@ -180,125 +144,80 @@ pub fn get_parachain_id_from_url<S: Source>(
     source: &mut S,
     url: &str,
 ) -> Result<Option<NonZeroU32>, ()> {
-    // if let Some(cached_id) = get_cached_parachain_id(url) {
-    //     return Ok(Some(cached_id));
-    // }
-    let para_id: Option<NonZeroU32> = async_std::task::block_on(get_parachain_id(source, &url));
-    Ok(para_id)
+    Ok(async_std::task::block_on(get_parachain_id(source, &url)))
 }
 
 async fn get_metadata_version(
     source: &mut impl Source,
     url: &str,
     hash: sp_core::H256,
-    block_number: u32,
 ) -> Option<String> {
-    let urlhash = please_hash(&url);
-    // let path = format!("target/{urlhash}.metadata.scale.events");
-    // let _ = std::fs::create_dir(&path);
-    // let filename = format!("{}/{}.metadataid", path, block_number);
+    let storage_key =
+        hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8")
+            .unwrap();
+    let call = source
+        .fetch_storage(
+            sp_core::storage::StorageKey(storage_key.clone()),
+            Some(hash),
+        )
+        .await;
+    let call = match call {
+        Ok(call) => call,
+        Err(err) => {
+            let err = err.to_string();
+            // TODO: if we're looking at finalised blocks why are we running into this?
+            let needle = "State already discarded for BlockId::Hash(";
 
-    // if let Ok(contents) = std::fs::read(&filename) {
-    //     Some(String::from_utf8(contents).unwrap())
-    // } else {
-        // println!("cache miss metadata id! {}", filename);
-        // parachainInfo / parachainId returns u32 paraId
-        let storage_key =
-            hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8")
-                .unwrap();
-        let call = source
-            .fetch_storage(
-                sp_core::storage::StorageKey(storage_key.clone()),
-                Some(hash),
-            )
-            .await;
-        let call = match call {
-            Ok(call) => call,
-            Err(err) => {
-                let err = err.to_string();
-                // TODO: if we're looking at finalised blocks why are we running into this?
-                let needle = "State already discarded for BlockId::Hash(";
-
-                let pos = err.find(needle);
-                if let Some(_pos) = pos {
-                    eprintln!(
-                        "{} is not alas an archive node and does not go back this far in time.",
-                        &url
-                    );
-                    return None; // If you get this error you need to point to an archive node.
-                                 // println!("error message (recoverable) {}", &err);
-                                 // let pos = pos + needle.len() + "0x".len();
-                                 // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
-                                 //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
-                                 //     // T::Hashing()
-                                 //     let hash = T::Hashing::hash(new_hash.as_slice());
-                                 //     let call = client
-                                 //         .storage()
-                                 //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
-                                 //         .await
-                                 //         .unwrap();
-                                 //     call
-                                 // } else {
-                                 //     panic!("could not recover from error {:?}", err);
-                                 // }
-                } else {
-                    //panic!("could not recover from error2 {:?}", err);
-                    return None;
-                }
+            let pos = err.find(needle);
+            if let Some(_pos) = pos {
+                eprintln!(
+                    "{} is not alas an archive node and does not go back this far in time.",
+                    &url
+                );
+                return None; // If you get this error you need to point to an archive node.
+                                // println!("error message (recoverable) {}", &err);
+                                // let pos = pos + needle.len() + "0x".len();
+                                // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
+                                //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
+                                //     // T::Hashing()
+                                //     let hash = T::Hashing::hash(new_hash.as_slice());
+                                //     let call = client
+                                //         .storage()
+                                //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
+                                //         .await
+                                //         .unwrap();
+                                //     call
+                                // } else {
+                                //     panic!("could not recover from error {:?}", err);
+                                // }
+            } else {
+                //panic!("could not recover from error2 {:?}", err);
+                return None;
             }
-        };
-
-        if let Some(sp_core::storage::StorageData(val)) = call {
-            let res = hex::encode(val.as_slice());
-            // std::fs::write(&filename, &res.as_bytes())
-            //     .expect(&format!("Couldn't write event output to {}", filename));
-            // println!("cache metadata id wrote to {}", filename);
-            Some(res)
-        } else {
-            warn!("could not find metadata id for {}", &url);
-            None
         }
-    // }
+    };
+
+    if let Some(sp_core::storage::StorageData(val)) = call {
+        Some(hex::encode(val.as_slice()))
+    } else {
+        warn!("could not find metadata id for {}", &url);
+        None
+    }
 }
 
-pub(crate) fn get_parachain_name_sync<S: Source>(url: &str, source: &mut S) -> Option<String> {
-    // let urlhash = please_hash(&url);
-    // let path = format!("target/{urlhash}.metadata.scale.events");
-
-    // let filename = format!("{}/.parachainname", path);
-    // if let Ok(contents) = std::fs::read(&filename) {
-    //     let para_name = String::from_utf8_lossy(&contents);
-    //     Some(para_name.to_string())
-    // } else {
-    //     println!("cache miss parachain name! {}", &url);
-        let parachain_name: String = block_on(source.fetch_chainname()).unwrap().unwrap();
-        // std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
-        Some(parachain_name)
-    // }
+pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<String> {
+    Some(block_on(source.fetch_chainname()).unwrap().unwrap())
 }
 
 async fn get_block_hash<S: Source>(
     source: &mut S,
-    url: &str,
     block_number: u32,
 ) -> Option<sp_core::H256> {
-    // let urlhash = please_hash(&url);
-    // let path = format!("target/{urlhash}.metadata.scale.events");
-
-    // let filename = format!("{}/{}.blockhash", path, block_number);
-    // if let Ok(contents) = std::fs::read(&filename) {
-    //     let para_name = sp_core::H256::from_slice(&hex::decode(contents).unwrap());
-    //     Some(para_name)
-    // } else {
-    //     println!("cache miss! block hash {} {}", url, block_number);
-        if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {
-            // std::fs::write(&filename, &hex::encode(block_hash.as_bytes()))
-            //     .expect("Couldn't write event output");
-            Some(block_hash)
-        } else {
-            None
-        }
-    // }
+    if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {
+        Some(block_hash)
+    } else {
+        None
+    }
 }
 
 pub type RelayBlockNumber = u32;
@@ -313,17 +232,6 @@ pub async fn watch_blocks<S: Source>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = &chain_info.chain_ws;
     let para_id = chain_info.chain_url.para_id.clone();
-    //let mut client = ClientBuilder::new().set_url(url).build().await?;
-
-    // let mut api =
-    //     client.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>();
-
-    // {
-    // let mut parachain_info = tx.lock().unwrap();
-    // parachain_info.1.chain_name = parachain_name.clone();
-    // parachain_info.1.chain_ws = url.clone();
-    // parachain_info.1.chain_id = para_id
-    // }
 
     let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
 
@@ -371,7 +279,7 @@ pub async fn watch_blocks<S: Source>(
                 let basetime = BASETIME.load(Ordering::Relaxed);
                 let mut time_for_blocknum = |blocknum: u32| {
                     let block_hash: sp_core::H256 =
-                        block_on(get_block_hash(&mut source, url, blocknum)).unwrap();
+                        block_on(get_block_hash(&mut source, blocknum)).unwrap();
 
                     block_on(find_timestamp(
                         chain_info.chain_url.clone(),
@@ -393,7 +301,7 @@ pub async fn watch_blocks<S: Source>(
             for block_number in as_of.block_number.unwrap().. {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let block_hash: Option<sp_core::H256> =
-                    get_block_hash(&mut source, url, block_number).await;
+                    get_block_hash(&mut source, block_number).await;
 
                 if block_hash.is_none() {
                     eprintln!(
@@ -461,10 +369,6 @@ pub async fn watch_blocks<S: Source>(
             }
             std::thread::sleep(std::time::Duration::from_secs(20));
             reconnects += 1;
-            // client = ClientBuilder::new().set_url(url).build().await?;
-            // api = client
-            //     .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
-            //     );
         }
     }
     Ok(())
@@ -481,13 +385,13 @@ async fn process_extrinsics<S: Source>(
     our_data_epoc: u32,
 ) -> Result<Option<u64>, ()> {
     let mut timestamp = None;
-    if let Ok(block) = get_extrinsics(&url, source, block_hash).await {
+    if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
         let got_block_num = block.block_number;
         let extrinsics = block.extrinsics;
         blockurl.block_number = Some(got_block_num);
         let block_number = blockurl.block_number.unwrap();
 
-        let version = get_metadata_version(source, &url, block_hash, block_number).await;
+        let version = get_metadata_version(source, &url, block_hash).await;
         let metad = if let Some(version) = version {
             get_desub_metadata(&url, source, Some((version, block_hash))).await
         } else {
@@ -571,7 +475,7 @@ async fn find_timestamp<S: Source>(
     source: &mut S,
     metad: &Metadata,
 ) -> Option<u64> {
-    if let Ok(block) = get_extrinsics(&url, source, block_hash).await {
+    if let Ok(Some(block)) = get_extrinsics( source, block_hash).await {
         blockurl.block_number = Some(block.block_number);
 
         for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
@@ -607,51 +511,12 @@ async fn find_timestamp<S: Source>(
 }
 
 // fetches extrinsics from node for a block number (wrapped by a file cache).
+use subxt::GenericError;
 async fn get_extrinsics(
-    url: &str,
     source: &mut impl Source,
     block_hash: H256,
-) -> Result<AgnosticBlock, ()> {
-    // let urlhash = please_hash(&url);
-    // let path = format!("target/{urlhash}.metadata.scale.events");
-    // let _ = std::fs::create_dir(&path);
-
-    // let filename = format!("{}/{}.block", path, hex::encode(block_hash.as_bytes()));
-    // if let Ok(contents) = std::fs::read(&filename) {
-    //     let temp = String::from_utf8(contents).unwrap();
-    //     let mut exs: Vec<_> = temp.lines().collect();
-    //     let block_num_str = exs.remove(0);
-    //     let block_num: u32 = block_num_str.parse().unwrap();
-    //     let exs = exs.iter().map(|ex| hex::decode(ex).unwrap()).collect();
-    //     Some((block_num, exs))
-    // } else {
-    //     println!("cache miss block! {} {}", url, filename);
-        if let Ok(Some(block)) = source.fetch_block(Some(block_hash)).await {
-            // let mut vals = block.extrinsics
-            //     .iter()
-            //     .fold(block.block_number.to_string(), |mut buf, ex| {
-            //         buf.push('\n');
-            //         buf.push_str(&hex::encode(ex));
-            //         buf
-            //     });
-            // vals.push('\n');
-            // let bytes = block_body.block.extrinsics.encode();
-            // std::fs::write(&filename, vals.as_bytes()).expect("Couldn't write block");
-
-            // let exts = <Vec<ExtrinsicVec> as Decode >::decode(&mut bytes.as_slice());
-            // desub_current::decoder::decode_extrinsics(&metad, &mut bytes.as_slice()).unwrap();
-            // let exs = vals
-            //     .lines()
-            //     .skip(1)
-            //     .map(|ex| hex::decode(ex).unwrap())
-            //     .collect();
-
-            Ok(block)
-        } else {
-            Err(())
-        }
-    // }
-    // .ok_or(())
+) -> Result<Option<AgnosticBlock>, GenericError<std::convert::Infallible>> {
+        source.fetch_block(Some(block_hash)).await
 }
 
 async fn process_extrisic<'a>(
@@ -1289,8 +1154,7 @@ async fn get_events_for_block(
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
     let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
     let mut data_events = vec![];
-    let urlhash = please_hash(&url);
-    // let events_path = format!("target/{urlhash}.metadata.scale.events");
+  
     let blocknum = block_url.block_number.unwrap();
 
     let storage = decoder::decode_storage(&metad);
@@ -1300,27 +1164,18 @@ async fn get_events_for_block(
         .decode_key(&metad, &mut storage_key.as_slice())
         .expect("can decode storage");
 
-    // let filename = format!("{}/{}.events", events_path, blocknum);
-    // let bytes = if let Ok(contents) = std::fs::read(&filename) {
-    //     // println!("cache hit events!");
-    //     Some(hex::decode(contents).unwrap())
-    // } else {
-        // println!("cache miss events!");
-        let call = source
-            .fetch_storage(
-                sp_core::storage::StorageKey(storage_key.clone()),
-                Some(blockhash),
-            )
-            .await?;
+    let call = source
+        .fetch_storage(
+            sp_core::storage::StorageKey(storage_key.clone()),
+            Some(blockhash),
+        )
+        .await?;
 
-        let bytes = if let Some(sp_core::storage::StorageData(events_raw)) = call {
-            // std::fs::write(&filename, &hex::encode(&events_raw))
-            //     .expect("Couldn't write event output");
-            Some(events_raw)
-        } else {
-            None
-        };
-    // };
+    let bytes = if let Some(sp_core::storage::StorageData(events_raw)) = call {
+        Some(events_raw)
+    } else {
+        None
+    };
 
     if let Some(events_raw) = bytes {
         if let Ok(val) =
@@ -1794,7 +1649,7 @@ mod tests {
         let mut source = RawDataSource::new(url);
         let blockhash = block_on(get_block_hash(&mut source, &url, 1000_000)).unwrap();
 
-        let (_block_num, results) = block_on(get_extrinsics(url, &mut source, blockhash)).unwrap();
+        let (_block_num, results) = block_on(get_extrinsics( &mut source, blockhash)).unwrap().unwrap();
 
         let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
         if let Ok(extrinsic) =
