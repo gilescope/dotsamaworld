@@ -1,5 +1,6 @@
 #![feature(drain_filter)]
 #![feature(hash_drain_filter)]
+#![feature(slice_group_by)]
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
@@ -44,6 +45,7 @@ use std::convert::AsRef;
 use std::convert::TryInto;
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 #[cfg(feature = "spacemouse")]
 pub struct MovementSettings {
@@ -174,6 +176,9 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.add_system(movement::player_move_arrows)
         .add_system(rain)
         .add_system(source_data)
+        .add_system(pad_system)
+        .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_system(right_click_system)
         .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
@@ -260,7 +265,10 @@ fn source_data(
                     .enumerate()
                     .map(|(chain_index, chain_name)| {
                         let url = chain_name_to_url(&chain_name);
-                        let mut source = datasource::RawDataSource::new(&url);
+                        let mut source = datasource::CachedDataSource::new(
+                            &url,
+                            datasource::RawDataSource::new(&url),
+                        );
                         let para_id = datasource::get_parachain_id_from_url(&mut source, &url)
                             .unwrap_or(Some(9999u32.try_into().unwrap()));
                         let parachain_name =
@@ -288,7 +296,10 @@ fn source_data(
                             source,
                         )
                     })
-                    .collect::<Vec<(Chain, datasource::RawDataSource)>>()
+                    .collect::<Vec<(
+                        Chain,
+                        datasource::CachedDataSource<datasource::RawDataSource>,
+                    )>>()
             })
             .collect::<Vec<Vec<_>>>();
 
@@ -297,7 +308,13 @@ fn source_data(
             //     sovereign: Some(relay_id as u32),
             //     ..dot_url.clone()
             // };
-            let mut relay2: Vec<((Chain, datasource::RawDataSource), _)> = vec![];
+            let mut relay2: Vec<(
+                (
+                    Chain,
+                    datasource::CachedDataSource<datasource::RawDataSource>,
+                ),
+                _,
+            )> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
                 crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
@@ -601,6 +618,21 @@ struct Sovereigns {
 #[derive(Component)]
 struct ClearMe;
 
+static CHAINS: AtomicU32 = AtomicU32::new(0);
+
+static BLOCKS: AtomicU32 = AtomicU32::new(0);
+
+static EXTRINSICS: AtomicU32 = AtomicU32::new(0);
+
+static EVENTS: AtomicU32 = AtomicU32::new(0);
+
+fn pad_system(gamepads: Res<Gamepads>) {
+    // iterates every active game pad
+    for gamepad in gamepads.iter() {
+        println!("pad found");
+    }
+}
+
 fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -623,6 +655,16 @@ fn render_block(
                 if let Some(data_update) = (*block_events).pop() {
                     match data_update {
                         DataUpdate::NewBlock(block) => {
+                            BLOCKS.fetch_add(1, Ordering::Relaxed);
+
+                            println!(
+                                "chains {} blocks {} txs {} events {}",
+                                CHAINS.load(Ordering::Relaxed),
+                                BLOCKS.load(Ordering::Relaxed),
+                                EXTRINSICS.load(Ordering::Relaxed),
+                                EVENTS.load(Ordering::Relaxed)
+                            );
+
                             // Skip data we no longer care about because the datasource has changed
                             if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
                                 continue;
@@ -892,6 +934,7 @@ fn render_block(
                             let ext_with_events =
                                 datasource::associate_events(block.extrinsics, block.events);
 
+                            // Leave infrastructure events underground and show user activity above ground.
                             let (boring, fun): (Vec<_>, Vec<_>) =
                                 ext_with_events.into_iter().partition(|(e, _)| {
                                     if let Some(ext) = e {
@@ -904,7 +947,6 @@ fn render_block(
                             add_blocks(
                                 &chain_info,
                                 block_num,
-                                // block_events.1.chain_index,
                                 fun,
                                 &mut commands,
                                 &mut meshes,
@@ -920,7 +962,6 @@ fn render_block(
                             add_blocks(
                                 &chain_info,
                                 block_num,
-                                // block_events.1.chain_index,
                                 boring,
                                 &mut commands,
                                 &mut meshes,
@@ -935,16 +976,8 @@ fn render_block(
                             event.send(RequestRedraw);
                         }
                         DataUpdate::NewChain(chain_info) => {
-                            draw_chain_rect(
-                                &chain_info,
-                                // &block_events.1.chain_ws,
-                                // &block_events.1.chain_name,
-                                // &block_events.1.chain_url,
-                                // block_events.1.chain_index,
-                                &mut commands,
-                                &mut meshes,
-                                &mut materials,
-                            )
+                            CHAINS.fetch_add(1, Ordering::Relaxed);
+                            draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
                         }
                     }
                 }
@@ -957,8 +990,7 @@ fn render_block(
 fn add_blocks<'a>(
     chain_info: &ChainInfo,
     block_num: f32,
-    // chain_index: isize,
-    block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
+    mut block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -1020,6 +1052,7 @@ fn add_blocks<'a>(
 
         if let Some(block @ DataEntity::Extrinsic { .. }) = block {
             for block in std::iter::once(block).chain(block.contains().iter()) {
+                EXTRINSICS.fetch_add(1, Ordering::Relaxed);
                 let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT;
                 let dark = block.details().doturl.is_darkside();
@@ -1138,70 +1171,115 @@ fn add_blocks<'a>(
             }
         }
 
-        for event in events {
-            let details = Details {
-                url: format!(
-                    "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-                    &encoded, &hex_block_hash
-                ),
-                ..event.details.clone()
-            };
-            let dark = details.doturl.is_darkside();
-            let entity = DataEvent {
-                details,
-                ..event.clone()
-            };
-            let style = style::style_data_event(&entity);
-            let material = mat_map.entry(style.clone()).or_insert_with(|| {
-                materials.add(if dark {
-                    StandardMaterial {
-                        base_color: style.color.clone(),
-                        emissive: style.color.clone(),
-                        perceptual_roughness: 0.3,
-                        metallic: 1.0,
-                        ..default()
-                    }
-                } else {
-                    style.color.clone().into()
-                })
-            });
+        let mut events = events.clone();
+        events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
+        //TODO keep original order a bit
 
-            let mesh = if content::is_event_message(&entity) {
-                mesh_xcm.clone()
+        for event_group in events.group_by(|a, b| {
+            a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
+        }) {
+            let event_group: Vec<_> = event_group.iter().collect();
+
+            let height = event_group.len() as f32;
+            let annoying = DataEvent {
+                details: Details {
+                    pallet: event_group[0].details.pallet.clone(),
+                    doturl: event_group[0].details.doturl.clone(),
+                    parent: event_group[0].details.parent.clone(),
+                    variant: event_group[0].details.variant.clone(),
+                    success: event_group[0].details.success.clone(),
+                    hover: event_group[0].details.hover.clone(),
+                    flattern: event_group[0].details.flattern.clone(),
+                    url: event_group[0].details.url.clone(),
+                },
+                start_link: vec![],
+            };
+            let event_group = if event_group.len() == 1 {
+                event_group
             } else {
-                mesh.clone()
+                vec![&annoying]
             };
-            rain_height[event_num % 81] += DOT_HEIGHT;
-            let target_y = next_y[event_num % 81];
-            next_y[event_num % 81] += DOT_HEIGHT;
-
-            let t = Transform::from_translation(Vec3::new(
-                px,
-                rain_height[event_num % 81] * build_dir,
-                pz * rflip,
-            ));
-
-            let mut x = commands.spawn_bundle(PbrBundle {
-                mesh,
-                material: material.clone(),
-                transform: t,
-                ..Default::default()
-            });
-            let event_bun = x
-                .insert_bundle(PickableBundle::default())
-                .insert(entity.details.clone())
-                .insert(Rainable {
-                    dest: base_y + target_y * build_dir,
-                    build_direction,
-                })
-                .insert(Name::new("BlockEvent"));
-
-            for (link, link_type) in &event.start_link {
-                println!("inserting source of rainbow (an event)!");
-                event_bun.insert(MessageSource {
-                    id: link.to_string(),
-                    link_type: *link_type,
+            for event in event_group {
+                EVENTS.fetch_add(1, Ordering::Relaxed);
+                let details = Details {
+                    url: format!(
+                        "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+                        &encoded, &hex_block_hash
+                    ),
+                    ..event.details.clone()
+                };
+                let dark = details.doturl.is_darkside();
+                let entity = DataEvent {
+                    details,
+                    ..event.clone()
+                };
+                let style = style::style_data_event(&entity);
+                //TODO: map should be a resource.
+                let material = mat_map.entry(style.clone()).or_insert_with(|| {
+                    materials.add(if dark {
+                        StandardMaterial {
+                            base_color: style.color.clone(),
+                            emissive: style.color.clone(),
+                            perceptual_roughness: 0.3,
+                            metallic: 1.0,
+                            ..default()
+                        }
+                    } else {
+                        style.color.clone().into()
+                    })
                 });
+
+                let mesh = if content::is_event_message(&entity) {
+                    mesh_xcm.clone()
+                } else {
+                    // let mesh = meshes.add(Mesh::from(shape::Box {
+                    //     min_x: 0.,
+                    //     max_x: 0.8,
+
+                    //     min_y: 0.,
+                    //     max_y: 0.8 * height + (height - 1.) * 0.4,
+
+                    //     min_z: 0.,
+                    //     max_z: 0.8,
+                    // }));
+                    // let mesh = meshes.add(Mesh::from(shape::Icosphere {
+                    //     radius: 0.40,
+                    //     subdivisions: 32,
+                    // }));
+                    mesh.clone()
+                };
+                rain_height[event_num % 81] += DOT_HEIGHT * height;
+                let target_y = next_y[event_num % 81];
+                next_y[event_num % 81] += DOT_HEIGHT * height;
+
+                let t = Transform::from_translation(Vec3::new(
+                    px,
+                    rain_height[event_num % 81] * build_dir,
+                    pz * rflip,
+                ));
+
+                let mut x = commands.spawn_bundle(PbrBundle {
+                    mesh,
+                    material: material.clone(),
+                    transform: t,
+                    ..Default::default()
+                });
+                let event_bun = x
+                    .insert_bundle(PickableBundle::default())
+                    .insert(entity.details.clone())
+                    .insert(Rainable {
+                        dest: base_y + target_y * build_dir,
+                        build_direction,
+                    })
+                    .insert(Name::new("BlockEvent"));
+
+                for (link, link_type) in &event.start_link {
+                    println!("inserting source of rainbow (an event)!");
+                    event_bun.insert(MessageSource {
+                        id: link.to_string(),
+                        link_type: *link_type,
+                    });
+                }
             }
         }
     }
@@ -1444,7 +1522,8 @@ fn setup(
     // camera
 
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(-100.0, 100., 0.0).looking_at(Vec3::new(1000.,1.,0.), Vec3::Y),
+        transform: Transform::from_xyz(-100.0, 100., 0.0)
+            .looking_at(Vec3::new(1000., 1., 0.), Vec3::Y),
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s
             far: 0.0001,
@@ -1525,12 +1604,14 @@ impl Inspectable for DateTime {
         _: <Self as Inspectable>::Attributes,
         _: &mut bevy_inspector_egui::Context<'_>,
     ) -> bool {
+        let mut changed = false;
         ui.checkbox(&mut self.1, "Point in time:");
         ui.add(
             DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut self.0)
                 .highlight_weekend(true),
         );
-        true // todo inefficient?
+        true
+        //        true // todo inefficient?
     }
 }
 

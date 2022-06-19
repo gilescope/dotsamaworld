@@ -1,6 +1,7 @@
 use super::polkadot;
 use crate::polkadot::RuntimeApi;
 use async_std::stream::StreamExt;
+use async_trait::async_trait;
 use parity_scale_codec::Encode;
 use sp_core::H256;
 use subxt::rpc::ClientT;
@@ -8,6 +9,46 @@ use subxt::Client;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
+
+/// A way to source untransformed raw data.
+#[async_trait(?Send)]
+pub trait Source {
+    // async fn client(&mut self) -> &mut Client<DefaultConfig>;
+
+    // async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>;
+
+    async fn fetch_block_hash(
+        &mut self,
+        block_number: u32,
+    ) -> Result<Option<sp_core::H256>, BError>;
+
+    async fn fetch_block(
+        &mut self,
+        block_hash: Option<H256>,
+    ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError>;
+
+    async fn fetch_chainname(&mut self) -> Result<String, BError>;
+
+    async fn fetch_storage(
+        &mut self,
+        key: sp_core::storage::StorageKey,
+        as_of: Option<H256>,
+    ) -> Result<Option<sp_core::storage::StorageData>, BError>;
+
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<sp_core::Bytes, ()>;
+
+    /// We subscribe to relay chains and self sovereign chains
+    /// TODO -> impl Iter<BlockHash>
+    async fn subscribe_finalised_blocks(
+        &mut self,
+    ) -> Result<
+        // Subscription<
+        //     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
+        // >
+        Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
+        (),
+    >;
+}
 
 pub struct RawDataSource {
     ws_url: String,
@@ -59,8 +100,11 @@ impl RawDataSource {
         );
         self.api.as_mut().unwrap()
     }
+}
 
-    pub(crate) async fn fetch_block_hash(
+#[async_trait(?Send)]
+impl Source for RawDataSource {
+    async fn fetch_block_hash(
         &mut self,
         block_number: u32,
     ) -> Result<Option<sp_core::H256>, BError> {
@@ -81,7 +125,7 @@ impl RawDataSource {
     ///         >,
     ///         subxt::sp_runtime::OpaqueExtrinsic
     ///       
-    pub(crate) async fn fetch_block(
+    async fn fetch_block(
         &mut self,
         block_hash: Option<H256>,
     ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError> {
@@ -106,11 +150,11 @@ impl RawDataSource {
         }
     }
 
-    pub(crate) async fn fetch_chainname(&mut self) -> Result<String, BError> {
+    async fn fetch_chainname(&mut self) -> Result<String, BError> {
         self.client().await.rpc().system_chain().await
     }
 
-    pub(crate) async fn fetch_storage(
+    async fn fetch_storage(
         &mut self,
         key: sp_core::storage::StorageKey,
         as_of: Option<H256>,
@@ -118,10 +162,7 @@ impl RawDataSource {
         self.client().await.storage().fetch_raw(key, as_of).await
     }
 
-    pub(crate) async fn fetch_metadata(
-        &mut self,
-        as_of: Option<H256>,
-    ) -> Result<sp_core::Bytes, ()> {
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<sp_core::Bytes, ()> {
         let mut params = None;
         if let Some(hash) = as_of {
             params = Some(jsonrpsee_types::ParamsSer::Array(vec![
@@ -150,14 +191,13 @@ impl RawDataSource {
     }
 
     /// We subscribe to relay chains and self sovereign chains
-    /// TODO -> impl Iter<BlockHash>
-    pub(crate) async fn subscribe_finalised_blocks(
+    async fn subscribe_finalised_blocks(
         &mut self,
     ) -> Result<
         // Subscription<
         //     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
         // >
-        impl futures::Stream<Item = Result<H256, ()>>,
+        Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
         (),
     > {
         let result = self
@@ -169,7 +209,7 @@ impl RawDataSource {
             .await;
         if let Ok(sub) = result {
             // sub is a Stream... can we map a stream?
-            Ok(sub.map(|block_header_result| {
+            Ok(Box::new(sub.map(|block_header_result| {
                 if let Ok(block_header) = block_header_result {
                     let block_header: subxt::sp_runtime::generic::Header<
                         u32,
@@ -179,7 +219,7 @@ impl RawDataSource {
                 } else {
                     Err(())
                 }
-            }))
+            })))
         } else {
             Err(())
         }

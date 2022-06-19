@@ -32,7 +32,10 @@ pub struct ExtrinsicVec(pub Vec<u8>);
 mod time_predictor;
 mod utils;
 use utils::{flattern, print_val};
+mod cached_source;
 mod raw_source;
+use crate::datasource::raw_source::Source;
+pub use cached_source::CachedDataSource;
 pub use raw_source::RawDataSource;
 
 fn please_hash<T: Hash>(val: &T) -> u64 {
@@ -42,9 +45,9 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
     hasher.finish()
 }
 
-async fn get_desub_metadata(
+async fn get_desub_metadata<S: Source>(
     url: &str,
-    source: &mut RawDataSource,
+    source: &mut S,
     version: Option<(String, H256)>,
 ) -> Option<Metadata> {
     let hash = please_hash(&url);
@@ -103,7 +106,7 @@ async fn get_desub_metadata(
     result.ok()
 }
 
-pub async fn get_parachain_id(source: &mut RawDataSource, url: &str) -> Option<NonZeroU32> {
+pub async fn get_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<NonZeroU32> {
     if let Some(cached) = get_cached_parachain_id(url) {
         return Some(cached);
     }
@@ -116,7 +119,7 @@ pub async fn get_parachain_id(source: &mut RawDataSource, url: &str) -> Option<N
     let filename = format!("{}/.parachainid", path);
 
     println!("cache miss parachain id! {} {}", filename, &url);
-    let result = fetch_parachain_id(source, url).await;
+    let result = fetch_parachain_id::<S>(source, url).await;
 
     if let Some(para_id) = result {
         std::fs::write(&filename, &para_id.to_string().as_bytes())
@@ -130,7 +133,7 @@ pub async fn get_parachain_id(source: &mut RawDataSource, url: &str) -> Option<N
     }
 }
 
-pub async fn fetch_parachain_id(source: &mut RawDataSource, url: &str) -> Option<NonZeroU32> {
+pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<NonZeroU32> {
     // parachainInfo / parachainId returns u32 paraId
     let storage_key =
         hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
@@ -174,8 +177,8 @@ pub fn is_relay_chain(url: &str) -> bool {
     url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
 
-pub fn get_parachain_id_from_url(
-    source: &mut RawDataSource,
+pub fn get_parachain_id_from_url<S: Source>(
+    source: &mut S,
     url: &str,
 ) -> Result<Option<NonZeroU32>, ()> {
     if let Some(cached_id) = get_cached_parachain_id(url) {
@@ -186,7 +189,7 @@ pub fn get_parachain_id_from_url(
 }
 
 async fn get_metadata_version(
-    source: &mut RawDataSource,
+    source: &mut impl Source,
     url: &str,
     hash: sp_core::H256,
     block_number: u32,
@@ -259,7 +262,7 @@ async fn get_metadata_version(
     }
 }
 
-pub(crate) fn get_parachain_name_sync(url: &str, source: &mut RawDataSource) -> Option<String> {
+pub(crate) fn get_parachain_name_sync<S: Source>(url: &str, source: &mut S) -> Option<String> {
     let urlhash = please_hash(&url);
     let path = format!("target/{urlhash}.metadata.scale.events");
 
@@ -275,8 +278,8 @@ pub(crate) fn get_parachain_name_sync(url: &str, source: &mut RawDataSource) -> 
     }
 }
 
-async fn get_block_hash(
-    source: &mut RawDataSource,
+async fn get_block_hash<S: Source>(
+    source: &mut S,
     url: &str,
     block_number: u32,
 ) -> Option<sp_core::H256> {
@@ -301,13 +304,13 @@ async fn get_block_hash(
 
 pub type RelayBlockNumber = u32;
 
-pub async fn watch_blocks(
+pub async fn watch_blocks<S: Source>(
     tx: ABlocks,
     chain_info: ChainInfo,
     as_of: Option<DotUrl>,
     recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
-    mut source: RawDataSource,
+    mut source: S,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = &chain_info.chain_ws;
     let para_id = chain_info.chain_url.para_id.clone();
@@ -389,7 +392,7 @@ pub async fn watch_blocks(
 
             let mut last_timestamp = None;
             for block_number in as_of.block_number.unwrap().. {
-                std::thread::sleep(std::time::Duration::from_secs(6));
+                std::thread::sleep(std::time::Duration::from_secs(2));
                 let block_hash: Option<sp_core::H256> =
                     get_block_hash(&mut source, url, block_number).await;
 
@@ -469,12 +472,12 @@ pub async fn watch_blocks(
 }
 
 // Returns the timestamp of the block decoded.
-async fn process_extrinsics(
+async fn process_extrinsics<S: Source>(
     tx: &ABlocks,
     mut blockurl: DotUrl,
     block_hash: H256,
     url: &str,
-    source: &mut RawDataSource,
+    source: &mut S,
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
     our_data_epoc: u32,
 ) -> Result<Option<u64>, ()> {
@@ -560,11 +563,11 @@ async fn process_extrinsics(
 }
 
 // Find the timestamp for a block (cut down version of `process_extrinsics`)
-async fn find_timestamp(
+async fn find_timestamp<S: Source>(
     mut blockurl: DotUrl,
     block_hash: H256,
     url: &str,
-    source: &mut RawDataSource,
+    source: &mut S,
     metad: &Metadata,
 ) -> Option<u64> {
     if let Ok((got_block_num, extrinsics)) = get_extrinsics(&url, source, block_hash).await {
@@ -606,7 +609,7 @@ async fn find_timestamp(
 // fetches extrinsics from node for a block number (wrapped by a file cache).
 async fn get_extrinsics(
     url: &str,
-    source: &mut RawDataSource,
+    source: &mut impl Source,
     block_hash: H256,
 ) -> Result<(u32, Vec<Vec<u8>>), ()> {
     let urlhash = please_hash(&url);
@@ -1277,7 +1280,7 @@ pub struct PolkaBlock {
 }
 
 async fn get_events_for_block(
-    source: &mut RawDataSource,
+    source: &mut impl Source,
     url: &str,
     blockhash: H256,
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
