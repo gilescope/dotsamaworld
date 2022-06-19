@@ -27,7 +27,7 @@ pub trait Source {
         block_hash: Option<H256>,
     ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError>;
 
-    async fn fetch_chainname(&mut self) -> Result<String, BError>;
+    async fn fetch_chainname(&mut self) -> Result<Option<String>, BError>;
 
     async fn fetch_storage(
         &mut self,
@@ -35,7 +35,7 @@ pub trait Source {
         as_of: Option<H256>,
     ) -> Result<Option<sp_core::storage::StorageData>, BError>;
 
-    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<sp_core::Bytes, ()>;
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()>;
 
     /// We subscribe to relay chains and self sovereign chains
     /// TODO -> impl Iter<BlockHash>
@@ -150,8 +150,8 @@ impl Source for RawDataSource {
         }
     }
 
-    async fn fetch_chainname(&mut self) -> Result<String, BError> {
-        self.client().await.rpc().system_chain().await
+    async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
+        self.client().await.rpc().system_chain().await.map(|res| Some(res))
     }
 
     async fn fetch_storage(
@@ -162,7 +162,7 @@ impl Source for RawDataSource {
         self.client().await.storage().fetch_raw(key, as_of).await
     }
 
-    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<sp_core::Bytes, ()> {
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
         let mut params = None;
         if let Some(hash) = as_of {
             params = Some(jsonrpsee_types::ParamsSer::Array(vec![
@@ -182,7 +182,7 @@ impl Source for RawDataSource {
             .await;
         match res {
             Ok(res) => {
-                return Ok(res);
+                return Ok(Some(res));
             }
             _ => {
                 return Err(());

@@ -1,7 +1,9 @@
 use crate::datasource::Source;
 use async_trait::async_trait;
+use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use sp_core::H256;
+use core::slice::SlicePattern;
 
 pub struct CachedDataSource<S: Source> {
     ws_url: String,
@@ -77,18 +79,46 @@ where
         &mut self,
         block_number: u32,
     ) -> Result<Option<sp_core::H256>, BError> {
-        self.underlying_source.fetch_block_hash(block_number).await
+            memoise!(
+            self,
+            block_number.as_bytes(),
+            self.underlying_source
+                .fetch_block_hash(block_number)
+                .map_ok(|res| res.map(|hash| hash.as_bytes().to_vec()))
+        )
+        .map(|op| op.map(|bytes| H256::from_slice(bytes.as_slice())))
+   
     }
 
     async fn fetch_block(
         &mut self,
         block_hash: Option<H256>,
     ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError> {
-        self.underlying_source.fetch_block(block_hash).await
+        // if let Some(block_hash) = block_hash {
+        //     memoise!(
+        //         self,
+        //         block_hash.as_bytes(),
+        //         self.underlying_source
+        //             .fetch_block(block_hash)
+        //            // .map_ok(|res| res.map(|block_h| block.as_bytes().to_vec()))
+        //     )
+        //     .map(|op| op.map(|bytes| H256::from_bytes(bytes)))
+        // } else {
+            // Don't cache latest block (maybe cache the result though?)
+            self.underlying_source
+                .fetch_block(None).await
+        // }
     }
 
-    async fn fetch_chainname(&mut self) -> Result<String, BError> {
-        self.underlying_source.fetch_chainname().await
+    async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
+        memoise!(
+            self,
+            b"chainname".as_slice(),
+            self.underlying_source
+                .fetch_chainname()
+                .map_ok(|res| res.map(|name| name.as_bytes().to_vec()))
+        )
+        .map(|op| op.map(|bytes| String::from_utf8_lossy(bytes.as_slice()).to_string()))
     }
 
     async fn fetch_storage(
@@ -96,9 +126,13 @@ where
         key: sp_core::storage::StorageKey,
         as_of: Option<H256>,
     ) -> Result<Option<sp_core::storage::StorageData>, BError> {
+        let mut cache_key = key.0.clone();
+        if let Some(as_of) = as_of {
+            cache_key.extend(as_of.as_bytes());
+        }
         memoise!(
             self,
-            key.0.as_slice() + as_of,
+            cache_key.as_slice(),
             self.underlying_source
                 .fetch_storage(key, as_of)
                 .map_ok(|res| res.map(|sp_core::storage::StorageData(bytes)| bytes))
@@ -106,18 +140,19 @@ where
         .map(|op| op.map(|bytes| sp_core::storage::StorageData(bytes)))
     }
 
-    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<sp_core::Bytes, ()> {
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
         memoise!(
             self,
-            as_of,
+            as_of.unwrap_or_default().as_bytes(),
             self.underlying_source
-                .fetch_metadata(as_of.map(|as_of| as_of.as_bytes()))
+                .fetch_metadata(as_of)
                 .map_ok(|res| res.map(|sp_core::Bytes(bytes)| bytes))
         )
         .map(|op| op.map(|bytes| sp_core::Bytes(bytes)))
     }
 
-    /// We subscribe to relay chains and self sovereign chains
+    /// We subscribe to relay chains and self sovereign chains.
+    /// Only used by live mode so should not cache.
     async fn subscribe_finalised_blocks(
         &mut self,
     ) -> Result<Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>, ()> {

@@ -79,7 +79,7 @@ async fn get_desub_metadata<S: Source>(
                 let res = source.fetch_metadata(as_of).await;
                 println!("finished trying {url}");
                 match res {
-                    Ok(res) => {
+                    Ok(Some(res)) => {
                         // let _ = cmd.kill();
                         break res;
                     }
@@ -272,7 +272,7 @@ pub(crate) fn get_parachain_name_sync<S: Source>(url: &str, source: &mut S) -> O
         Some(para_name.to_string())
     } else {
         println!("cache miss parachain name! {}", &url);
-        let parachain_name: String = block_on(source.fetch_chainname()).unwrap();
+        let parachain_name: String = block_on(source.fetch_chainname()).unwrap().unwrap();
         std::fs::write(&filename, &parachain_name.as_bytes()).expect("Couldn't write event output");
         Some(parachain_name)
     }
