@@ -4,6 +4,7 @@ use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use sp_core::H256;
 use core::slice::SlicePattern;
+use crate::datasource::raw_source::AgnosticBlock;
 
 pub struct CachedDataSource<S: Source> {
     ws_url: String,
@@ -42,7 +43,7 @@ macro_rules! memoise {
                 Ok(Some(contents))
             }
         } else {
-            // println!("cache miss storage {} {}", filename, &$self.ws_url);
+            println!("cache miss {} {}", filename, &$self.ws_url);
             let result = $fetch.await;
             if let Ok(result) = result {
                 if let Some(bytes) = result {
@@ -90,24 +91,26 @@ where
    
     }
 
+    /// This is not as clean because SignedBlock takes Block as a generic arg and we want 
+    /// to be blockchain agnostic.
     async fn fetch_block(
         &mut self,
         block_hash: Option<H256>,
-    ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError> {
-        // if let Some(block_hash) = block_hash {
-        //     memoise!(
-        //         self,
-        //         block_hash.as_bytes(),
-        //         self.underlying_source
-        //             .fetch_block(block_hash)
-        //            // .map_ok(|res| res.map(|block_h| block.as_bytes().to_vec()))
-        //     )
-        //     .map(|op| op.map(|bytes| H256::from_bytes(bytes)))
-        // } else {
+    ) -> Result<Option<AgnosticBlock>, BError> {
+        if let Some(block_hash) = block_hash {
+            memoise!(
+                self,
+                block_hash.as_bytes(),
+                self.underlying_source
+                    .fetch_block(Some(block_hash))
+                   .map_ok(|res| res.map(|block| block.to_vec()))
+            )
+            .map(|op| op.map(|bytes| AgnosticBlock::from_bytes(bytes.as_slice()).unwrap()))
+        } else {
             // Don't cache latest block (maybe cache the result though?)
             self.underlying_source
                 .fetch_block(None).await
-        // }
+        }
     }
 
     async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
