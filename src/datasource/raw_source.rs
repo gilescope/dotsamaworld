@@ -1,6 +1,7 @@
 use super::polkadot;
 use crate::polkadot::RuntimeApi;
 use async_std::stream::StreamExt;
+use async_trait::async_trait;
 use parity_scale_codec::Encode;
 use sp_core::H256;
 use subxt::rpc::ClientT;
@@ -8,6 +9,63 @@ use subxt::Client;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
+use sp_core::Decode;
+
+#[derive(Encode, Decode)]
+pub struct AgnosticBlock {
+    pub block_number: u32, 
+    pub extrinsics: Vec<Vec<u8>>
+}
+
+impl AgnosticBlock {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.encode()
+    }
+
+    pub fn from_bytes(mut bytes: &[u8]) -> Result<Self, parity_scale_codec::Error> {
+        AgnosticBlock::decode(&mut bytes)
+    }
+}
+
+/// A way to source untransformed raw data.
+#[async_trait(?Send)]
+pub trait Source {
+    // async fn client(&mut self) -> &mut Client<DefaultConfig>;
+
+    // async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>;
+
+    async fn fetch_block_hash(
+        &mut self,
+        block_number: u32,
+    ) -> Result<Option<sp_core::H256>, BError>;
+
+    async fn fetch_block(
+        &mut self,
+        block_hash: Option<H256>,
+    ) -> Result<Option<AgnosticBlock>, BError>;
+
+    async fn fetch_chainname(&mut self) -> Result<Option<String>, BError>;
+
+    async fn fetch_storage(
+        &mut self,
+        key: sp_core::storage::StorageKey,
+        as_of: Option<H256>,
+    ) -> Result<Option<sp_core::storage::StorageData>, BError>;
+
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()>;
+
+    /// We subscribe to relay chains and self sovereign chains
+    /// TODO -> impl Iter<BlockHash>
+    async fn subscribe_finalised_blocks(
+        &mut self,
+    ) -> Result<
+        // Subscription<
+        //     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
+        // >
+        Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
+        (),
+    >;
+}
 
 pub struct RawDataSource {
     ws_url: String,
@@ -44,14 +102,42 @@ impl RawDataSource {
     }
 
     async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>> {
+
+
         if self.api.is_some() {
             return self.api.as_mut().unwrap();
         }
-        let client = ClientBuilder::new()
+
+
+        const MAX_RETRIES: usize = 6;
+        let mut retries = 0;
+        println!("retries1 {}", retries);
+        let client = loop {
+            println!("retries2 {}", retries);
+            if retries >= MAX_RETRIES {
+                println!("Cannot connect to substrate node after {} retries", retries);
+            }
+            println!("retries {}", retries);
+
+            // It might take a while for substrate node that spin up the RPC server.
+            // Thus, the connection might get rejected a few times.
+            let res = ClientBuilder::new()
             .set_url(&self.ws_url)
             .build()
-            .await
-            .unwrap();
+            .await;
+           
+            match res {
+                Ok(res) => {
+                    break res;
+                }
+                _ => {
+                    async_std::task::sleep( std::time::Duration::from_secs(1 << retries) ).await;
+                    retries += 1;
+                }
+            };
+        };
+
+        println!("Client created........................");
         self.api = Some(
             client
                 .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
@@ -59,8 +145,11 @@ impl RawDataSource {
         );
         self.api.as_mut().unwrap()
     }
+}
 
-    pub(crate) async fn fetch_block_hash(
+#[async_trait(?Send)]
+impl Source for RawDataSource {
+    async fn fetch_block_hash(
         &mut self,
         block_number: u32,
     ) -> Result<Option<sp_core::H256>, BError> {
@@ -81,22 +170,22 @@ impl RawDataSource {
     ///         >,
     ///         subxt::sp_runtime::OpaqueExtrinsic
     ///       
-    pub(crate) async fn fetch_block(
+    async fn fetch_block(
         &mut self,
         block_hash: Option<H256>,
-    ) -> Result<Option<(u32, Vec<Vec<u8>>)>, BError> {
+    ) -> Result<Option<AgnosticBlock>, BError> {
         let result = self.get_api().await.client.rpc().block(block_hash).await;
         if let Ok(Some(block_body)) = result {
             //TODO: we're decoding and encoding here. cut it out.
-            Ok(Some((
-                block_body.block.header.number,
-                block_body
+            Ok(Some(AgnosticBlock{
+                block_number: block_body.block.header.number,
+                extrinsics: block_body
                     .block
                     .extrinsics
                     .into_iter()
                     .map(|ex| ex.encode())
                     .collect::<Vec<_>>(),
-            )))
+            }))
         } else {
             if let Err(err) = result {
                 Err(err)
@@ -106,11 +195,11 @@ impl RawDataSource {
         }
     }
 
-    pub(crate) async fn fetch_chainname(&mut self) -> Result<String, BError> {
-        self.client().await.rpc().system_chain().await
+    async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
+        self.client().await.rpc().system_chain().await.map(|res| Some(res))
     }
 
-    pub(crate) async fn fetch_storage(
+    async fn fetch_storage(
         &mut self,
         key: sp_core::storage::StorageKey,
         as_of: Option<H256>,
@@ -118,10 +207,7 @@ impl RawDataSource {
         self.client().await.storage().fetch_raw(key, as_of).await
     }
 
-    pub(crate) async fn fetch_metadata(
-        &mut self,
-        as_of: Option<H256>,
-    ) -> Result<sp_core::Bytes, ()> {
+    async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
         let mut params = None;
         if let Some(hash) = as_of {
             params = Some(jsonrpsee_types::ParamsSer::Array(vec![
@@ -141,7 +227,7 @@ impl RawDataSource {
             .await;
         match res {
             Ok(res) => {
-                return Ok(res);
+                return Ok(Some(res));
             }
             _ => {
                 return Err(());
@@ -150,14 +236,13 @@ impl RawDataSource {
     }
 
     /// We subscribe to relay chains and self sovereign chains
-    /// TODO -> impl Iter<BlockHash>
-    pub(crate) async fn subscribe_finalised_blocks(
+    async fn subscribe_finalised_blocks(
         &mut self,
     ) -> Result<
         // Subscription<
         //     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
         // >
-        impl futures::Stream<Item = Result<H256, ()>>,
+        Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
         (),
     > {
         let result = self
@@ -169,7 +254,7 @@ impl RawDataSource {
             .await;
         if let Ok(sub) = result {
             // sub is a Stream... can we map a stream?
-            Ok(sub.map(|block_header_result| {
+            Ok(Box::new(sub.map(|block_header_result| {
                 if let Ok(block_header) = block_header_result {
                     let block_header: subxt::sp_runtime::generic::Header<
                         u32,
@@ -179,7 +264,7 @@ impl RawDataSource {
                 } else {
                     Err(())
                 }
-            }))
+            })))
         } else {
             Err(())
         }
