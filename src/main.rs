@@ -2,6 +2,7 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_group_by)]
 #![feature(slice_pattern)]
+#![feature(async_closure)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 // use bevy::winit::WinitSettings;
