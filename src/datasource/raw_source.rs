@@ -27,20 +27,6 @@ impl RawDataSource {
 
     async fn client(&mut self) -> &mut Client<DefaultConfig> {
         &mut self.get_api().await.client
-        // if self.api.is_some() {
-        //     return &mut self.api.as_mut().unwrap().client;
-        // }
-        // let client = ClientBuilder::new()
-        //     .set_url(&self.ws_url)
-        //     .build()
-        //     .await
-        //     .unwrap();
-        // self.api = Some(
-        //     client
-        //         .to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(
-        //         ),
-        // );
-        // &mut self.api.as_mut().unwrap().client
     }
 
     async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>> {

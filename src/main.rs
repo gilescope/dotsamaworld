@@ -3,6 +3,7 @@
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
+use bevy::render::primitives::Aabb;
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
@@ -13,6 +14,8 @@ use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 use bevy::window::RequestRedraw;
+use bevy::diagnostic::LogDiagnosticsPlugin;
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
 use std::collections::HashMap;
@@ -154,8 +157,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .register_inspectable::<Details>()
         // .add_plugin(DebugEventsPickingPlugin)
-        // .add_plugin(FrameTimeDiagnosticsPlugin::default())
-        // .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(PolylinePlugin)
         // .add_system(movement::scroll)
         .add_startup_system(
@@ -175,6 +178,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_system(rain)
         .add_system(source_data)
         .add_system(right_click_system)
+       
+        .add_system_to_stage(CoreStage::PostUpdate, update_visibility)
         .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
         .add_plugin(bevy_atmosphere::AtmospherePlugin {
@@ -210,7 +215,7 @@ fn source_data(
     mut datasource_events: EventReader<DataSourceChangedEvent>,
     mut commands: Commands,
     mut sovereigns: ResMut<Sovereigns>,
-    details: Query<Entity, With<Details>>,
+    details: Query<Entity, With<ClearMeAlwaysVisible>>,
     clean_me: Query<Entity, With<ClearMe>>,
 ) {
     for event in datasource_events.iter() {
@@ -406,11 +411,12 @@ fn draw_chain_rect(
             ..default()
         })
         .insert(Name::new("Blockchain"))
+        .insert(ClearMeAlwaysVisible)
         .insert_bundle(PickableBundle::default());
 }
 
 fn clear_world(
-    details: &Query<Entity, With<Details>>,
+    details: &Query<Entity, With<ClearMeAlwaysVisible>>,
     commands: &mut Commands,
     clean_me: &Query<Entity, With<ClearMe>>,
 ) {
@@ -601,6 +607,9 @@ struct Sovereigns {
 #[derive(Component)]
 struct ClearMe;
 
+#[derive(Component)]
+struct ClearMeAlwaysVisible;
+
 fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -713,6 +722,11 @@ fn render_block(
                                     )),
                                     ..Default::default()
                                 });
+                                bun.insert(ClearMe);
+                                bun.insert(Aabb::from_min_max(
+                                    Vec3::new(0.,0.,0.),
+                                    Vec3::new( 1., 1.,1.),
+                                ));
 
                                 bun.insert(details)
                                     .insert(Name::new("Block"))
@@ -802,7 +816,10 @@ fn render_block(
                                                 ..default()
                                             })
                                             .insert(Name::new("BillboardUp"))
-                                            .insert(ClearMe); // TODO: should be able to add same component onto 3 different entities maybe?
+                                            .insert(ClearMe).insert(Aabb::from_min_max(
+                                                Vec3::new(0.,0.,0.),
+                                                Vec3::new( 1., 1.,1.),
+                                            )); // TODO: should be able to add same component onto 3 different entities maybe?
 
                                         //block_events.2.inserted_pic = true;
                                     })
@@ -1073,7 +1090,7 @@ fn add_blocks<'a>(
                                     .spawn_bundle(PolylineBundle {
                                         polyline: polylines.add(Polyline {
                                             vertices: vertices.clone(),
-                                            ..Default::default()
+                                           si ..Default::default()
                                         }),
                                         material: polyline_materials.add(PolylineMaterial {
                                             width: 10.0,
@@ -1126,11 +1143,16 @@ fn add_blocks<'a>(
                         pallet: block.pallet().to_string(),
                         variant: block.variant().to_string(),
                     })
+                    .insert(ClearMe)
                     .insert(Rainable {
                         dest: base_y + target_y * build_dir,
                         build_direction,
                     })
-                    .insert(Name::new("Extrinsic"));
+                    .insert(Name::new("Extrinsic"))
+                    .insert(Aabb::from_min_max(
+                        Vec3::new(0.,0.,0.),
+                        Vec3::new( 1., 1.,1.),
+                    ));
 
                 for source in create_source {
                     bun.insert(source);
@@ -1194,7 +1216,12 @@ fn add_blocks<'a>(
                     dest: base_y + target_y * build_dir,
                     build_direction,
                 })
-                .insert(Name::new("BlockEvent"));
+                .insert(Name::new("BlockEvent"))
+                .insert(ClearMe)
+                .insert(Aabb::from_min_max(
+                    Vec3::new(0.,0.,0.),
+                    Vec3::new( 1., 1.,1.),
+                ));
 
             for (link, link_type) in &event.start_link {
                 println!("inserting source of rainbow (an event)!");
@@ -1367,6 +1394,30 @@ pub fn print_events(
     }
 }
 
+
+fn update_visibility(
+    mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
+    player_query: Query<&Transform, With<Viewport>>,
+) {
+    // TODO have a lofi zone and switch visibility of the lofi and hifi entities
+
+    let transform: &Transform = player_query.get_single().unwrap();
+    let x = transform.translation.x;
+
+    let width = 500.;
+    let (min, max) = (x - width, x + width);
+    // let mut count = 0;
+    // let mut count_vis = 0; 
+    
+    for (mut vis, transform, _) in entity_query.iter_mut() {
+    // count +=1;
+        vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+        // if vis.is_visible { count_vis += 1 }
+    }
+
+    // println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
+}
+
 pub fn right_click_system(
     mouse_button_input: Res<Input<MouseButton>>,
     touches_input: Res<Touches>,
@@ -1444,15 +1495,17 @@ fn setup(
     // camera
 
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(-100.0, 100., 0.0).looking_at(Vec3::new(1000.,1.,0.), Vec3::Y),
+        transform: Transform::from_xyz(-100.0, 50., 0.0)
+            .looking_at(Vec3::new(1000., 1., 0.), Vec3::Y),
+
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s
-            far: 0.0001,
+            far: 10.,
             near: 0.000001,
             ..default()
         },
         camera: Camera {
-            far: 0.0001,
+            far: 10.,
             near: 0.000001,
 
             ..default()
