@@ -1,9 +1,9 @@
+use crate::datasource::raw_source::AgnosticBlock;
 use crate::datasource::Source;
 use async_trait::async_trait;
 use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use sp_core::H256;
-use crate::datasource::raw_source::AgnosticBlock;
 
 pub struct CachedDataSource<S: Source> {
     ws_url: String,
@@ -79,7 +79,7 @@ where
         &mut self,
         block_number: u32,
     ) -> Result<Option<sp_core::H256>, BError> {
-            memoise!(
+        memoise!(
             self,
             block_number.as_bytes(),
             self.underlying_source
@@ -87,10 +87,9 @@ where
                 .map_ok(|res| res.map(|hash| hash.as_bytes().to_vec()))
         )
         .map(|op| op.map(|bytes| H256::from_slice(bytes.as_slice())))
-   
     }
 
-    /// This is not as clean because SignedBlock takes Block as a generic arg and we want 
+    /// This is not as clean because SignedBlock takes Block as a generic arg and we want
     /// to be blockchain agnostic.
     async fn fetch_block(
         &mut self,
@@ -102,13 +101,12 @@ where
                 block_hash.as_bytes(),
                 self.underlying_source
                     .fetch_block(Some(block_hash))
-                   .map_ok(|res| res.map(|block| block.to_vec()))
+                    .map_ok(|res| res.map(|block| block.to_vec()))
             )
             .map(|op| op.map(|bytes| AgnosticBlock::from_bytes(bytes.as_slice()).unwrap()))
         } else {
             // Don't cache latest block (maybe cache the result though?)
-            self.underlying_source
-                .fetch_block(None).await
+            self.underlying_source.fetch_block(None).await
         }
     }
 

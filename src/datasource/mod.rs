@@ -153,8 +153,7 @@ async fn get_metadata_version(
     hash: sp_core::H256,
 ) -> Option<String> {
     let storage_key =
-        hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8")
-            .unwrap();
+        hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8").unwrap();
     let call = source
         .fetch_storage(
             sp_core::storage::StorageKey(storage_key.clone()),
@@ -175,21 +174,21 @@ async fn get_metadata_version(
                     &url
                 );
                 return None; // If you get this error you need to point to an archive node.
-                                // println!("error message (recoverable) {}", &err);
-                                // let pos = pos + needle.len() + "0x".len();
-                                // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
-                                //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
-                                //     // T::Hashing()
-                                //     let hash = T::Hashing::hash(new_hash.as_slice());
-                                //     let call = client
-                                //         .storage()
-                                //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
-                                //         .await
-                                //         .unwrap();
-                                //     call
-                                // } else {
-                                //     panic!("could not recover from error {:?}", err);
-                                // }
+                             // println!("error message (recoverable) {}", &err);
+                             // let pos = pos + needle.len() + "0x".len();
+                             // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
+                             //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
+                             //     // T::Hashing()
+                             //     let hash = T::Hashing::hash(new_hash.as_slice());
+                             //     let call = client
+                             //         .storage()
+                             //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
+                             //         .await
+                             //         .unwrap();
+                             //     call
+                             // } else {
+                             //     panic!("could not recover from error {:?}", err);
+                             // }
             } else {
                 //panic!("could not recover from error2 {:?}", err);
                 return None;
@@ -209,10 +208,7 @@ pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<Strin
     Some(block_on(source.fetch_chainname()).unwrap().unwrap())
 }
 
-async fn get_block_hash<S: Source>(
-    source: &mut S,
-    block_number: u32,
-) -> Option<sp_core::H256> {
+async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<sp_core::H256> {
     if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {
         Some(block_hash)
     } else {
@@ -245,7 +241,9 @@ pub async fn watch_blocks<S: Source>(
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
-            while let Ok((_relay_block_number, timestamp_parent, block_hash)) = recieve_channel.recv() {
+            while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
+                recieve_channel.recv()
+            {
                 let _ = process_extrinsics(
                     &tx,
                     chain_info.chain_url.clone(),
@@ -254,7 +252,7 @@ pub async fn watch_blocks<S: Source>(
                     &mut source,
                     &sender,
                     our_data_epoc,
-                    Some(timestamp_parent)
+                    Some(timestamp_parent),
                 )
                 .await;
                 if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
@@ -335,7 +333,7 @@ pub async fn watch_blocks<S: Source>(
                     &mut source,
                     &sender,
                     our_data_epoc,
-                    None
+                    None,
                 )
                 .await
                 {
@@ -360,7 +358,7 @@ pub async fn watch_blocks<S: Source>(
                         &mut source,
                         &None,
                         our_data_epoc,
-                        None
+                        None,
                     )
                     .await;
                     // check for stop signal
@@ -385,7 +383,7 @@ async fn process_extrinsics<S: Source>(
     source: &mut S,
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     our_data_epoc: u32,
-    timestamp_parent: Option<u64>
+    timestamp_parent: Option<u64>,
 ) -> Result<Option<u64>, ()> {
     let mut timestamp = None;
     if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
@@ -442,10 +440,17 @@ async fn process_extrinsics<S: Source>(
                 println!("can't decode block ext {}-{} {}", block_number, i, &url);
             }
         }
-        let (events, start_link) =
-            get_events_for_block(source, &url, block_hash, &sender, &blockurl, &metad, timestamp.clone())
-                .await
-                .or(Err(()))?;
+        let (events, start_link) = get_events_for_block(
+            source,
+            &url,
+            block_hash,
+            &sender,
+            &blockurl,
+            &metad,
+            timestamp.clone(),
+        )
+        .await
+        .or(Err(()))?;
 
         let mut handle = tx.lock().unwrap();
         let is_parachain = blockurl.para_id.is_some();
@@ -473,7 +478,7 @@ async fn find_timestamp<S: Source>(
     source: &mut S,
     metad: &Metadata,
 ) -> Option<u64> {
-    if let Ok(Some(block)) = get_extrinsics( source, block_hash).await {
+    if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
         blockurl.block_number = Some(block.block_number);
 
         for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
@@ -514,7 +519,7 @@ async fn get_extrinsics(
     source: &mut impl Source,
     block_hash: H256,
 ) -> Result<Option<AgnosticBlock>, GenericError<std::convert::Infallible>> {
-        source.fetch_block(Some(block_hash)).await
+    source.fetch_block(Some(block_hash)).await
 }
 
 async fn process_extrisic<'a>(
@@ -1147,11 +1152,11 @@ async fn get_events_for_block(
     sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     block_url: &DotUrl,
     metad: &Metadata,
-    timestamp: Option<u64>
+    timestamp: Option<u64>,
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
     let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
     let mut data_events = vec![];
-  
+
     let blocknum = block_url.block_number.unwrap();
 
     let storage = decoder::decode_storage(&metad);
@@ -1380,7 +1385,8 @@ async fn get_events_for_block(
                             let mailbox = sender.get(&para_id);
                             if let Some(mailbox) = mailbox {
                                 let hash = H256::from_slice(hash.as_slice());
-                                if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash)) {
+                                if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash))
+                                {
                                     println!(
                                         "block hash failed to send at {} error: {}",
                                         blocknum, err
@@ -1646,7 +1652,9 @@ mod tests {
         let mut source = RawDataSource::new(url);
         let blockhash = block_on(get_block_hash(&mut source, &url, 1000_000)).unwrap();
 
-        let (_block_num, results) = block_on(get_extrinsics( &mut source, blockhash)).unwrap().unwrap();
+        let (_block_num, results) = block_on(get_extrinsics(&mut source, blockhash))
+            .unwrap()
+            .unwrap();
 
         let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
         if let Ok(extrinsic) =

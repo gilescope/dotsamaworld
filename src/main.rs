@@ -49,7 +49,6 @@ use std::convert::AsRef;
 use std::convert::TryInto;
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 
 /// Pick a faster allocator.
 #[cfg(not(target_env = "msvc"))]
@@ -58,7 +57,6 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
-
 
 #[cfg(feature = "spacemouse")]
 pub struct MovementSettings {
@@ -626,7 +624,6 @@ struct Sovereigns {
 #[derive(Component)]
 struct ClearMe;
 
-
 #[derive(Component)]
 struct ClearMeAlwaysVisible;
 
@@ -644,7 +641,6 @@ static EVENTS: AtomicU32 = AtomicU32::new(0);
 //         println!("pad found");
 //     }
 // }
-
 
 fn render_block(
     mut commands: Commands,
@@ -752,7 +748,10 @@ fn render_block(
                                 let mut bun = commands.spawn_bundle(PbrBundle {
                                     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
                                     material: materials.add(StandardMaterial {
-                                        base_color: style::color_block_number(timestamp_color, chain.info.chain_url.is_darkside()), // Color::rgba(0., 0., 0., 0.7),
+                                        base_color: style::color_block_number(
+                                            timestamp_color,
+                                            chain.info.chain_url.is_darkside(),
+                                        ), // Color::rgba(0., 0., 0., 0.7),
                                         alpha_mode: AlphaMode::Blend,
                                         perceptual_roughness: 0.08,
                                         unlit: if block.blockurl.is_darkside() {
@@ -867,16 +866,15 @@ fn render_block(
                                             })
                                             .insert(Name::new("BillboardUp"))
                                             .insert(ClearMe);
-                                            // .insert(Aabb::from_min_max(
-                                            //     Vec3::new(0., 0., 0.),
-                                            //     Vec3::new(1., 1., 1.),
-                                            // )); // TODO: should be able to add same component onto 3 different entities maybe?
+                                        // .insert(Aabb::from_min_max(
+                                        //     Vec3::new(0., 0., 0.),
+                                        //     Vec3::new(1., 1., 1.),
+                                        // )); // TODO: should be able to add same component onto 3 different entities maybe?
 
                                         //block_events.2.inserted_pic = true;
                                     })
                                     .insert_bundle(PickableBundle::default());
                             }
-                          
 
                             let ext_with_events =
                                 datasource::associate_events(block.extrinsics, block.events);
@@ -1112,10 +1110,10 @@ fn add_blocks<'a>(
                         build_direction,
                     })
                     .insert(Name::new("Extrinsic"));
-                    // .insert(Aabb::from_min_max(
-                    //     Vec3::new(0., 0., 0.),
-                    //     Vec3::new(1., 1., 1.),
-                    // ));
+                // .insert(Aabb::from_min_max(
+                //     Vec3::new(0., 0., 0.),
+                //     Vec3::new(1., 1., 1.),
+                // ));
 
                 for source in create_source {
                     bun.insert(source);
@@ -1204,28 +1202,27 @@ fn add_blocks<'a>(
                 let target_y = next_y[event_num % 81];
                 next_y[event_num % 81] += DOT_HEIGHT * height;
 
-           
-            let t = Transform::from_translation(Vec3::new(
-                px,
-                rain_height[event_num % 81] * build_dir,
-                pz * rflip,
-            ));
+                let t = Transform::from_translation(Vec3::new(
+                    px,
+                    rain_height[event_num % 81] * build_dir,
+                    pz * rflip,
+                ));
 
-            let mut x = commands.spawn_bundle(PbrBundle {
-                mesh,
-                material: material.clone(),
-                transform: t,
-                ..Default::default()
-            });
-            let event_bun = x
-                .insert_bundle(PickableBundle::default())
-                .insert(entity.details.clone())
-                .insert(Rainable {
-                    dest: base_y + target_y * build_dir,
-                    build_direction,
-                })
-                .insert(Name::new("BlockEvent"))
-                .insert(ClearMe);
+                let mut x = commands.spawn_bundle(PbrBundle {
+                    mesh,
+                    material: material.clone(),
+                    transform: t,
+                    ..Default::default()
+                });
+                let event_bun = x
+                    .insert_bundle(PickableBundle::default())
+                    .insert(entity.details.clone())
+                    .insert(Rainable {
+                        dest: base_y + target_y * build_dir,
+                        build_direction,
+                    })
+                    .insert(Name::new("BlockEvent"))
+                    .insert(ClearMe);
                 // .insert(Aabb::from_min_max(
                 //     Vec3::new(0., 0., 0.),
                 //     Vec3::new(1., 1., 1.),
@@ -1498,10 +1495,8 @@ fn setup(
     // camera
 
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-
         transform: Transform::from_xyz(-100.0, 50., 0.0)
             .looking_at(Vec3::new(1000., 1., 0.), Vec3::Y),
-
 
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s

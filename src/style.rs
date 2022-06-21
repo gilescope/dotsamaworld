@@ -42,7 +42,7 @@ pub fn color_block_number(block_number: u64, darkside: bool) -> Color {
         (block_number % 360) as f32,
     );
     let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
-    Color::rgba(rgb.red, rgb.green, rgb.blue, 0.7 )
+    Color::rgba(rgb.red, rgb.green, rgb.blue, 0.7)
 }
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {

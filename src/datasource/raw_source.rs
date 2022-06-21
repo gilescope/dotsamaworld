@@ -3,18 +3,18 @@ use crate::polkadot::RuntimeApi;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
 use parity_scale_codec::Encode;
+use sp_core::Decode;
 use sp_core::H256;
 use subxt::rpc::ClientT;
 use subxt::Client;
 use subxt::ClientBuilder;
 use subxt::DefaultConfig;
 use subxt::DefaultExtra;
-use sp_core::Decode;
 
 #[derive(Encode, Decode)]
 pub struct AgnosticBlock {
-    pub block_number: u32, 
-    pub extrinsics: Vec<Vec<u8>>
+    pub block_number: u32,
+    pub extrinsics: Vec<Vec<u8>>,
 }
 
 impl AgnosticBlock {
@@ -88,12 +88,9 @@ impl RawDataSource {
     }
 
     async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>> {
-
-
         if self.api.is_some() {
             return self.api.as_mut().unwrap();
         }
-
 
         const MAX_RETRIES: usize = 6;
         let mut retries = 0;
@@ -107,17 +104,14 @@ impl RawDataSource {
 
             // It might take a while for substrate node that spin up the RPC server.
             // Thus, the connection might get rejected a few times.
-            let res = ClientBuilder::new()
-            .set_url(&self.ws_url)
-            .build()
-            .await;
-           
+            let res = ClientBuilder::new().set_url(&self.ws_url).build().await;
+
             match res {
                 Ok(res) => {
                     break res;
                 }
                 _ => {
-                    async_std::task::sleep( std::time::Duration::from_secs(1 << retries) ).await;
+                    async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
                     retries += 1;
                 }
             };
@@ -163,7 +157,7 @@ impl Source for RawDataSource {
         let result = self.get_api().await.client.rpc().block(block_hash).await;
         if let Ok(Some(block_body)) = result {
             //TODO: we're decoding and encoding here. cut it out.
-            Ok(Some(AgnosticBlock{
+            Ok(Some(AgnosticBlock {
                 block_number: block_body.block.header.number,
                 extrinsics: block_body
                     .block
@@ -182,7 +176,12 @@ impl Source for RawDataSource {
     }
 
     async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
-        self.client().await.rpc().system_chain().await.map(|res| Some(res))
+        self.client()
+            .await
+            .rpc()
+            .system_chain()
+            .await
+            .map(|res| Some(res))
     }
 
     async fn fetch_storage(
