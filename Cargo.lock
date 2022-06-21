@@ -504,6 +504,7 @@ name = "bevy_app"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "async-trait",
  "bevy 0.7.0",
  "bevy-inspector-egui",
  "bevy_atmosphere",
@@ -535,7 +536,6 @@ dependencies = [
  "sp-core 5.0.0",
  "subxt",
  "tikv-jemallocator",
- "tracing-wasm 0.2.1",
  "url",
  "wasm-bindgen",
  "winit 0.26.1",

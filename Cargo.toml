@@ -17,8 +17,8 @@ normalmouse = ["bevy_flycam"]
 sp-core = "*"
 
 async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
-tracing-wasm = "*"
-wasm-bindgen = "*"
+async-trait = "0.1"
+
 futures = "0.3.13"
 jsonrpsee-types = "*"
 
@@ -73,6 +73,8 @@ open = "1"
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
 bevy_webgl2 = "*"
 getrandom = { version = "*", features = ["wasm-bindgen"] }
+#tracing-wasm = "*"
+wasm-bindgen = "*"
 
 # [patch.'https://github.com/bevyengine/bevy']
 # bevy = {git = "https://github.com/bevyengine/bevy//", rev="841755aaf23acfd55b375c37390daeb302c5b30b", default-features=false}
