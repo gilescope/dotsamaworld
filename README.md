@@ -26,6 +26,8 @@ There are cubes which represent extrinsics (transactions) and there are spheres 
 
 Currently new extrinsics and events fall from the sky and land once they are finalised by grandpa.
 
+The colors of the parachain blocks are the same color as the relay chain that secures them.
+
 ! There may be bugs, what you see may not be correct - please double check any info you read here with external sources before doing any transactions based on this info. !
 
 ## What can I do?
@@ -34,6 +36,12 @@ As well as look around you can left click on any event or extrinsic to get some 
 If you right click on an event it will open polkadot-js at that block (and pointing to the right chain).
 If you right click on an extrinsic it will open the polkadot-js decode screen for the right chain so you can see the full details.
 
+## Keyboard controls
+
+ - To move about: WSAD or arrow keys.
+ - Hold space to rise and shift to lower. 
+ - Escape switches the mouse from being able to select something to being able to look around.
+ - Tab lowers or raises the anchor so that you do or don't move with the chain.
 
 ## Prerequisites
 

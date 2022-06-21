@@ -98,7 +98,7 @@ pub struct ChainInfo {
     pub chain_name: String,
 }
 
-type ABlocks = Arc<
+pub type ABlocks = Arc<
     Mutex<
         // Queue of new data to be processed.
         Vec<datasource::DataUpdate>,
@@ -113,6 +113,11 @@ use networks::Env;
 pub struct DataSourceChangedEvent {
     source: String,
     timestamp: Option<u64>,
+}
+
+#[derive(Default)]
+pub struct Anchor {
+    pub dropped: bool,
 }
 
 #[async_std::main]
@@ -131,11 +136,15 @@ async fn main() -> color_eyre::eyre::Result<()> {
         speed: 12.0,          // default: 12.0
     });
 
-    app.insert_resource(Sovereigns { relays: vec![] });
+    app.insert_resource(Sovereigns {
+        relays: vec![],
+        default_track_speed: 1.,
+    });
 
     #[cfg(feature = "normalmouse")]
     app.add_plugin(NoCameraPlayerPlugin);
     app.insert_resource(movement::MouseCapture::default());
+    app.insert_resource(Anchor::default());
 
     #[cfg(feature = "spacemouse")]
     app.add_plugin(SpaceMousePlugin);
@@ -243,7 +252,11 @@ fn source_data(
             BASETIME.store(timestamp, Ordering::Relaxed);
         }
 
-        let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if LIVE == event.source {
+        let is_live = LIVE == event.source;
+        println!("event source {}", event.source);
+        sovereigns.default_track_speed = if is_live { 0.1 } else { 1. };
+        println!("tracking speed set to {}", sovereigns.default_track_speed);
+        let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
             (DotUrl::default(), None)
         } else {
             (dot_url.clone().unwrap(), Some(dot_url.unwrap()))
@@ -602,14 +615,15 @@ const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
 #[derive(Clone)]
-struct Chain {
+pub struct Chain {
     shared: ABlocks,
     info: ChainInfo,
 }
 
-struct Sovereigns {
+pub struct Sovereigns {
     //                            name    para_id             url
     pub relays: Vec<Vec<Chain>>,
+    pub default_track_speed: f32,
 }
 
 #[derive(Component)]
@@ -1140,93 +1154,93 @@ fn add_blocks<'a>(
         //     } else {
         //         vec![&annoying]
         //     };
-            for event in events {
-                EVENTS.fetch_add(1, Ordering::Relaxed);
-                let details = Details {
-                    url: format!(
-                        "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-                        &encoded, &hex_block_hash
-                    ),
-                    ..event.details.clone()
-                };
-                let dark = details.doturl.is_darkside();
-                let entity = DataEvent {
-                    details,
-                    ..event.clone()
-                };
-                let style = style::style_data_event(&entity);
-                //TODO: map should be a resource.
-                let material = mat_map.entry(style.clone()).or_insert_with(|| {
-                    materials.add(if dark {
-                        StandardMaterial {
-                            base_color: style.color.clone(),
-                            emissive: style.color.clone(),
-                            perceptual_roughness: 0.3,
-                            metallic: 1.0,
-                            ..default()
-                        }
-                    } else {
-                        style.color.clone().into()
-                    })
-                });
-
-                let mesh = if content::is_event_message(&entity) {
-                    mesh_xcm.clone()
+        for event in events {
+            EVENTS.fetch_add(1, Ordering::Relaxed);
+            let details = Details {
+                url: format!(
+                    "https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+                    &encoded, &hex_block_hash
+                ),
+                ..event.details.clone()
+            };
+            let dark = details.doturl.is_darkside();
+            let entity = DataEvent {
+                details,
+                ..event.clone()
+            };
+            let style = style::style_data_event(&entity);
+            //TODO: map should be a resource.
+            let material = mat_map.entry(style.clone()).or_insert_with(|| {
+                materials.add(if dark {
+                    StandardMaterial {
+                        base_color: style.color.clone(),
+                        emissive: style.color.clone(),
+                        perceptual_roughness: 0.3,
+                        metallic: 1.0,
+                        ..default()
+                    }
                 } else {
-                    // let mesh = meshes.add(Mesh::from(shape::Box {
-                    //     min_x: 0.,
-                    //     max_x: 0.8,
+                    style.color.clone().into()
+                })
+            });
 
-                    //     min_y: 0.,
-                    //     max_y: 0.8 * height + (height - 1.) * 0.4,
+            let mesh = if content::is_event_message(&entity) {
+                mesh_xcm.clone()
+            } else {
+                // let mesh = meshes.add(Mesh::from(shape::Box {
+                //     min_x: 0.,
+                //     max_x: 0.8,
 
-                    //     min_z: 0.,
-                    //     max_z: 0.8,
-                    // }));
-                    // let mesh = meshes.add(Mesh::from(shape::Icosphere {
-                    //     radius: 0.40,
-                    //     subdivisions: 32,
-                    // }));
-                    mesh.clone()
-                };
-                rain_height[event_num % 81] += DOT_HEIGHT; // * height;
-                let target_y = next_y[event_num % 81];
-                next_y[event_num % 81] += DOT_HEIGHT; // * height;
+                //     min_y: 0.,
+                //     max_y: 0.8 * height + (height - 1.) * 0.4,
 
-                let t = Transform::from_translation(Vec3::new(
-                    px,
-                    rain_height[event_num % 81] * build_dir,
-                    pz * rflip,
-                ));
+                //     min_z: 0.,
+                //     max_z: 0.8,
+                // }));
+                // let mesh = meshes.add(Mesh::from(shape::Icosphere {
+                //     radius: 0.40,
+                //     subdivisions: 32,
+                // }));
+                mesh.clone()
+            };
+            rain_height[event_num % 81] += DOT_HEIGHT; // * height;
+            let target_y = next_y[event_num % 81];
+            next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
-                let mut x = commands.spawn_bundle(PbrBundle {
-                    mesh,
-                    material: material.clone(),
-                    transform: t,
-                    ..Default::default()
+            let t = Transform::from_translation(Vec3::new(
+                px,
+                rain_height[event_num % 81] * build_dir,
+                pz * rflip,
+            ));
+
+            let mut x = commands.spawn_bundle(PbrBundle {
+                mesh,
+                material: material.clone(),
+                transform: t,
+                ..Default::default()
+            });
+            let event_bun = x
+                .insert_bundle(PickableBundle::default())
+                .insert(entity.details.clone())
+                .insert(Rainable {
+                    dest: base_y + target_y * build_dir,
+                    build_direction,
+                })
+                .insert(Name::new("BlockEvent"))
+                .insert(ClearMe);
+            // .insert(Aabb::from_min_max(
+            //     Vec3::new(0., 0., 0.),
+            //     Vec3::new(1., 1., 1.),
+            // ));
+
+            for (link, link_type) in &event.start_link {
+                println!("inserting source of rainbow (an event)!");
+                event_bun.insert(MessageSource {
+                    id: link.to_string(),
+                    link_type: *link_type,
                 });
-                let event_bun = x
-                    .insert_bundle(PickableBundle::default())
-                    .insert(entity.details.clone())
-                    .insert(Rainable {
-                        dest: base_y + target_y * build_dir,
-                        build_direction,
-                    })
-                    .insert(Name::new("BlockEvent"))
-                    .insert(ClearMe);
-                // .insert(Aabb::from_min_max(
-                //     Vec3::new(0., 0., 0.),
-                //     Vec3::new(1., 1., 1.),
-                // ));
-
-                for (link, link_type) in &event.start_link {
-                    println!("inserting source of rainbow (an event)!");
-                    event_bun.insert(MessageSource {
-                        id: link.to_string(),
-                        link_type: *link_type,
-                    });
-                }
             }
+        }
         // }
     }
 }
@@ -1487,8 +1501,8 @@ fn setup(
     // camera
 
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(-100.0, 50., 0.0)
-            .looking_at(Vec3::new(1000., 1., 0.), Vec3::Y),
+        transform: Transform::from_xyz(200.0, 50., 0.0)
+            .looking_at(Vec3::new(-1000., 1., 0.), Vec3::Y),
 
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s
@@ -1535,7 +1549,7 @@ fn setup(
 
     // Kick off the live mode automatically so people have something to look at
     datasource_events.send(DataSourceChangedEvent {
-        source: "dotsama:/1//10504599".to_string(),// LIVE.to_string(),
+        source: "dotsama:/1//10504599".to_string(), // LIVE.to_string(),
         timestamp: None,
     });
 }

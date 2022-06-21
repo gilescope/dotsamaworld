@@ -1,3 +1,5 @@
+use crate::datasource;
+use crate::Anchor;
 use bevy::core::Time;
 use bevy::ecs::system::Query;
 use bevy::ecs::system::Res;
@@ -28,6 +30,8 @@ pub fn player_move_arrows(
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     windows: Res<Windows>,
+    datasource: Res<super::Sovereigns>,
+    mut anchor: ResMut<Anchor>,
     mut settings: ResMut<MovementSettings>,
     mut query: Query<&mut Transform, With<Viewport>>,
     mut toggle_mouse_capture: ResMut<MouseCapture>,
@@ -35,12 +39,25 @@ pub fn player_move_arrows(
     let window = windows.get_primary().unwrap();
     for mut transform in query.iter_mut() {
         let mut velocity = Vec3::ZERO;
+
+        if !anchor.dropped {
+            let x = datasource.default_track_speed;
+            velocity = Vec3::new(x, 0., 0.);
+        }
+
         let local_z = transform.local_z();
         let forward = -Vec3::new(local_z.x, 0., local_z.z);
         let right = Vec3::new(local_z.z, 0., -local_z.x);
 
+        if keys.just_released(KeyCode::Tab) {
+            anchor.dropped = !anchor.dropped;
+        }
+        if keys.just_released(KeyCode::Escape) {
+            toggle_mouse_capture.0 = !toggle_mouse_capture.0;
+        }
+
         for key in keys.get_pressed() {
-            if window.cursor_locked() {
+            if window.is_focused() {
                 match key {
                     KeyCode::Up => velocity += forward,
                     KeyCode::Down => velocity -= forward,
@@ -58,9 +75,7 @@ pub fn player_move_arrows(
                             }
                         }
                     }
-                    KeyCode::Escape => {
-                        toggle_mouse_capture.0 = !toggle_mouse_capture.0;
-                    }
+
                     _ => (),
                 }
             }
