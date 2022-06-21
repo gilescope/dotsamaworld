@@ -8,7 +8,7 @@ pub enum Env {
     SelfSovereign,
     SelfSovereignTest,
     NFTs,
-    CGP
+    CGP,
 }
 
 impl Env {

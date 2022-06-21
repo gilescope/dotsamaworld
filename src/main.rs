@@ -1,6 +1,7 @@
 #![feature(drain_filter)]
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
+
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
 
@@ -47,6 +48,15 @@ use std::convert::AsRef;
 use std::convert::TryInto;
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 pub mod polkadot {}
+
+/// Pick a faster allocator.
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 
 #[cfg(feature = "spacemouse")]
 pub struct MovementSettings {
@@ -304,7 +314,7 @@ fn source_data(
             let mut relay2: Vec<((Chain, datasource::RawDataSource), _)> = vec![];
             let mut send_map: HashMap<
                 NonZeroU32,
-                crossbeam_channel::Sender<(datasource::RelayBlockNumber, H256)>,
+                crossbeam_channel::Sender<(datasource::RelayBlockNumber, u64, H256)>,
             > = Default::default();
             for (chain, source) in relay.into_iter() {
                 let (tx, rc) = unbounded();
@@ -514,13 +524,6 @@ pub struct MessageSource {
     pub link_type: LinkType,
 }
 
-/// An entity can only have one component so this is now the set of
-/// unmatched sources.
-#[derive(Component)]
-pub struct UnmatchedSourceLinks {
-    pub unmatched: Vec<(Vec<u8>, LinkType)>,
-}
-
 #[derive(Clone, Copy)]
 pub enum LinkType {
     Teleport,
@@ -613,12 +616,10 @@ fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    // asset_server: Res<AssetServer>,
     relays: Res<Sovereigns>,
     asset_server: Res<AssetServer>,
     // effects: Res<Assets<EffectAsset>>,
     links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-    links2: Query<(Entity, &UnmatchedSourceLinks, &GlobalTransform)>,
     mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
     mut polylines: ResMut<Assets<Polyline>>,
     mut event: EventWriter<RequestRedraw>,
@@ -698,10 +699,16 @@ fn render_block(
 
                             // Add the new block as a large square on the ground:
                             {
+                                let timestamp_color = if chain.info.chain_url.is_relay() {
+                                    block.timestamp.unwrap()
+                                } else {
+                                    block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
+                                } / 400;
+
                                 let mut bun = commands.spawn_bundle(PbrBundle {
                                     mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
                                     material: materials.add(StandardMaterial {
-                                        base_color: Color::rgba(0., 0., 0., 0.7),
+                                        base_color: style::color_block_number(timestamp_color, chain.info.chain_url.is_darkside()), // Color::rgba(0., 0., 0., 0.7),
                                         alpha_mode: AlphaMode::Blend,
                                         perceptual_roughness: 0.08,
                                         unlit: if block.blockurl.is_darkside() {
@@ -824,87 +831,8 @@ fn render_block(
                                         //block_events.2.inserted_pic = true;
                                     })
                                     .insert_bundle(PickableBundle::default());
-
-                                if block.start_link.len() > 0 {
-                                    bun.insert(UnmatchedSourceLinks {
-                                        unmatched: block.start_link.clone(),
-                                    });
-                                }
                             }
-                            //let mut to_remove = vec![];
-                            let mut drawn_count = 0.;
-                            for (link, _only_one_link_type_at_moment) in block.end_link {
-                                println!("END LINK !!! {}", links.iter().count());
-                                for (entity, links, source_global) in links2.iter() {
-                                    //let mut matched_ids = vec![];
-                                    for (id, _link_type) in &links.unmatched {
-                                        if *id == link {
-                                            //matched_ids.push(*id);
-                                            let layer = if is_relay { 0. } else { 1. };
-                                            let (base_x, base_y, base_z) = (
-                                                (block_num) - 4.,
-                                                LAYER_GAP * layer,
-                                                RELAY_CHAIN_CHASM_WIDTH
-                                                    + BLOCK_AND_SPACER
-                                                        * chain_info.chain_index.abs() as f32
-                                                    - 4.,
-                                            );
-                                            let vertices = vec![
-                                                Vec3::new(
-                                                    source_global.translation.x + drawn_count,
-                                                    source_global.translation.y,
-                                                    source_global.translation.z,
-                                                ), // Source
-                                                Vec3::new(
-                                                    source_global.translation.x + drawn_count,
-                                                    source_global.translation.y,
-                                                    base_z * rflip,
-                                                ), // Source but z of dest
-                                                Vec3::new(
-                                                    source_global.translation.x + drawn_count,
-                                                    source_global.translation.y + 3.,
-                                                    base_z * rflip,
-                                                ),
-                                                Vec3::new(
-                                                    base_x,
-                                                    source_global.translation.y + 5.,
-                                                    base_z * rflip,
-                                                ),
-                                                Vec3::new(base_x, base_y, base_z * rflip), // Dest
-                                            ];
-                                            drawn_count += 2.5;
-
-                                            println!(
-                                                "END OF LINK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! {}",
-                                                drawn_count
-                                            );
-                                            //TODO: we need to remove the links we have matched.
-                                            commands
-                                                .spawn_bundle(PolylineBundle {
-                                                    polyline: polylines.add(Polyline {
-                                                        vertices: vertices.clone(),
-                                                        ..Default::default()
-                                                    }),
-                                                    material: polyline_materials.add(
-                                                        PolylineMaterial {
-                                                            width: 10.0,
-                                                            color: Color::GREEN,
-                                                            perspective: true,
-                                                            ..Default::default()
-                                                        },
-                                                    ),
-                                                    ..Default::default()
-                                                })
-                                                .insert(ClearMe);
-                                        }
-                                        // to_remove.push(entity);
-                                    }
-                                }
-                            }
-
-                            // for entity in to_remove {
-                            //     commands.remove_one::<MessageSource>(entity);
-                            // }
+                          
 
                             let ext_with_events =
                                 datasource::associate_events(block.extrinsics, block.events);
