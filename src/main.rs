@@ -3,7 +3,7 @@
 #![feature(slice_pattern)]
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-use bevy::render::primitives::Aabb;
+
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
@@ -722,10 +722,10 @@ fn render_block(
                                     ..Default::default()
                                 });
                                 bun.insert(ClearMe);
-                                bun.insert(Aabb::from_min_max(
-                                    Vec3::new(0., 0., 0.),
-                                    Vec3::new(1., 1., 1.),
-                                ));
+                                // bun.insert(Aabb::from_min_max(
+                                //     Vec3::new(0., 0., 0.),
+                                //     Vec3::new(1., 1., 1.),
+                                // ));
 
                                 bun.insert(details)
                                     .insert(Name::new("Block"))
@@ -815,11 +815,11 @@ fn render_block(
                                                 ..default()
                                             })
                                             .insert(Name::new("BillboardUp"))
-                                            .insert(ClearMe)
-                                            .insert(Aabb::from_min_max(
-                                                Vec3::new(0., 0., 0.),
-                                                Vec3::new(1., 1., 1.),
-                                            )); // TODO: should be able to add same component onto 3 different entities maybe?
+                                            .insert(ClearMe);
+                                            // .insert(Aabb::from_min_max(
+                                            //     Vec3::new(0., 0., 0.),
+                                            //     Vec3::new(1., 1., 1.),
+                                            // )); // TODO: should be able to add same component onto 3 different entities maybe?
 
                                         //block_events.2.inserted_pic = true;
                                     })
@@ -1148,11 +1148,11 @@ fn add_blocks<'a>(
                         dest: base_y + target_y * build_dir,
                         build_direction,
                     })
-                    .insert(Name::new("Extrinsic"))
-                    .insert(Aabb::from_min_max(
-                        Vec3::new(0., 0., 0.),
-                        Vec3::new(1., 1., 1.),
-                    ));
+                    .insert(Name::new("Extrinsic"));
+                    // .insert(Aabb::from_min_max(
+                    //     Vec3::new(0., 0., 0.),
+                    //     Vec3::new(1., 1., 1.),
+                    // ));
 
                 for source in create_source {
                     bun.insert(source);
@@ -1217,11 +1217,11 @@ fn add_blocks<'a>(
                     build_direction,
                 })
                 .insert(Name::new("BlockEvent"))
-                .insert(ClearMe)
-                .insert(Aabb::from_min_max(
-                    Vec3::new(0., 0., 0.),
-                    Vec3::new(1., 1., 1.),
-                ));
+                .insert(ClearMe);
+                // .insert(Aabb::from_min_max(
+                //     Vec3::new(0., 0., 0.),
+                //     Vec3::new(1., 1., 1.),
+                // ));
 
             for (link, link_type) in &event.start_link {
                 println!("inserting source of rainbow (an event)!");
