@@ -34,6 +34,17 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 
 use palette::FromColor;
 
+// coloring block timestamp actually
+pub fn color_block_number(block_number: u64, darkside: bool) -> Color {
+    let color = palette::Lchuv::new(
+        if darkside { 40. } else { 80. },
+        80. + (block_number % 100) as f32,
+        (block_number % 360) as f32,
+    );
+    let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
+    Color::rgba(rgb.red, rgb.green, rgb.blue, 0.7 )
+}
+
 pub fn style_event(entry: &DataEntity) -> ExStyle {
     let darkside = entry.details().doturl.is_darkside();
     let msg = crate::content::is_message(entry);

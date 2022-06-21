@@ -226,8 +226,8 @@ pub async fn watch_blocks<S: Source>(
     tx: ABlocks,
     chain_info: ChainInfo,
     as_of: Option<DotUrl>,
-    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, H256)>,
-    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
+    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, u64, H256)>,
+    sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     mut source: S,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = &chain_info.chain_ws;
@@ -245,7 +245,7 @@ pub async fn watch_blocks<S: Source>(
         // if we are a parachain then we need the relay chain to tell us which numbers it is interested in
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
-            while let Ok((_relay_block_number, block_hash)) = recieve_channel.recv() {
+            while let Ok((_relay_block_number, timestamp_parent, block_hash)) = recieve_channel.recv() {
                 let _ = process_extrinsics(
                     &tx,
                     chain_info.chain_url.clone(),
@@ -254,6 +254,7 @@ pub async fn watch_blocks<S: Source>(
                     &mut source,
                     &sender,
                     our_data_epoc,
+                    Some(timestamp_parent)
                 )
                 .await;
                 if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
@@ -311,8 +312,9 @@ pub async fn watch_blocks<S: Source>(
                     // TODO: timestamp probably incorrect
                     tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
                         data_epoc: our_data_epoc,
-                        // Place it in the aproximately right location...
+                        // Place it in the approximately right location...
                         timestamp: last_timestamp.map(|t| t + 12_000_000),
+                        timestamp_parent: None,
                         blockurl: DotUrl {
                             block_number: Some(block_number),
                             ..chain_info.chain_url.clone()
@@ -320,8 +322,6 @@ pub async fn watch_blocks<S: Source>(
                         blockhash: sp_core::H256::default(),
                         extrinsics: vec![],
                         events: vec![],
-                        start_link: vec![],
-                        end_link: vec![],
                     }));
 
                     continue;
@@ -335,6 +335,7 @@ pub async fn watch_blocks<S: Source>(
                     &mut source,
                     &sender,
                     our_data_epoc,
+                    None
                 )
                 .await
                 {
@@ -359,6 +360,7 @@ pub async fn watch_blocks<S: Source>(
                         &mut source,
                         &None,
                         our_data_epoc,
+                        None
                     )
                     .await;
                     // check for stop signal
@@ -381,8 +383,9 @@ async fn process_extrinsics<S: Source>(
     block_hash: H256,
     url: &str,
     source: &mut S,
-    sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
+    sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     our_data_epoc: u32,
+    timestamp_parent: Option<u64>
 ) -> Result<Option<u64>, ()> {
     let mut timestamp = None;
     if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
@@ -440,7 +443,7 @@ async fn process_extrinsics<S: Source>(
             }
         }
         let (events, start_link) =
-            get_events_for_block(source, &url, block_hash, &sender, &blockurl, &metad)
+            get_events_for_block(source, &url, block_hash, &sender, &blockurl, &metad, timestamp.clone())
                 .await
                 .or(Err(()))?;
 
@@ -449,16 +452,11 @@ async fn process_extrinsics<S: Source>(
         let current = PolkaBlock {
             data_epoc: our_data_epoc,
             timestamp: timestamp.clone(),
+            timestamp_parent,
             blockurl,
             blockhash: block_hash,
             extrinsics: exts,
             events,
-            start_link,
-            end_link: if is_parachain {
-                vec![(block_hash.as_bytes().to_vec(), LinkType::ParaInclusion)]
-            } else {
-                vec![]
-            },
         };
 
         //FYI: blocks sometimes have no events in them.
@@ -1134,23 +1132,22 @@ pub enum DataUpdate {
 pub struct PolkaBlock {
     pub data_epoc: u32,
     pub timestamp: Option<u64>,
+    pub timestamp_parent: Option<u64>,
     pub blockurl: DotUrl,
     pub blockhash: H256,
     pub extrinsics: Vec<DataEntity>,
     pub events: Vec<DataEvent>,
-
-    pub start_link: Vec<(Vec<u8>, LinkType)>,
-    /// list of links that we have finished
-    pub end_link: Vec<(Vec<u8>, LinkType)>,
 }
 
+// Timestamp only needs to be provided when relay chain.
 async fn get_events_for_block(
     source: &mut impl Source,
     url: &str,
     blockhash: H256,
-    sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, H256)>>>,
+    sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     block_url: &DotUrl,
     metad: &Metadata,
+    timestamp: Option<u64>
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
     let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
     let mut data_events = vec![];
@@ -1383,7 +1380,7 @@ async fn get_events_for_block(
                             let mailbox = sender.get(&para_id);
                             if let Some(mailbox) = mailbox {
                                 let hash = H256::from_slice(hash.as_slice());
-                                if let Err(err) = mailbox.send((blocknum, hash)) {
+                                if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash)) {
                                     println!(
                                         "block hash failed to send at {} error: {}",
                                         blocknum, err
