@@ -13,9 +13,9 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
-use bevy::window::RequestRedraw;
-use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::diagnostic::LogDiagnosticsPlugin;
+use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
 use std::collections::HashMap;
@@ -178,7 +178,6 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_system(rain)
         .add_system(source_data)
         .add_system(right_click_system)
-       
         .add_system_to_stage(CoreStage::PostUpdate, update_visibility)
         .add_startup_system(ui::details::configure_visuals)
         .insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
@@ -724,8 +723,8 @@ fn render_block(
                                 });
                                 bun.insert(ClearMe);
                                 bun.insert(Aabb::from_min_max(
-                                    Vec3::new(0.,0.,0.),
-                                    Vec3::new( 1., 1.,1.),
+                                    Vec3::new(0., 0., 0.),
+                                    Vec3::new(1., 1., 1.),
                                 ));
 
                                 bun.insert(details)
@@ -816,9 +815,10 @@ fn render_block(
                                                 ..default()
                                             })
                                             .insert(Name::new("BillboardUp"))
-                                            .insert(ClearMe).insert(Aabb::from_min_max(
-                                                Vec3::new(0.,0.,0.),
-                                                Vec3::new( 1., 1.,1.),
+                                            .insert(ClearMe)
+                                            .insert(Aabb::from_min_max(
+                                                Vec3::new(0., 0., 0.),
+                                                Vec3::new(1., 1., 1.),
                                             )); // TODO: should be able to add same component onto 3 different entities maybe?
 
                                         //block_events.2.inserted_pic = true;
@@ -1090,7 +1090,7 @@ fn add_blocks<'a>(
                                     .spawn_bundle(PolylineBundle {
                                         polyline: polylines.add(Polyline {
                                             vertices: vertices.clone(),
-                                           si ..Default::default()
+                                            ..Default::default()
                                         }),
                                         material: polyline_materials.add(PolylineMaterial {
                                             width: 10.0,
@@ -1150,8 +1150,8 @@ fn add_blocks<'a>(
                     })
                     .insert(Name::new("Extrinsic"))
                     .insert(Aabb::from_min_max(
-                        Vec3::new(0.,0.,0.),
-                        Vec3::new( 1., 1.,1.),
+                        Vec3::new(0., 0., 0.),
+                        Vec3::new(1., 1., 1.),
                     ));
 
                 for source in create_source {
@@ -1219,8 +1219,8 @@ fn add_blocks<'a>(
                 .insert(Name::new("BlockEvent"))
                 .insert(ClearMe)
                 .insert(Aabb::from_min_max(
-                    Vec3::new(0.,0.,0.),
-                    Vec3::new( 1., 1.,1.),
+                    Vec3::new(0., 0., 0.),
+                    Vec3::new(1., 1., 1.),
                 ));
 
             for (link, link_type) in &event.start_link {
@@ -1394,7 +1394,6 @@ pub fn print_events(
     }
 }
 
-
 fn update_visibility(
     mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
     player_query: Query<&Transform, With<Viewport>>,
@@ -1407,10 +1406,10 @@ fn update_visibility(
     let width = 500.;
     let (min, max) = (x - width, x + width);
     // let mut count = 0;
-    // let mut count_vis = 0; 
-    
+    // let mut count_vis = 0;
+
     for (mut vis, transform, _) in entity_query.iter_mut() {
-    // count +=1;
+        // count +=1;
         vis.is_visible = transform.translation.x > min && transform.translation.x < max;
         // if vis.is_visible { count_vis += 1 }
     }
