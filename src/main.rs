@@ -1116,31 +1116,31 @@ fn add_blocks<'a>(
         events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
         //TODO keep original order a bit
 
-        for event_group in events.group_by(|a, b| {
-            a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
-        }) {
-            let event_group: Vec<_> = event_group.iter().collect();
+        // for event_group in events.group_by(|a, b| {
+        //     a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
+        // }) {
+        //     let event_group: Vec<_> = event_group.iter().collect();
 
-            let height = event_group.len() as f32;
-            let annoying = DataEvent {
-                details: Details {
-                    pallet: event_group[0].details.pallet.clone(),
-                    doturl: event_group[0].details.doturl.clone(),
-                    parent: event_group[0].details.parent.clone(),
-                    variant: event_group[0].details.variant.clone(),
-                    success: event_group[0].details.success.clone(),
-                    hover: event_group[0].details.hover.clone(),
-                    flattern: event_group[0].details.flattern.clone(),
-                    url: event_group[0].details.url.clone(),
-                },
-                start_link: vec![],
-            };
-            let event_group = if event_group.len() == 1 {
-                event_group
-            } else {
-                vec![&annoying]
-            };
-            for event in event_group {
+        //     let height = event_group.len() as f32;
+        //     let annoying = DataEvent {
+        //         details: Details {
+        //             pallet: event_group[0].details.pallet.clone(),
+        //             doturl: event_group[0].details.doturl.clone(),
+        //             parent: event_group[0].details.parent.clone(),
+        //             variant: event_group[0].details.variant.clone(),
+        //             success: event_group[0].details.success.clone(),
+        //             hover: event_group[0].details.hover.clone(),
+        //             flattern: event_group[0].details.flattern.clone(),
+        //             url: event_group[0].details.url.clone(),
+        //         },
+        //         start_link: vec![],
+        //     };
+        //     let event_group = if event_group.len() == 1 {
+        //         event_group
+        //     } else {
+        //         vec![&annoying]
+        //     };
+            for event in events {
                 EVENTS.fetch_add(1, Ordering::Relaxed);
                 let details = Details {
                     url: format!(
@@ -1189,9 +1189,9 @@ fn add_blocks<'a>(
                     // }));
                     mesh.clone()
                 };
-                rain_height[event_num % 81] += DOT_HEIGHT * height;
+                rain_height[event_num % 81] += DOT_HEIGHT; // * height;
                 let target_y = next_y[event_num % 81];
-                next_y[event_num % 81] += DOT_HEIGHT * height;
+                next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
                 let t = Transform::from_translation(Vec3::new(
                     px,
@@ -1227,7 +1227,7 @@ fn add_blocks<'a>(
                     });
                 }
             }
-        }
+        // }
     }
 }
 
@@ -1535,7 +1535,7 @@ fn setup(
 
     // Kick off the live mode automatically so people have something to look at
     datasource_events.send(DataSourceChangedEvent {
-        source: LIVE.to_string(),
+        source: "dotsama:/1//10504599".to_string(),// LIVE.to_string(),
         timestamp: None,
     });
 }
