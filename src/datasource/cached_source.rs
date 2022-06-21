@@ -28,11 +28,11 @@ where
 }
 
 macro_rules! memoise {
-    ($self:expr, $keybytes:expr, $fetch:expr) => {{
+    ($datatype:expr, $self:expr, $keybytes:expr, $fetch:expr) => {{
         let path = format!("target/{}.data", $self.urlhash);
         let _ = std::fs::create_dir(&path);
 
-        let filename = format!("{}/{}.storage", path, hex::encode($keybytes));
+        let filename = format!("{}/{}.{}", path, hex::encode($keybytes), $datatype);
 
         if let Ok(contents) = std::fs::read(&filename) {
             // println!("cache hit events!");
@@ -80,6 +80,7 @@ where
         block_number: u32,
     ) -> Result<Option<sp_core::H256>, BError> {
         memoise!(
+            "block_hash",
             self,
             block_number.as_bytes(),
             self.underlying_source
@@ -97,6 +98,7 @@ where
     ) -> Result<Option<AgnosticBlock>, BError> {
         if let Some(block_hash) = block_hash {
             memoise!(
+                "block",
                 self,
                 block_hash.as_bytes(),
                 self.underlying_source
@@ -112,6 +114,7 @@ where
 
     async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
         memoise!(
+            "chainname",
             self,
             b"chainname".as_slice(),
             self.underlying_source
@@ -131,6 +134,7 @@ where
             cache_key.extend(as_of.as_bytes());
         }
         memoise!(
+            "storage",
             self,
             cache_key.as_slice(),
             self.underlying_source
@@ -142,6 +146,7 @@ where
 
     async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
         memoise!(
+            "metadata",
             self,
             as_of.unwrap_or_default().as_bytes(),
             self.underlying_source

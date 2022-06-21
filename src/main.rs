@@ -15,8 +15,8 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
-use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-use bevy::diagnostic::LogDiagnosticsPlugin;
+// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+// use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
@@ -167,18 +167,9 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .register_inspectable::<Details>()
         // .add_plugin(DebugEventsPickingPlugin)
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
-        .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(PolylinePlugin)
         // .add_system(movement::scroll)
-        .add_startup_system(
-            move |commands: Commands,
-                  meshes: ResMut<Assets<Mesh>>,
-                  materials: ResMut<Assets<StandardMaterial>>| {
-                // let clone_chains_for_lanes = clone_chains_for_lanes.clone();
-                setup(commands, meshes, materials);
-            },
-        );
+        .add_startup_system(setup);
     #[cfg(feature = "spacemouse")]
     app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
         scale.rotate_scale = 0.00010;
@@ -188,8 +179,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .add_system(rain)
         .add_system(source_data)
         // .add_system(pad_system)
-        .add_plugin(LogDiagnosticsPlugin::default())
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        // .add_plugin(LogDiagnosticsPlugin::default())
+        // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_system(right_click_system)
         .add_system_to_stage(CoreStage::PostUpdate, update_visibility)
         .add_startup_system(ui::details::configure_visuals)
@@ -1453,6 +1444,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     // asset_server: Res<AssetServer>,
+    mut datasource_events: EventWriter<DataSourceChangedEvent>,
 ) {
     // add entities to the world
     // plane
@@ -1540,6 +1532,12 @@ fn setup(
         transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
         ..Default::default()
     });
+
+    // Kick off the live mode automatically so people have something to look at
+    datasource_events.send(DataSourceChangedEvent {
+        source: LIVE.to_string(),
+        timestamp: None,
+    });
 }
 
 #[derive(Inspectable, Default)]
@@ -1578,7 +1576,7 @@ impl Inspectable for DateTime {
         _: <Self as Inspectable>::Attributes,
         _: &mut bevy_inspector_egui::Context<'_>,
     ) -> bool {
-        let mut changed = false;
+        // let mut changed = false;
         ui.checkbox(&mut self.1, "Point in time:");
         ui.add(
             DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut self.0)

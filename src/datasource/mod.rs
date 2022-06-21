@@ -440,7 +440,7 @@ async fn process_extrinsics<S: Source>(
                 println!("can't decode block ext {}-{} {}", block_number, i, &url);
             }
         }
-        let (events, start_link) = get_events_for_block(
+        let (events, _start_link) = get_events_for_block(
             source,
             &url,
             block_hash,
@@ -453,7 +453,7 @@ async fn process_extrinsics<S: Source>(
         .or(Err(()))?;
 
         let mut handle = tx.lock().unwrap();
-        let is_parachain = blockurl.para_id.is_some();
+
         let current = PolkaBlock {
             data_epoc: our_data_epoc,
             timestamp: timestamp.clone(),
