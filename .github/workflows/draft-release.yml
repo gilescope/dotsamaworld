@@ -27,12 +27,17 @@ jobs:
       run: sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev
     - name: Build
       run: cargo build --locked --verbose --release
+    - if: ${{ matrix.os == 'macos-latest' }}
+      run: cp target/release/dotsamaworld target/release/dotsamaworld-mac
+    - if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: cp target/release/dotsamaworld target/release/dotsamaworld-linux
     - name: Upload lin runtime
       uses: actions/upload-artifact@v3
       with:
-        name: dotsamaworld-lin-bin
+        name: dotsamaworld
         path: |
-          target/release/dotsamaworld
+          target/release/dotsamaworld-mac
+          target/release/dotsamaworld-linux
           target/release/dotsamaworld.exe
 
   publish-draft-release:  
@@ -42,6 +47,7 @@ jobs:
       asset_upload_url: ${{ steps.create-release.outputs.upload_url }}
     needs: build
     steps:
+    - uses: actions/download-artifact@v2
     - name: Create draft release
       id: create-release
       uses: actions/create-release@v1
