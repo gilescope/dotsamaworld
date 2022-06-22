@@ -48,9 +48,9 @@ pub trait Source {
 
     async fn fetch_storage(
         &mut self,
-        key: sp_core::storage::StorageKey,
+        key: subxt::sp_core::storage::StorageKey,
         as_of: Option<H256>,
-    ) -> Result<Option<sp_core::storage::StorageData>, BError>;
+    ) -> Result<Option<subxt::sp_core::storage::StorageData>, BError>;
 
     async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()>;
 
@@ -186,9 +186,9 @@ impl Source for RawDataSource {
 
     async fn fetch_storage(
         &mut self,
-        key: sp_core::storage::StorageKey,
+        key: subxt::sp_core::storage::StorageKey,
         as_of: Option<H256>,
-    ) -> Result<Option<sp_core::storage::StorageData>, BError> {
+    ) -> Result<Option<subxt::sp_core::storage::StorageData>, BError> {
         self.client().await.storage().fetch_raw(key, as_of).await
     }
 

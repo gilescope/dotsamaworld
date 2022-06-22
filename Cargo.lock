@@ -500,48 +500,6 @@ dependencies = [
 
 [[package]]
 name = "bevy_app"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "async-trait",
- "bevy 0.7.0",
- "bevy-inspector-egui",
- "bevy_atmosphere",
- "bevy_egui",
- "bevy_flycam",
- "bevy_mod_picking",
- "bevy_polyline",
- "bevy_spacemouse",
- "bevy_webgl2",
- "chrono",
- "color-eyre",
- "crossbeam-channel 0.5.4",
- "desub-current",
- "egui",
- "egui-datepicker",
- "fastrand",
- "frame-metadata",
- "futures",
- "getrandom 0.2.6",
- "hex",
- "jsonrpsee-types",
- "open",
- "palette",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "serde_bytes",
- "serde_json",
- "sp-core 5.0.0",
- "subxt",
- "tikv-jemallocator",
- "url",
- "wasm-bindgen",
- "winit 0.26.1",
-]
-
-[[package]]
-name = "bevy_app"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d720bb8174ec9a7bc8f745ff821536a1d234d50fed205d2f8dc831e0577f76c9"
@@ -2462,6 +2420,48 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68df3f2b690c1b86e65ef7830956aededf3cb0a16f898f79b9a6f421a7b6211b"
 dependencies = [
  "rand 0.8.5",
+]
+
+[[package]]
+name = "dotsamaworld"
+version = "0.1.1"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "bevy 0.7.0",
+ "bevy-inspector-egui",
+ "bevy_atmosphere",
+ "bevy_egui",
+ "bevy_flycam",
+ "bevy_mod_picking",
+ "bevy_polyline",
+ "bevy_spacemouse",
+ "bevy_webgl2",
+ "chrono",
+ "color-eyre",
+ "crossbeam-channel 0.4.4",
+ "desub-current",
+ "egui",
+ "egui-datepicker",
+ "fastrand",
+ "frame-metadata",
+ "futures",
+ "getrandom 0.1.16",
+ "hex",
+ "jsonrpsee-types",
+ "open",
+ "palette",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sp-core 4.0.0",
+ "subxt",
+ "tikv-jemallocator",
+ "url",
+ "wasm-bindgen",
+ "winit 0.24.0",
 ]
 
 [[package]]

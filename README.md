@@ -12,13 +12,13 @@ Thank you Bevy and all your plugin ecosystem for making this project a real joy 
 
 ! This is very experimental and under active dev. I'll clean up the code once I know what it is I'm creating. !
 
-![Image](https://github.com/gilescope/dotsamatown-visual-history/blob/main/chapter2/Screenshot%20from%202022-05-08%2010-03-11.png?raw=true)
+![Image](https://github.com/gilescope/dotsamaworld-visual-history/blob/main/chapter2/Screenshot%20from%202022-05-08%2010-03-11.png?raw=true)
 
 ## What am I looking at?
 
 Pictures are stored in a separate repo to not bloat this one: 
 
-[Dotsama Town - A Visual History](https://github.com/gilescope/dotsamatown-visual-history)
+[Dotsama Town - A Visual History](https://github.com/gilescope/dotsamaworld-visual-history)
 
 There are long roads streatching into the distance - these are the parachains with the two relay chains side by side in the middle.
 

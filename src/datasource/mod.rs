@@ -120,11 +120,11 @@ pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<
     let storage_key =
         hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
     let call = source
-        .fetch_storage(sp_core::storage::StorageKey(storage_key), None)
+        .fetch_storage(subxt::sp_core::storage::StorageKey(storage_key), None)
         .await
         .unwrap();
 
-    if let Some(sp_core::storage::StorageData(val)) = call {
+    if let Some(subxt::sp_core::storage::StorageData(val)) = call {
         let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
         println!("{} is para id {}", &url, para_id);
         let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
@@ -156,7 +156,7 @@ async fn get_metadata_version(
         hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8").unwrap();
     let call = source
         .fetch_storage(
-            sp_core::storage::StorageKey(storage_key.clone()),
+            subxt::sp_core::storage::StorageKey(storage_key.clone()),
             Some(hash),
         )
         .await;
@@ -196,7 +196,7 @@ async fn get_metadata_version(
         }
     };
 
-    if let Some(sp_core::storage::StorageData(val)) = call {
+    if let Some(subxt::sp_core::storage::StorageData(val)) = call {
         Some(hex::encode(val.as_slice()))
     } else {
         warn!("could not find metadata id for {}", &url);
@@ -1168,12 +1168,12 @@ async fn get_events_for_block(
 
     let call = source
         .fetch_storage(
-            sp_core::storage::StorageKey(storage_key.clone()),
+            subxt::sp_core::storage::StorageKey(storage_key.clone()),
             Some(blockhash),
         )
         .await?;
 
-    let bytes = if let Some(sp_core::storage::StorageData(events_raw)) = call {
+    let bytes = if let Some(subxt::sp_core::storage::StorageData(events_raw)) = call {
         Some(events_raw)
     } else {
         None

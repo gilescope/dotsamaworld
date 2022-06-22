@@ -126,9 +126,9 @@ where
 
     async fn fetch_storage(
         &mut self,
-        key: sp_core::storage::StorageKey,
+        key: subxt::sp_core::storage::StorageKey,
         as_of: Option<H256>,
-    ) -> Result<Option<sp_core::storage::StorageData>, BError> {
+    ) -> Result<Option<subxt::sp_core::storage::StorageData>, BError> {
         let mut cache_key = key.0.clone();
         if let Some(as_of) = as_of {
             cache_key.extend(as_of.as_bytes());
@@ -139,9 +139,9 @@ where
             cache_key.as_slice(),
             self.underlying_source
                 .fetch_storage(key, as_of)
-                .map_ok(|res| res.map(|sp_core::storage::StorageData(bytes)| bytes))
+                .map_ok(|res| res.map(|subxt::sp_core::storage::StorageData(bytes)| bytes))
         )
-        .map(|op| op.map(|bytes| sp_core::storage::StorageData(bytes)))
+        .map(|op| op.map(|bytes| subxt::sp_core::storage::StorageData(bytes)))
     }
 
     async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
