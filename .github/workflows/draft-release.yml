@@ -1,0 +1,77 @@
+name: Release - Create draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      pre_release:
+        description: For pre-releases
+        default: "true"
+        required: true
+      ref2:
+        description: The 'to' tag to use for the diff
+        default: dotsamaworld-v0.1.1
+        required: true
+
+jobs:
+  build-lin:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - run: sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload lin runtime
+      uses: actions/upload-artifact@v3
+      with:
+        name: dotsamaworld-lin-bin
+        path: |
+          target/release/dotsamaworld
+
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload lin runtime
+      uses: actions/upload-artifact@v3
+      with:
+        name: dotsamaworld-win-bin
+        path: |
+          target/release/dotsamaworld
+
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose --release
+    - name: Run tests
+      run: cargo test --verbose --release
+    - name: Upload lin runtime
+      uses: actions/upload-artifact@v3
+      with:
+        name: dotsamaworld-mac-bin
+        path: |
+          target/release/dotsamaworld
+
+publish-draft-release:
+  runs-on: ubuntu-latest
+  needs: ["build-lin", "build-win", "build-man"]
+  steps:
+  - name: Create draft release
+    id: create-release
+    uses: actions/create-release@v1
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      tag_name: ${{ github.event.inputs.ref2 }}
+      release_name: ${{ github.event.inputs.ref2 }}
+      draft: true
