@@ -124,6 +124,11 @@ pub struct Anchor {
 async fn main() -> color_eyre::eyre::Result<()> {
     color_eyre::install()?;
 
+    // App assumes the target dir exists
+    let _ = std::fs::create_dir_all("target");
+
+
+
     let low_power_mode = false;
 
     let mut app = App::new();
@@ -170,6 +175,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     // });
     //app.add_plugins(DefaultPickingPlugins)
     app.add_plugin(PickingPlugin)
+    .add_system(ui::ui_bars_system)
         .add_plugin(InteractablePickingPlugin)
         // .add_plugin(HighlightablePickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
@@ -177,6 +183,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         .register_inspectable::<Details>()
         // .add_plugin(DebugEventsPickingPlugin)
         .add_plugin(PolylinePlugin)
+        .insert_resource(ui::OccupiedScreenSpace::default())
         // .add_system(movement::scroll)
         .add_startup_system(setup);
     #[cfg(feature = "spacemouse")]
@@ -190,6 +197,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         // .add_system(pad_system)
         // .add_plugin(LogDiagnosticsPlugin::default())
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        // .add_system(ui::update_camera_transform_system)
         .add_system(right_click_system)
         .add_system_to_stage(CoreStage::PostUpdate, update_visibility)
         .add_startup_system(ui::details::configure_visuals)
@@ -647,6 +655,17 @@ static EVENTS: AtomicU32 = AtomicU32::new(0);
 //     }
 // }
 
+// Convert from x to timestamp
+pub fn x_to_timestamp(x: f32) -> i64 {
+    let zero = BASETIME.load(Ordering::Relaxed) as i64;
+    (zero + (x as f64 * 400.) as i64) / 1000
+}
+
+pub fn timestamp_to_x(mut timestamp: u64) -> f32 {
+    let zero = BASETIME.load(Ordering::Relaxed);
+    ((timestamp as f64 - zero as f64) / 400.) as f32
+}
+
 fn render_block(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -736,12 +755,9 @@ fn render_block(
                                 ..default()
                             };
 
-                            let block_num =
-                                block.timestamp.unwrap_or(base_time) as f64 - base_time as f64;
-                            //   miliseconds / = 14
-                            let block_num = (block_num / 400.) as f32;
-                            // println!("block num time becomes {}", block_num);
-
+                            let block_num = timestamp_to_x(
+                                block.timestamp.unwrap_or(base_time));
+                            
                             // Add the new block as a large square on the ground:
                             {
                                 let timestamp_color = if chain.info.chain_url.is_relay() {
@@ -1499,10 +1515,11 @@ fn setup(
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
     // camera
-
+    let camera_transform = Transform::from_xyz(200.0, 50., 0.0)
+    .looking_at(Vec3::new(-1000., 1., 0.), Vec3::Y); 
+    commands.insert_resource(ui::OriginalCameraTransform(camera_transform));
     let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(200.0, 50., 0.0)
-            .looking_at(Vec3::new(-1000., 1., 0.), Vec3::Y),
+        transform: camera_transform,
 
         perspective_projection: PerspectiveProjection {
             // far: 1., // 1000 will be 100 blocks that you can s

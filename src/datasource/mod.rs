@@ -1622,8 +1622,7 @@ mod tests {
     fn polkadot_millionth_block_hash() {
         let url = "wss://rpc.polkadot.io:443";
         let mut source = RawDataSource::new(url);
-        let blockhash =
-            async_std::task::block_on(get_block_hash(&mut source,  1000_000)).unwrap();
+        let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
         let actual = hex::encode(blockhash.as_bytes());
 
         assert_eq!(
@@ -1636,8 +1635,7 @@ mod tests {
     fn polkadot_millionth_block_3_extrinsics() {
         let url = "wss://rpc.polkadot.io:443";
         let mut source = RawDataSource::new(url);
-        let blockhash =
-            async_std::task::block_on(get_block_hash(&mut source,  1000_000)).unwrap();
+        let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
         let actual = hex::encode(blockhash.as_bytes());
 
         assert_eq!(
@@ -1650,7 +1648,7 @@ mod tests {
     fn get_extrinsics_test() {
         let url = "wss://rpc.polkadot.io:443";
         let mut source = RawDataSource::new(url);
-        let blockhash = block_on(get_block_hash(&mut source,  1000_000)).unwrap();
+        let blockhash = block_on(get_block_hash(&mut source, 1000_000)).unwrap();
 
         let block = block_on(get_extrinsics(&mut source, blockhash))
             .unwrap()
