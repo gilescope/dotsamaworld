@@ -39,6 +39,7 @@ jobs:
           target/release/dotsamaworld-mac
           target/release/dotsamaworld-linux
           target/release/dotsamaworld.exe
+          assets
 
   publish-draft-release:  
     runs-on: ubuntu-latest
