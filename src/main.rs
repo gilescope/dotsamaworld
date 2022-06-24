@@ -1592,6 +1592,7 @@ fn setup(
 #[derive(Inspectable, Default)]
 pub struct Inspector {
     // #[inspectable(deletable = false)]
+    #[inspectable(collapse)]
     start_location: UrlBar,
     timestamp: DateTime,
     #[inspectable(deletable = false)]
@@ -1646,6 +1647,7 @@ impl Default for UrlBar {
         }
     }
 }
+
 
 struct UrlBar {
     changed: bool,
