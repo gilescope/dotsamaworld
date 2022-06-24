@@ -5,7 +5,6 @@
 
 use bevy::ecs as bevy_ecs;
 use bevy::prelude::*;
-
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
@@ -18,6 +17,7 @@ use bevy_mod_picking::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use bevy::window::RequestRedraw;
+use crate::movement::Destination;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
 use std::collections::HashMap;
@@ -30,6 +30,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 mod content;
+use std::sync::atomic::AtomicI64;
 mod datasource;
 mod movement;
 mod style;
@@ -174,8 +175,14 @@ async fn main() -> color_eyre::eyre::Result<()> {
     //     ..default()
     // });
     //app.add_plugins(DefaultPickingPlugins)
+
+
     app.add_plugin(PickingPlugin)
+    // .insert_resource(camera_rig
+    // )
+    .insert_resource(movement::Destination::default())
     .add_system(ui::ui_bars_system)
+    // .add_system(movement::rig_system)
         .add_plugin(InteractablePickingPlugin)
         // .add_plugin(HighlightablePickingPlugin)
         // .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
@@ -194,7 +201,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.add_system(movement::player_move_arrows)
         .add_system(rain)
         .add_system(source_data)
-        // .add_system(pad_system)
+       // .add_system(pad_system)
         // .add_plugin(LogDiagnosticsPlugin::default())
         // .add_plugin(FrameTimeDiagnosticsPlugin::default())
         // .add_system(ui::update_camera_transform_system)
@@ -207,7 +214,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
             sky_radius: 1000.0,
         })
         .add_system(render_block)
-        .add_system_to_stage(CoreStage::PostUpdate, print_events);
+       .add_system_to_stage(CoreStage::PostUpdate, print_events);
 
     app.run();
 
@@ -661,7 +668,7 @@ pub fn x_to_timestamp(x: f32) -> i64 {
     (zero + (x as f64 * 400.) as i64) / 1000
 }
 
-pub fn timestamp_to_x(mut timestamp: u64) -> f32 {
+pub fn timestamp_to_x(timestamp: u64) -> f32 {
     let zero = BASETIME.load(Ordering::Relaxed);
     ((timestamp as f64 - zero as f64) / 400.) as f32
 }
@@ -1365,10 +1372,12 @@ pub struct UpdateTimer {
 
 pub fn print_events(
     mut events: EventReader<PickingEvent>,
-    mut query2: Query<(Entity, &Details)>,
+    mut query2: Query<(Entity, &Details, &GlobalTransform)>,
     mut inspector: ResMut<Inspector>,
     mut custom: EventWriter<DataSourceChangedEvent>,
     //  mut inspector_windows: Res<InspectorWindows>,
+    mut dest: ResMut<Destination>,
+    mut anchor: ResMut<Anchor>,
 ) {
     if inspector.start_location.changed {
         inspector.start_location.changed = false;
@@ -1382,7 +1391,7 @@ pub fn print_events(
     for event in events.iter() {
         match event {
             PickingEvent::Selection(selection) => {
-                if let SelectionEvent::JustSelected(entity) = selection {
+                if let SelectionEvent::JustSelected(_entity) = selection {
                     //  let mut inspector_window_data = inspector_windows.window_data::<Details>();
                     //   let window_size = &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
 
@@ -1393,13 +1402,13 @@ pub fn print_events(
                     //     commands.entity(entity).despawn();
                     // });
 
-                    let (_entity, details) = query2.get_mut(*entity).unwrap();
+                    
 
                     // if inspector.active == Some(details) {
                     //     print!("deselected current selection");
                     //     inspector.active = None;
                     // } else {
-                    inspector.selected = Some(details.clone());
+                   
                     // }
 
                     // info!("{}", details.hover.as_str());
@@ -1409,12 +1418,24 @@ pub fn print_events(
             PickingEvent::Hover(_e) => {
                 // info!("Egads! A hover event!? {:?}", e)
             }
-            PickingEvent::Clicked(_e) => {
+            PickingEvent::Clicked(entity) => {
+                let now = Utc::now().timestamp();
+                let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+                inspector.selected = Some(details.clone());
                 // info!("Gee Willikers, it's a click! {:?}", e)
+                
+                let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
+                if now - prev < 2 { 
+                    println!("double click {}", now - prev);
+                    anchor.dropped = true; // otherwise when we get to the destination then we will start moving away from it.
+                    dest.location = Some(global_location.translation);
+                }
             }
         }
     }
 }
+
+static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 fn update_visibility(
     mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
@@ -1512,6 +1533,7 @@ fn setup(
         },
         ..default()
     });
+
     //somehow this can change the color
     //    mesh_highlighting(None, None, None);
     // camera

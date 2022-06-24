@@ -56,7 +56,7 @@ scale-info = { version = "*", features = ["serde"] }
 # desub = { git = "https://github.com/paritytech/desub/" }
 desub-current = { git = "https://github.com/paritytech/desub/" }
 # bevy_kira_audio = "*"
-
+# dolly = "0.3"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"

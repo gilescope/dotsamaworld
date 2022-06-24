@@ -6,11 +6,12 @@ use bevy::input::keyboard::KeyCode;
 // use bevy::input::mouse::MouseWheel;
 use bevy::input::Input;
 use bevy::prelude::*;
+// use dolly::prelude::*;
+
 // use bevy::render::camera::CameraProjection;
 use crate::Viewport;
 use bevy::transform::components::Transform;
 use bevy::window::Windows;
-
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
 #[cfg(feature = "normalmouse")]
@@ -24,6 +25,16 @@ impl Default for MouseCapture {
     }
 }
 
+#[derive(Default)]
+pub struct Destination {
+    pub location: Option<Vec3>,
+    pub look_at: Option<Vec3>,
+    // how many seconds should the transition take?
+    //pub time: Option<f32>
+    // pub set: bool
+}
+
+
 /// Handles keyboard input and movement
 pub fn player_move_arrows(
     keys: Res<Input<KeyCode>>,
@@ -34,6 +45,7 @@ pub fn player_move_arrows(
     mut settings: ResMut<MovementSettings>,
     mut query: Query<&mut Transform, With<Viewport>>,
     mut toggle_mouse_capture: ResMut<MouseCapture>,
+    mut dest: ResMut<Destination>,
 ) {
     let window = windows.get_primary().unwrap();
     for mut transform in query.iter_mut() {
@@ -79,10 +91,56 @@ pub fn player_move_arrows(
                 }
             }
         }
+        if let Some(loc) = dest.location  {
+            let dist = loc.distance_squared( transform.translation);
+            if dist < 50. {
+                dest.location = None;
+                return;
+            }
+            velocity = (loc - transform.translation).normalize();
+            // TODO if near stop....
+            // let current_look = transform.rotation.normalize();
+            // let ideal_look_direction = Quat::from_euler(
+            //     EulerRot::XYZ,
+            //     -velocity.x,
+            // -velocity.y,
+            //     -velocity.z,
+            // );
 
-        velocity = velocity.normalize_or_zero();
 
-        transform.translation += velocity * time.delta_seconds() * settings.speed
+            // Current location
+            // let mut camera: dolly::prelude::CameraRig<RightHanded> = CameraRig::builder()
+            //     .with(Position::new(transform.translation))
+            //     .with(YawPitch::new().rotation_quat(current_look))
+            //     .with(Smooth::new_position(1.25).predictive(true))
+            //     .with(LookAt::new(ideal_look_direction).tracking_smoothness(1.25))
+            //     .build();
+
+
+            //camera.driver_mut::<YawPitch>().set_rotation_quat(ideal_look_direction);
+            // camera.driver_mut::<Position>().position = loc;
+
+            // let final_transform = camera.update(time.delta_seconds());
+
+
+            // println!("current loc: {} {}", transform.translation, current_look);
+
+            //let smooth = dolly::drivers::Smooth::new_position_rotation(2.,2.);
+
+           
+            //velocity = velocity.normalize_or_zero();
+            // transform.translation = final_transform.position;
+            // transform.rotation = final_transform.rotation;
+            // println!("dolly: {} {}",  final_transform.position,  final_transform.rotation);
+
+            transform.translation += velocity * time.delta_seconds() * settings.speed * dist.sqrt() / 5.;
+            // transform.rotation = transform.rotation.slerp(ideal_look_direction, 0.05);
+            // println!("our step forward: {} ", velocity * time.delta_seconds() * settings.speed * 3.);
+            // println!("dest: {} {}", loc,  ideal_look_direction);
+        } else {
+            velocity = velocity.normalize_or_zero();
+            transform.translation += velocity * time.delta_seconds() * settings.speed 
+        }
     }
 }
 

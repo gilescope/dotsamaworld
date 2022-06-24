@@ -23,7 +23,7 @@ pub struct OriginalCameraTransform(pub Transform);
 pub fn ui_bars_system(
     mut egui_context: ResMut<EguiContext>,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-    mut viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
+    viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
 ) {
     // occupied_screen_space.left = egui::SidePanel::left("left_panel")
     //     .resizable(true)
