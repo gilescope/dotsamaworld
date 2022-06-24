@@ -1432,25 +1432,32 @@ pub fn print_events(
 }
 
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
 
 fn update_visibility(
     mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
     player_query: Query<&Transform, With<Viewport>>,
 ) {
-    // TODO have a lofi zone and switch visibility of the lofi and hifi entities
+    // TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
     let transform: &Transform = player_query.get_single().unwrap();
     let x = transform.translation.x;
 
     let width = 500.;
     let (min, max) = (x - width, x + width);
-    // let mut count = 0;
-    // let mut count_vis = 0;
 
+    let mut vis_count = 0;
     for (mut vis, transform, _) in entity_query.iter_mut() {
-        // count +=1;
         vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-        // if vis.is_visible { count_vis += 1 }
+        if vis.is_visible { vis_count += 1; }
+    }
+
+    // If nothing's visible because we're far away make a few things visible so you know which dir to go in
+    // and can double click to get there...
+    if vis_count == 0 {
+        for (mut vis, transform, _)  in entity_query.iter_mut().take(1000) {
+            vis.is_visible = true;
+        }
     }
 
     // println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
