@@ -1,4 +1,6 @@
 target
 bin
+play.csv
+record.csv
 .old
 *.metadata.scale

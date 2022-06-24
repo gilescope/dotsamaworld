@@ -69,6 +69,13 @@ Note: spacemouse is on by default at the moment.
 | Feature    | Description                       |
 | spacemouse | n-degrees of freedom mouse support |
 
+## Recording and Playback
+
+It should record your journey in a file called `record.csv`. If you want to play it back, then rename it to `play.csv` and it will execute it. The format is:
+| time in seconds elapsed | x | y | z | rx | ry | rz | rw |
+
+The `r` ones are rotation as a quaternion.
+
 ## Donations
 
 If you like this project please consider participating in the gitcoin grant's round 14 
