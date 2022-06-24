@@ -25,10 +25,10 @@ jobs:
     - if: ${{ matrix.os == 'ubuntu-latest' }}
       run: cp target/release/dotsamaworld target/release/dotsamaworld-linux
     - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files:  |
-            target/release/dotsamaworld-mac
-            target/release/dotsamaworld-linux
-            target/release/dotsamaworld.exe
-            assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files:  |
+          target/release/dotsamaworld-mac
+          target/release/dotsamaworld-linux
+          target/release/dotsamaworld.exe
+          assets
