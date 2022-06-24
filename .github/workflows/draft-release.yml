@@ -24,30 +24,11 @@ jobs:
       run: cp target/release/dotsamaworld target/release/dotsamaworld-mac
     - if: ${{ matrix.os == 'ubuntu-latest' }}
       run: cp target/release/dotsamaworld target/release/dotsamaworld-linux
-    - name: Upload lin runtime
-      uses: actions/upload-artifact@v3
-      with:
-        name: dotsamaworld
-        path: |
-          target/release/dotsamaworld-mac
-          target/release/dotsamaworld-linux
-          target/release/dotsamaworld.exe
-          assets
-
-  publish-draft-release:  
-    runs-on: ubuntu-latest
-    outputs:
-      release_url: ${{ steps.create-release.outputs.html_url }}
-      asset_upload_url: ${{ steps.create-release.outputs.upload_url }}
-    needs: build
-    steps:
-    - uses: actions/download-artifact@v2
-    - name: Create draft release
-      id: create-release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.event.inputs.ref2 }}
-        release_name: ${{ github.event.inputs.ref2 }}
-        draft: true
+    - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files:  |
+            target/release/dotsamaworld-mac
+            target/release/dotsamaworld-linux
+            target/release/dotsamaworld.exe
+            assets
