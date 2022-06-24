@@ -54,7 +54,8 @@ pub fn player_move_arrows(
 
         if !anchor.dropped {
             // If someone has recently pressed a key to move then don't try and move...
-            if time.seconds_since_startup() as i64 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2 {
+            if time.seconds_since_startup() as i64 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2
+            {
                 let x = datasource.default_track_speed;
                 velocity = Vec3::new(x, 0., 0.);
             }
@@ -75,27 +76,28 @@ pub fn player_move_arrows(
 
         for key in keys.get_pressed() {
             if window.is_focused() {
-                match key {
-                    KeyCode::Up => velocity += forward,
-                    KeyCode::Down => velocity -= forward,
-                    KeyCode::Left => velocity -= right,
-                    KeyCode::Right => velocity += right,
-                    KeyCode::Space | KeyCode::Comma => {
-                        if transform.local_y().y > 0. {
-                            settings.speed += 0.5;
-                        }
-                    }
-                    KeyCode::LShift | KeyCode::RShift | KeyCode::Period => {
-                        if transform.local_y().y > 0. {
-                            if settings.speed > 12. {
-                                settings.speed -= 0.5;
-                            }
-                        }
-                    }
+                // match key {
+                //     // KeyCode::Up => velocity += forward,
+                //     // KeyCode::Down => velocity -= forward,
+                //     // KeyCode::Left => velocity -= right,
+                //     // KeyCode::Right => velocity += right,
+                //     // KeyCode::Space | KeyCode::Comma => {
+                //     //     if transform.local_y().y > 0. {
+                //     //         settings.speed += 0.5;
+                //     //     }
+                //     // }
+                //     // KeyCode::LShift | KeyCode::RShift | KeyCode::Period => {
+                //     //     if transform.local_y().y > 0. {
+                //     //         if settings.speed > 12. {
+                //     //             settings.speed -= 0.5;
+                //     //         }
+                //     //     }
+                //     // }
 
-                    _ => (),
-                }
+                //     _ => (),
+                // }
                 LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
+                break;
             }
         }
         if let Some(loc) = dest.location {
@@ -138,9 +140,10 @@ pub fn player_move_arrows(
 
             transform.translation +=
                 velocity * time.delta_seconds() * settings.speed * dist.sqrt() / 5.;
-            transform.rotation = transform.rotation.slerp(dest.look_at.unwrap(), 0.05);
-            // println!("our step forward: {} ", velocity * time.delta_seconds() * settings.speed * 3.);
-            // println!("dest: {} {}", loc,  ideal_look_direction);
+            if let Some(look_at) = dest.look_at {
+                transform.rotation = transform.rotation.slerp(look_at, 0.05);
+            } // println!("our step forward: {} ", velocity * time.delta_seconds() * settings.speed * 3.);
+              // println!("dest: {} {}", loc,  ideal_look_direction);
         } else {
             velocity = velocity.normalize_or_zero();
             transform.translation += velocity * time.delta_seconds() * settings.speed

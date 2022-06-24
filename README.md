@@ -38,10 +38,10 @@ If you right click on an extrinsic it will open the polkadot-js decode screen fo
 
 ## Keyboard controls
 
- - To move about: WSAD or arrow keys.
- - Hold space to rise and shift to lower. 
+ - To move about: WSAD or arrow keys, with left shift to run.
+ - Hold `.` to rise and `,` to lower (or space and right shift). 
  - Escape switches the mouse from being able to select something to being able to look around.
- - Tab lowers or raises the anchor so that you do or don't move with the chain.
+ - Tab lowers or raises the anchor so that you do or don't follow the chain.
 
 ## Prerequisites
 

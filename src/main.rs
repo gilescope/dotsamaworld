@@ -139,6 +139,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
     app.insert_resource(MovementSettings {
         sensitivity: 0.00020, // default: 0.00012
         speed: 12.0,          // default: 12.0
+        boost: 5.,
     });
 
     app.insert_resource(Sovereigns {
@@ -1449,13 +1450,15 @@ fn update_visibility(
     let mut vis_count = 0;
     for (mut vis, transform, _) in entity_query.iter_mut() {
         vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-        if vis.is_visible { vis_count += 1; }
+        if vis.is_visible {
+            vis_count += 1;
+        }
     }
 
     // If nothing's visible because we're far away make a few things visible so you know which dir to go in
     // and can double click to get there...
     if vis_count == 0 {
-        for (mut vis, transform, _)  in entity_query.iter_mut().take(1000) {
+        for (mut vis, transform, _) in entity_query.iter_mut().take(1000) {
             vis.is_visible = true;
         }
     }
@@ -1654,7 +1657,6 @@ impl Default for UrlBar {
         }
     }
 }
-
 
 struct UrlBar {
     changed: bool,

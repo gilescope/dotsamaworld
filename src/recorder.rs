@@ -1,9 +1,9 @@
+use crate::Anchor;
+use crate::Destination;
 use crate::Viewport;
 use bevy::prelude::*;
 use bevy::prelude::{GlobalTransform, Query};
 use std::fs::{read_to_string, OpenOptions};
-use crate::Destination;
-use crate::Anchor;
 
 #[derive(Default)]
 pub struct Script {
@@ -40,7 +40,7 @@ pub struct RecorderPlugin;
 impl Plugin for RecorderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Script::default())
-        .add_startup_system(start_recording)
+            .add_startup_system(start_recording)
             .add_startup_system(start_playing)
             .add_system(camera_recorder)
             .add_system(player);
@@ -77,10 +77,9 @@ pub fn camera_recorder(time: Res<Time>, query_t: Query<&GlobalTransform, With<Vi
     );
 }
 
-pub fn start_playing(mut script: ResMut<Script>, 
-    mut anchor: ResMut<Anchor>) {
+pub fn start_playing(mut script: ResMut<Script>, mut anchor: ResMut<Anchor>) {
     if let Ok(contents) = std::fs::read_to_string("play.csv") {
-        if let Ok(new_script)  = Script::parse(&contents) {
+        if let Ok(new_script) = Script::parse(&contents) {
             script.moments = new_script.moments;
             println!("Parsed script ok, playing {} moments", script.moments.len());
             anchor.dropped = true;
