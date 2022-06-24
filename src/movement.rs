@@ -3,11 +3,13 @@ use bevy::core::Time;
 use bevy::ecs::system::Query;
 use bevy::ecs::system::Res;
 use bevy::input::keyboard::KeyCode;
+use std::sync::atomic::Ordering;
 // use bevy::input::mouse::MouseWheel;
 use bevy::input::Input;
 use bevy::prelude::*;
+use egui::Key;
 // use dolly::prelude::*;
-
+use crate::LAST_KEYSTROKE_TIME;
 // use bevy::render::camera::CameraProjection;
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
@@ -51,13 +53,18 @@ pub fn player_move_arrows(
         let mut velocity = Vec3::ZERO;
 
         if !anchor.dropped {
-            let x = datasource.default_track_speed;
-            velocity = Vec3::new(x, 0., 0.);
+            // If someone has recently pressed a key to move then don't try and move...
+            if time.seconds_since_startup() as i64 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2 {
+                let x = datasource.default_track_speed;
+                velocity = Vec3::new(x, 0., 0.);
+            }
         }
 
-        let local_z = transform.local_z();
-        let forward = -Vec3::new(local_z.x, 0., local_z.z);
-        let right = Vec3::new(local_z.z, 0., -local_z.x);
+        // Don't change the Y axis.
+        let forward = transform.forward();
+        let right = transform.right();
+        let forward = Vec3::new(forward.x, 0., forward.z);
+        let right = Vec3::new(right.x, 0., right.z);
 
         if keys.just_released(KeyCode::Tab) {
             anchor.dropped = !anchor.dropped;
@@ -73,12 +80,12 @@ pub fn player_move_arrows(
                     KeyCode::Down => velocity -= forward,
                     KeyCode::Left => velocity -= right,
                     KeyCode::Right => velocity += right,
-                    KeyCode::Space => {
+                    KeyCode::Space | KeyCode::Comma => {
                         if transform.local_y().y > 0. {
                             settings.speed += 0.5;
                         }
                     }
-                    KeyCode::LShift => {
+                    KeyCode::LShift | KeyCode::RShift | KeyCode::Period => {
                         if transform.local_y().y > 0. {
                             if settings.speed > 12. {
                                 settings.speed -= 0.5;
@@ -88,6 +95,7 @@ pub fn player_move_arrows(
 
                     _ => (),
                 }
+                LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
             }
         }
         if let Some(loc) = dest.location {
