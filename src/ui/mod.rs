@@ -4,71 +4,69 @@ pub mod doturl;
 use crate::Viewport;
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
-use chrono::DateTime;
-use chrono::NaiveDateTime;
-use chrono::Utc;
+use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
 use egui_datepicker::DatePicker;
 
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
-    left: f32,
-    top: f32,
-    right: f32,
-    bottom: f32,
+	left: f32,
+	top: f32,
+	right: f32,
+	bottom: f32,
 }
 
 pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
-    mut egui_context: ResMut<EguiContext>,
-    mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-    viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
+	mut egui_context: ResMut<EguiContext>,
+	mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
+	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
 ) {
-    // occupied_screen_space.left = egui::SidePanel::left("left_panel")
-    //     .resizable(true)
-    //     .show(egui_context.ctx_mut(), |ui| {
-    //         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-    //     })
-    //     .response
-    //     .rect
-    //     .width();
-    // occupied_screen_space.right = egui::SidePanel::right("right_panel")
-    //     .resizable(true)
-    //     .show(egui_context.ctx_mut(), |ui| {
-    //         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-    //     })
-    //     .response
-    //     .rect
-    //     .width();
-    occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
-        .resizable(false)
-        .show(egui_context.ctx_mut(), |ui| {
-            ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-        })
-        .response
-        .rect
-        .height();
-    occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
-        .resizable(false)
-        .show(egui_context.ctx_mut(), |ui| {
-            let timestamp =
-                super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation.x);
-            let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
-            let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
-            let datetime: DateTime<chrono::Local> = datetime.into();
-            // ui.add(
-            //     DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut datetime)
-            //         .highlight_weekend(true),
-            // );
-            
-            let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-            ui.heading(format!("{}", newdate));
-        })
-        .response
-        .rect
-        .height();
+	// occupied_screen_space.left = egui::SidePanel::left("left_panel")
+	//     .resizable(true)
+	//     .show(egui_context.ctx_mut(), |ui| {
+	//         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+	//     })
+	//     .response
+	//     .rect
+	//     .width();
+	// occupied_screen_space.right = egui::SidePanel::right("right_panel")
+	//     .resizable(true)
+	//     .show(egui_context.ctx_mut(), |ui| {
+	//         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+	//     })
+	//     .response
+	//     .rect
+	//     .width();
+	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
+		.resizable(false)
+		.show(egui_context.ctx_mut(), |ui| {
+			ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+		})
+		.response
+		.rect
+		.height();
+	occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
+		.resizable(false)
+		.show(egui_context.ctx_mut(), |ui| {
+			let timestamp =
+				super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation.x);
+			let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+			let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
+			let datetime: DateTime<chrono::Local> = datetime.into();
+			// ui.add(
+			//     DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut
+			// datetime)         .highlight_weekend(true),
+			// );
+
+			let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
+			ui.heading(format!("{}", newdate));
+		})
+		.response
+		.rect
+		.height();
 }
 
 // TODO: Something like this would probably stop us rendering
@@ -83,9 +81,10 @@ pub fn ui_bars_system(
 //     // let cam = cam_query.get_single().unwrap();
 //     let (camera_projection, mut transform) = camera_query.get_single_mut().unwrap();
 
-//     let distance_to_target = (/*CAMERA_TARGET -*/ original_camera_transform.0.translation).length();
-//     let frustum_height = 2.0 * distance_to_target * (camera_projection.fov * 0.5).tan();
-//     let frustum_width = frustum_height * camera_projection.aspect_ratio;
+//     let distance_to_target = (/*CAMERA_TARGET -*/
+// original_camera_transform.0.translation).length();     let frustum_height = 2.0 *
+// distance_to_target * (camera_projection.fov * 0.5).tan();     let frustum_width = frustum_height
+// * camera_projection.aspect_ratio;
 
 //     let window = windows.get_primary().unwrap();
 
