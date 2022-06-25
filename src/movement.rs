@@ -6,6 +6,7 @@ use bevy::input::keyboard::KeyCode;
 use std::sync::atomic::Ordering;
 // use bevy::input::mouse::MouseWheel;
 use bevy::input::Input;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use egui::Key;
 // use dolly::prelude::*;
@@ -151,25 +152,21 @@ pub fn player_move_arrows(
     }
 }
 
-// the mouse-scroll changes the field-of-view of the camera
-// pub fn scroll(
-//     mut mouse_wheel_events: EventReader<MouseWheel>,
-//     windows: Res<Windows>,
-//     mut query: Query<(&FlyCam, &mut Camera, &mut PerspectiveProjection)>,
-// ) {
-//     // for event in mouse_wheel_events.iter() {
-//     //     for (_camera, mut camera, mut project) in query.iter_mut() {
-//     //         project.fov = (project.fov - event.y * 0.01).abs();
-//     //         let prim = windows.get_primary().unwrap();
-
-//     //         //Calculate projection with new fov
-//     //         project.update(prim.width(), prim.height());
-
-//     //         //Update camera with the new fov
-//     //         camera.projection_matrix = project.get_projection_matrix();
-//     //         camera.depth_calculation = project.depth_calculation();
-
-//     //         // println!("FOV: {:?}", project.fov);
-//     //     }
-//     // }
-// }
+/// the mouse-scroll does not change the field-of-view of the camera
+/// because if you change that too far the world goes inside out.
+/// Instead scroll moves forwards or backwards.
+pub fn scroll(
+    time: Res<Time>,
+    mut mouse_wheel_events: EventReader<MouseWheel>,
+    windows: Res<Windows>,
+    mut query: Query<&mut Transform, With<Viewport>>,
+) {
+    for event in mouse_wheel_events.iter() {
+        LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
+        for mut viewport in query.iter_mut() {
+            //  viewport.translation.y -= event.y / 4.;
+            let forward = viewport.forward();
+            viewport.translation += forward * event.y;
+        }
+    }
+}

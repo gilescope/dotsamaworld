@@ -191,7 +191,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
         // .add_plugin(DebugEventsPickingPlugin)
         .add_plugin(PolylinePlugin)
         .insert_resource(ui::OccupiedScreenSpace::default())
-        // .add_system(movement::scroll)
+        .add_system(movement::scroll)
         .add_startup_system(setup);
     #[cfg(feature = "spacemouse")]
     app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
