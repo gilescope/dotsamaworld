@@ -9,6 +9,7 @@ use chrono::NaiveDateTime;
 use chrono::Utc;
 pub use details::Details;
 pub use doturl::DotUrl;
+use egui_datepicker::DatePicker;
 
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
@@ -57,6 +58,11 @@ pub fn ui_bars_system(
             let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
             let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
             let datetime: DateTime<chrono::Local> = datetime.into();
+            // ui.add(
+            //     DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut datetime)
+            //         .highlight_weekend(true),
+            // );
+            
             let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
             ui.heading(format!("{}", newdate));
         })

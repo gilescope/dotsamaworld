@@ -86,7 +86,7 @@ async fn get_desub_metadata<S: Source>(
                         break res;
                     }
                     _ => {
-                        std::thread::sleep(std::time::Duration::from_secs(1 << retries));
+                        async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
                         retries += 1;
                     }
                 };
@@ -222,7 +222,7 @@ pub async fn watch_blocks<S: Source>(
     tx: ABlocks,
     chain_info: ChainInfo,
     as_of: Option<DotUrl>,
-    recieve_channel: crossbeam_channel::Receiver<(RelayBlockNumber, u64, H256)>,
+    receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, u64, H256)>,
     sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
     mut source: S,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -242,7 +242,7 @@ pub async fn watch_blocks<S: Source>(
         if para_id.is_some() {
             // Parachain (listening for relay blocks' para include candidate included events.)
             while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
-                recieve_channel.recv()
+                receive_channel.recv()
             {
                 let _ = process_extrinsics(
                     &tx,
@@ -270,7 +270,7 @@ pub async fn watch_blocks<S: Source>(
                 // if so, we have to wait till we know what the time is of that block to proceed.
                 // then we can figure out our nearest block based on that timestamp...
                 while BASETIME.load(Ordering::Relaxed) == 0 {
-                    thread::sleep(Duration::from_millis(250));
+                    async_std::task::sleep(Duration::from_millis(250)).await;
                 }
 
                 // Timestamp is unlikely to change so we can use generic metadata
@@ -298,7 +298,7 @@ pub async fn watch_blocks<S: Source>(
 
             let mut last_timestamp = None;
             for block_number in as_of.block_number.unwrap().. {
-                std::thread::sleep(std::time::Duration::from_secs(2));
+                async_std::task::sleep(std::time::Duration::from_secs(2)).await;
                 let block_hash: Option<sp_core::H256> =
                     get_block_hash(&mut source, block_number).await;
 
@@ -367,7 +367,7 @@ pub async fn watch_blocks<S: Source>(
                     }
                 }
             }
-            std::thread::sleep(std::time::Duration::from_secs(20));
+            async_std::task::sleep(std::time::Duration::from_secs(20)).await;
             reconnects += 1;
         }
     }

@@ -269,7 +269,7 @@ fn source_data(
 
         let is_live = LIVE == event.source;
         println!("event source {}", event.source);
-        sovereigns.default_track_speed = if is_live { 0.1 } else { 1. };
+        sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
         println!("tracking speed set to {}", sovereigns.default_track_speed);
         let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
             (DotUrl::default(), None)
