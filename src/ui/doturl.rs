@@ -87,13 +87,28 @@ impl std::fmt::Display for DotUrl {
 		};
 
 		f.write_fmt(format_args!(
-			"{}:/{}/{}/{}/{}/{}",
+			"{}:",
 			protocol,
-			self.sovereign.map(|s| s.to_string()).unwrap_or("".to_string()),
-			self.para_id.map(|s| s.to_string()).unwrap_or("".to_string()),
-			self.block_number.map(|s| s.to_string()).unwrap_or("".to_string()),
-			self.extrinsic.map(|s| s.to_string()).unwrap_or("".to_string()),
-			self.event.map(|s| s.to_string()).unwrap_or("".to_string()),
-		))
+			// self.sovereign.map(|s| s.to_string()).unwrap_or("".to_string()),
+			// self.para_id.map(|s| s.to_string()).unwrap_or("".to_string()),
+			// self.block_number.map(|s| s.to_string()).unwrap_or("".to_string()),
+			// self.extrinsic.map(|s| s.to_string()).unwrap_or("".to_string()),
+		))?;
+		if let Some(relay_id) = self.sovereign {
+			f.write_fmt(format_args!("/{}", if relay_id == 1 { "polkadot" } else { "kusama" }))?;
+		}
+		if let Some(para_id) = self.para_id {
+			f.write_fmt(format_args!("/{}", para_id))?;
+		}
+		if let Some(block_number) = self.block_number {
+			f.write_fmt(format_args!("/{}", block_number))?;
+		}
+		if let Some(extrinsic) = self.extrinsic {
+			f.write_fmt(format_args!("/{}", extrinsic))?;
+		}
+		if let Some(event) = self.event {
+			f.write_fmt(format_args!("/{}", event))?;
+		}
+		Ok(())
 	}
 }

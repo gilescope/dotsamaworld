@@ -99,9 +99,7 @@ impl RawDataSource {
 			let res = ClientBuilder::new().set_url(&self.ws_url).build().await;
 
 			match res {
-				Ok(res) => {
-					break res
-				},
+				Ok(res) => break res,
 				_ => {
 					async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
 					retries += 1;
@@ -193,12 +191,8 @@ impl Source for RawDataSource {
 			.request("state_getMetadata", params.clone())
 			.await;
 		match res {
-			Ok(res) => {
-				return Ok(Some(res))
-			},
-			_ => {
-				return Err(())
-			},
+			Ok(res) => return Ok(Some(res)),
+			_ => return Err(()),
 		};
 	}
 

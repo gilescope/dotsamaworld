@@ -16,7 +16,6 @@ use std::{
 	hash::Hash,
 	num::NonZeroU32,
 	sync::atomic::Ordering,
-	thread,
 	time::Duration,
 };
 
@@ -163,21 +162,21 @@ async fn get_metadata_version(
 					&url
 				);
 				return None // If you get this error you need to point to an archive node.
-			 // println!("error message (recoverable) {}", &err);
-			 // let pos = pos + needle.len() + "0x".len();
-			 // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
-			 //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
-			 //     // T::Hashing()
-			 //     let hash = T::Hashing::hash(new_hash.as_slice());
-			 //     let call = client
-			 //         .storage()
-			 //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
-			 //         .await
-			 //         .unwrap();
-			 //     call
-			 // } else {
-			 //     panic!("could not recover from error {:?}", err);
-			 // }
+				 // println!("error message (recoverable) {}", &err);
+				 // let pos = pos + needle.len() + "0x".len();
+				 // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
+				 //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
+				 //     // T::Hashing()
+				 //     let hash = T::Hashing::hash(new_hash.as_slice());
+				 //     let call = client
+				 //         .storage()
+				 //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
+				 //         .await
+				 //         .unwrap();
+				 //     call
+				 // } else {
+				 //     panic!("could not recover from error {:?}", err);
+				 // }
 			} else {
 				//panic!("could not recover from error2 {:?}", err);
 				return None
@@ -1295,13 +1294,13 @@ async fn get_events_for_block(
 
 							//  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
 							//                                 // use
-							// crate::polkadot::runtime_types::xcm::v2::traits::Error;              
+							// crate::polkadot::runtime_types::xcm::v2::traits::Error;
 							// use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO
 							// version                                 let result = <Outcome as
-							// Decode>::decode(&mut ev.data.as_slice());                            
-							// if let Ok(outcome) = &result {                                     
-							// match outcome {                                         
-							// Outcome::Complete(_) => details.success = Success::Happy,            
+							// Decode>::decode(&mut ev.data.as_slice());
+							// if let Ok(outcome) = &result {
+							// match outcome {
+							// Outcome::Complete(_) => details.success = Success::Happy,
 							// Outcome::Incomplete(_, _) => details.success = Success::Worried,
 							//                                         Outcome::Error(_) =>
 							// details.success = Success::Sad,                                     }

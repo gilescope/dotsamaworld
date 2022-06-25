@@ -114,15 +114,15 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
 					// 28th renewal
 					// 29th renewal
 					"rpc.turing.oak.tech", /* 30th
-					                        * Auction Batch 7
-					                        * "kusama.kylin-node.co.uk", 31st not online yet
-					                        * 32nd renewal
-					                        * Dora Factory (not yet online) 33rd
-					                        * 34nd renewal
-					                        * 35nd renewal */
+											* Auction Batch 7
+											* "kusama.kylin-node.co.uk", 31st not online yet
+											* 32nd renewal
+											* Dora Factory (not yet online) 33rd
+											* 34nd renewal
+											* 35nd renewal */
 
-					                       /* Auction Batch 8
-					                        * Listen (not online yet) 36th */
+										   /* Auction Batch 8
+											* Listen (not online yet) 36th */
 				],
 				vec![
 					// TODO: how can we dynamically discover

@@ -1,25 +1,17 @@
-use crate::Anchor;
+#[cfg(feature = "spacemouse")]
+use crate::MovementSettings;
+use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME};
 use bevy::{
 	core::Time,
 	ecs::system::{Query, Res},
-	input::keyboard::KeyCode,
-};
-use std::sync::atomic::Ordering;
-// use bevy::input::mouse::MouseWheel;
-use bevy::{
-	input::{mouse::MouseWheel, Input},
+	input::{keyboard::KeyCode, mouse::MouseWheel, Input},
 	prelude::*,
+	transform::components::Transform,
+	window::Windows,
 };
-use egui::Key;
-// use dolly::prelude::*;
-use crate::LAST_KEYSTROKE_TIME;
-// use bevy::render::camera::CameraProjection;
-#[cfg(feature = "spacemouse")]
-use crate::MovementSettings;
-use crate::Viewport;
-use bevy::{transform::components::Transform, window::Windows};
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::MovementSettings;
+use std::sync::atomic::Ordering;
 
 pub struct MouseCapture(pub bool);
 
@@ -54,7 +46,7 @@ pub fn player_move_arrows(
 	for mut transform in query.iter_mut() {
 		let mut velocity = Vec3::ZERO;
 
-		if !anchor.dropped {
+		if anchor.follow_chain {
 			// If someone has recently pressed a key to move then don't try and move...
 			if time.seconds_since_startup() as i64 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2
 			{
@@ -70,7 +62,7 @@ pub fn player_move_arrows(
 		let right = Vec3::new(right.x, 0., right.z);
 
 		if keys.just_released(KeyCode::Tab) {
-			anchor.dropped = !anchor.dropped;
+			anchor.follow_chain = !anchor.follow_chain;
 		}
 		if keys.just_released(KeyCode::Escape) {
 			toggle_mouse_capture.0 = !toggle_mouse_capture.0;
@@ -145,7 +137,7 @@ pub fn player_move_arrows(
 			if let Some(look_at) = dest.look_at {
 				transform.rotation = transform.rotation.slerp(look_at, 0.05);
 			} // println!("our step forward: {} ", velocity * time.delta_seconds() * settings.speed *
-		 // 3.); println!("dest: {} {}", loc,  ideal_look_direction);
+			 // 3.); println!("dest: {} {}", loc,  ideal_look_direction);
 		} else {
 			velocity = velocity.normalize_or_zero();
 			transform.translation += velocity * time.delta_seconds() * settings.speed

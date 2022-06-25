@@ -43,7 +43,7 @@ macro_rules! memoise {
 				if let Some(bytes) = result {
 					std::fs::write(&filename, bytes.as_slice())
 						.expect(&format!("Couldn't write event output to {}", filename));
-					// println!("cache storage wrote to {}", filename);
+				// println!("cache storage wrote to {}", filename);
 				} else {
 					std::fs::write(&filename, vec![].as_slice())
 						.expect(&format!("Couldn't write event output to {}", filename));

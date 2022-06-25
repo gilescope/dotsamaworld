@@ -4,9 +4,8 @@ use crate::{DataEntity, DataEvent};
 /// For the relay chain including parachain blocks is useful work.
 pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
 	match event {
-		&DataEntity::Extrinsic { ref details, .. } => {
-			return is_boring(details.pallet.as_str(), details.variant.as_str())
-		},
+		&DataEntity::Extrinsic { ref details, .. } =>
+			return is_boring(details.pallet.as_str(), details.variant.as_str()),
 		&DataEntity::Event(DataEvent { ref details, .. }) =>
 			details.parent.is_none() || is_boring(&details.pallet, &details.variant),
 	}

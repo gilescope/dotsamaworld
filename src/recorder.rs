@@ -1,6 +1,5 @@
 use crate::{Anchor, Destination, Viewport};
 use bevy::prelude::{GlobalTransform, Query, *};
-use std::fs::{read_to_string, OpenOptions};
 
 #[derive(Default)]
 pub struct Script {
@@ -79,7 +78,7 @@ pub fn start_playing(mut script: ResMut<Script>, mut anchor: ResMut<Anchor>) {
 		if let Ok(new_script) = Script::parse(&contents) {
 			script.moments = new_script.moments;
 			println!("Parsed script ok, playing {} moments", script.moments.len());
-			anchor.dropped = true;
+			anchor.follow_chain = false;
 		}
 	}
 }

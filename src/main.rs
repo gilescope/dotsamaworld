@@ -11,6 +11,7 @@ use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 //use bevy_kira_audio::AudioPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
+use ui::details;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
@@ -117,7 +118,7 @@ pub struct DataSourceChangedEvent {
 
 #[derive(Default)]
 pub struct Anchor {
-	pub dropped: bool,
+	pub follow_chain: bool,
 }
 
 #[async_std::main]
@@ -138,7 +139,11 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		speed: 12.0,          // default: 12.0
 		boost: 5.,
 	});
-
+	app.insert_resource(ui::UrlBar {
+		changed: false,
+		location: "dotsama:/1//10504599".to_string(),
+		timestamp: None,
+	});
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
 	#[cfg(feature = "normalmouse")]
@@ -1328,20 +1333,17 @@ pub struct UpdateTimer {
 pub fn print_events(
 	mut events: EventReader<PickingEvent>,
 	mut query2: Query<(Entity, &Details, &GlobalTransform)>,
+	mut urlbar: ResMut<ui::UrlBar>,
 	mut inspector: ResMut<Inspector>,
 	mut custom: EventWriter<DataSourceChangedEvent>,
-	//  mut inspector_windows: Res<InspectorWindows>,
 	mut dest: ResMut<Destination>,
 	mut anchor: ResMut<Anchor>,
 ) {
-	if inspector.start_location.changed {
-		inspector.start_location.changed = false;
-		let timestamp = inspector.timestamp.timestamp();
+	if urlbar.changed {
+		urlbar.changed = false;
+		let timestamp = urlbar.timestamp;
 
-		custom.send(DataSourceChangedEvent {
-			source: inspector.start_location.location.clone(),
-			timestamp,
-		});
+		custom.send(DataSourceChangedEvent { source: urlbar.location.clone(), timestamp });
 	}
 	for event in events.iter() {
 		match event {
@@ -1370,8 +1372,22 @@ pub fn print_events(
 					// value, details);
 				}
 			},
-			PickingEvent::Hover(_e) => {
+			PickingEvent::Hover(e) => {
 				// info!("Egads! A hover event!? {:?}", e)
+
+				match e {
+					HoverEvent::JustEntered(entity) => {
+						let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+						inspector.hovered = Some(if details.doturl.extrinsic.is_some() {
+							format!("{} - {} ({})", details.doturl, details.variant, details.pallet)
+						} else {
+							format!("{}", details.doturl)
+						});
+					},
+					HoverEvent::JustLeft(_) => {
+						//	inspector.hovered = None;
+					},
+				}
 			},
 			PickingEvent::Clicked(entity) => {
 				let now = Utc::now().timestamp();
@@ -1380,10 +1396,10 @@ pub fn print_events(
 				// info!("Gee Willikers, it's a click! {:?}", e)
 
 				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
-				if now - prev < 2 {
+				if now - prev < 1 {
 					println!("double click {}", now - prev);
-					anchor.dropped = true; // otherwise when we get to the destination then we will start moving away from
-					   // it.
+					anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away from
+							 // it.
 					dest.location = Some(global_location.translation);
 				}
 			},
@@ -1545,11 +1561,13 @@ fn setup(
 #[derive(Inspectable, Default)]
 pub struct Inspector {
 	// #[inspectable(deletable = false)]
-	#[inspectable(collapse)]
-	start_location: UrlBar,
-	timestamp: DateTime,
+	// #[inspectable(collapse)]
+	// start_location: UrlBar,
+	// timestamp: DateTime,
 	#[inspectable(deletable = false)]
 	selected: Option<Details>,
+
+	hovered: Option<String>,
 }
 
 struct DateTime(NaiveDateTime, bool);
@@ -1587,63 +1605,6 @@ impl Inspectable for DateTime {
 		);
 		true
 		//        true // todo inefficient?
-	}
-}
-
-impl Default for UrlBar {
-	fn default() -> Self {
-		Self {
-			//dotsama:/1//10504605 doesn't stop.
-			//dotsama:/1//10504599 stops after 12 blocks
-			location: "dotsama:/1//10504599".to_string(),
-			changed: false,
-		}
-	}
-}
-
-struct UrlBar {
-	changed: bool,
-	location: String,
-}
-use bevy_inspector_egui::{options::StringAttributes, Context};
-use egui::Grid;
-impl Inspectable for UrlBar {
-	type Attributes = ();
-
-	fn ui(
-		&mut self,
-		ui: &mut bevy_egui::egui::Ui,
-		_options: Self::Attributes,
-		context: &mut Context,
-	) -> bool {
-		let mut changed = false;
-		ui.vertical_centered(|ui| {
-			Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
-				// ui.label("Pallet");
-				changed |= self.location.ui(ui, StringAttributes { multiline: false }, context);
-
-				ui.end_row();
-
-				if ui.button("Time travel").clicked() {
-					self.changed = true;
-					println!("clicked {}", &self.location);
-				};
-				ui.end_row();
-				if ui.button("Live").clicked() {
-					self.changed = true;
-					self.location = LIVE.into();
-					println!("clicked {}", &self.location);
-				};
-				ui.end_row();
-				if ui.button("Clear").clicked() {
-					self.changed = true;
-					self.location = "".into();
-					println!("clicked {}", &self.location);
-				};
-				ui.end_row();
-			});
-		});
-		changed
 	}
 }
 
