@@ -210,8 +210,8 @@ pub async fn watch_blocks<S: Source>(
 	tx: ABlocks,
 	chain_info: ChainInfo,
 	as_of: Option<DotUrl>,
-	receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, u64, H256)>,
-	sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
+	receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>,
+	sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	mut source: S,
 ) -> Result<(), Box<dyn std::error::Error>> {
 	let url = &chain_info.chain_ws;
@@ -277,12 +277,12 @@ pub async fn watch_blocks<S: Source>(
 						&metad_current,
 					))
 				};
-				as_of.block_number = dbg!(time_predictor::get_block_number_near_timestamp(
+				as_of.block_number = time_predictor::get_block_number_near_timestamp(
 					basetime,
 					10_000_000,
 					&mut time_for_blocknum,
 					None,
-				));
+				);
 			}
 
 			let mut last_timestamp = None;
@@ -370,10 +370,10 @@ async fn process_extrinsics<S: Source>(
 	block_hash: H256,
 	url: &str,
 	source: &mut S,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
-	timestamp_parent: Option<u64>,
-) -> Result<Option<u64>, ()> {
+	timestamp_parent: Option<i64>,
+) -> Result<Option<i64>, ()> {
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		let got_block_num = block.block_number;
@@ -416,7 +416,7 @@ async fn process_extrinsics<S: Source>(
 						if let ValueDef::Primitive(Primitive::U64(val)) =
 							extrinsic.call_data.arguments[0].value
 						{
-							timestamp = Some(val);
+							timestamp = Some(val as i64);
 						}
 					}
 					exts.push(entity);
@@ -462,7 +462,7 @@ async fn find_timestamp<S: Source>(
 	url: &str,
 	source: &mut S,
 	metad: &Metadata,
-) -> Option<u64> {
+) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		blockurl.block_number = Some(block.block_number);
 
@@ -484,7 +484,9 @@ async fn find_timestamp<S: Source>(
 						if let ValueDef::Primitive(Primitive::U64(val)) =
 							extrinsic.call_data.arguments[0].value
 						{
-							return Some(val)
+							// Timestamps are usually represented as i64
+							// I'm sure i64 time will be enough for a while.
+							return Some(val as i64)
 						}
 					}
 				}
@@ -1105,8 +1107,8 @@ pub enum DataUpdate {
 
 pub struct PolkaBlock {
 	pub data_epoc: u32,
-	pub timestamp: Option<u64>,
-	pub timestamp_parent: Option<u64>,
+	pub timestamp: Option<i64>,
+	pub timestamp_parent: Option<i64>,
 	pub blockurl: DotUrl,
 	pub blockhash: H256,
 	pub extrinsics: Vec<DataEntity>,
@@ -1118,10 +1120,10 @@ async fn get_events_for_block(
 	source: &mut impl Source,
 	url: &str,
 	blockhash: H256,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, u64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
 	metad: &Metadata,
-	timestamp: Option<u64>,
+	timestamp: Option<i64>,
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
 	let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
 	let mut data_events = vec![];

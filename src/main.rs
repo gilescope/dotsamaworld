@@ -24,7 +24,7 @@ use std::{
 	collections::HashMap,
 	num::NonZeroU32,
 	sync::{
-		atomic::{AtomicU32, AtomicU64, Ordering},
+		atomic::{AtomicU32, Ordering},
 		Arc,
 	},
 };
@@ -79,7 +79,7 @@ impl Default for MovementSettings {
 const LAYER_GAP: f32 = 10.;
 
 /// The time by which all times should be placed relative to each other on the x axis.
-static BASETIME: AtomicU64 = AtomicU64::new(0);
+static BASETIME: AtomicI64 = AtomicI64::new(0);
 
 /// Bump this to tell the current datasources to stop.
 static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
@@ -113,7 +113,7 @@ use networks::Env;
 
 pub struct DataSourceChangedEvent {
 	source: String,
-	timestamp: Option<u64>,
+	timestamp: Option<i64>,
 }
 
 #[derive(Default)]
@@ -139,11 +139,10 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		speed: 12.0,          // default: 12.0
 		boost: 5.,
 	});
-	app.insert_resource(ui::UrlBar {
-		changed: false,
-		location: "dotsama:/1//10504599".to_string(),
-		timestamp: None,
-	});
+	app.insert_resource(ui::UrlBar::new(
+		 "dotsama:/1//10504599".to_string()
+		, Utc::now().naive_utc(),
+	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
 	#[cfg(feature = "normalmouse")]
@@ -256,11 +255,14 @@ fn source_data(
 
 		let dot_url = DotUrl::parse(&event.source);
 
-		if let Some(timestamp) = event.timestamp {
+		let is_live = if let Some(timestamp) = event.timestamp {
 			BASETIME.store(timestamp, Ordering::Relaxed);
-		}
+			// if time is now or in future then we are live mode.
+			timestamp >= Utc::now().timestamp()
+		} else {
+			LIVE == event.source
+		};
 
-		let is_live = LIVE == event.source;
 		println!("event source {}", event.source);
 		sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
 		println!("tracking speed set to {}", sovereigns.default_track_speed);
@@ -333,7 +335,7 @@ fn source_data(
 			)> = vec![];
 			let mut send_map: HashMap<
 				NonZeroU32,
-				crossbeam_channel::Sender<(datasource::RelayBlockNumber, u64, H256)>,
+				crossbeam_channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
 			> = Default::default();
 			for (chain, source) in relay.into_iter() {
 				let (tx, rc) = unbounded();
@@ -647,9 +649,9 @@ pub fn x_to_timestamp(x: f32) -> i64 {
 	(zero + (x as f64 * 400.) as i64) / 1000
 }
 
-pub fn timestamp_to_x(timestamp: u64) -> f32 {
+pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	let zero = BASETIME.load(Ordering::Relaxed);
-	((timestamp as f64 - zero as f64) / 400.) as f32
+	(((timestamp - zero) as f64) / 400.) as f32
 }
 
 fn render_block(
@@ -1339,9 +1341,9 @@ pub fn print_events(
 	mut dest: ResMut<Destination>,
 	mut anchor: ResMut<Anchor>,
 ) {
-	if urlbar.changed {
-		urlbar.changed = false;
-		let timestamp = urlbar.timestamp;
+	if urlbar.changed() {
+		urlbar.reset_changed();
+		let timestamp = urlbar.timestamp();
 
 		custom.send(DataSourceChangedEvent { source: urlbar.location.clone(), timestamp });
 	}
@@ -1573,9 +1575,9 @@ pub struct Inspector {
 struct DateTime(NaiveDateTime, bool);
 
 impl DateTime {
-	fn timestamp(&self) -> Option<u64> {
+	fn timestamp(&self) -> Option<i64> {
 		if self.1 {
-			Some(self.0.timestamp() as u64 * 1000)
+			Some(self.0.timestamp() as i64 * 1000)
 		} else {
 			None
 		}

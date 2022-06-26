@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-type TIME = u64;
+type TIME = i64;
 
 /// Note: Genisis blocks (0) do not generally have timestamps.
 pub fn get_block_number_near_timestamp(

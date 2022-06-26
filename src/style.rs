@@ -37,7 +37,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 use palette::FromColor;
 
 // coloring block timestamp actually
-pub fn color_block_number(block_number: u64, darkside: bool) -> Color {
+pub fn color_block_number(block_number: i64, darkside: bool) -> Color {
 	let color = palette::Lchuv::new(
 		if darkside { 40. } else { 80. },
 		80. + (block_number % 100) as f32,

@@ -1,7 +1,7 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
-use crate::{Anchor, Inspector, Viewport};
+use crate::{Anchor, Env, Inspector, Viewport};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
 use bevy_inspector_egui::{options::StringAttributes, Inspectable};
@@ -9,6 +9,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
 use egui_datepicker::DatePicker;
+ use egui::ComboBox;
 use std::ops::DerefMut;
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
@@ -49,17 +50,28 @@ pub fn ui_bars_system(
 		.show(egui_context.ctx_mut(), |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
-				let timestamp =
-					super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation.x);
-				let mut naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+				// let combo =	ComboBox::from_label("Env")
+				// 	.selected_text(format!("{}", spec.env))
+				// 	.show_ui(
+				// 		ui,
+				// 		|ui| {
+				// 			ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
+				// 			ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
+				// 			ui.selectable_value(&mut spec.env, Env::Test, "westend");
+				// 			ui.selectable_value(&mut spec.env, Env::Local, "local");
+				// 		}
+				// 	);
+				
 				ui.add(
 					DatePicker::<std::ops::Range<NaiveDateTime>>::new(
 						"noweekendhighlight",
-						&mut naive,
+						&mut spec.timestamp,
 					)
 					.highlight_weekend(false),
 				);
-				ui.text_edit_singleline(&mut spec.location);
+
+				//TODO: location = alpha blend to 10% everything but XXXX
+				//ui.text_edit_singleline(&mut spec.location);
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
 					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
 					ui.heading("Follow:");
@@ -138,9 +150,42 @@ pub fn ui_bars_system(
 // }
 
 pub struct UrlBar {
-	pub changed: bool,
+	// Maybe this is a find?
 	pub location: String,
-	pub timestamp: Option<u64>,
+	was_location: String,
+	pub timestamp: NaiveDateTime,
+	was_timestamp: NaiveDateTime,
+	pub env: Env,
+}
+
+impl UrlBar {
+	pub fn new(location: String, timestamp: NaiveDateTime) -> Self {
+		let loc_clone = location.clone();
+		let time_clone = timestamp.clone();
+		Self {
+			location,
+			was_location: loc_clone,
+			timestamp,
+			was_timestamp: time_clone,
+			env: Env::Prod,
+		}
+	}
+
+	pub fn timestamp(&self) -> Option<i64> {
+		//self.timestamp.map(|timestamp| {
+		let datetime: DateTime<chrono::Utc> = DateTime::from_utc(self.timestamp, Utc);
+		Some(datetime.timestamp())
+		//})
+	}
+
+	pub fn changed(&self) -> bool {
+		self.was_location != self.location || self.was_timestamp != self.timestamp
+	}
+
+	pub fn reset_changed(&mut self) {
+		self.was_location = self.location.clone();
+		self.was_timestamp = self.timestamp.clone();
+	}
 }
 // use bevy_inspector_egui::{options::StringAttributes, Context};
 // use egui::Grid;

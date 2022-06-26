@@ -1,5 +1,7 @@
+use std::fmt::write;
+
 #[allow(dead_code)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub enum Env {
 	Local,
 	Test,
@@ -9,6 +11,24 @@ pub enum Env {
 	SelfSovereignTest,
 	NFTs,
 	CGP,
+}
+
+impl std::fmt::Display for Env {
+fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+	let display = match self {
+		Env::Local => { "local" }
+		Env::Test => { "test" }
+		Env::Prod => { "dotsama" }
+		Env::SelfSovereign => { "independents" }
+		Env::SelfSovereignTest => { "independent_test" }
+		Env::NFTs => { "nfts" }
+		Env::CGP => { "cgp" }
+		
+
+	};
+	write(fmt, format_args!("{}",display))?;
+	Ok(())
+}
 }
 
 impl Env {
