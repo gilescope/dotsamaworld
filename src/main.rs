@@ -261,9 +261,9 @@ fn source_data(
 		} else {
 			LIVE == event.source
 		};
-		if is_live {
-			event.timestamp = None;
-		}
+		// if is_live {
+		// 	event.timestamp = None;
+		// }
 
 		println!("event source {}", event.source);
 		sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
