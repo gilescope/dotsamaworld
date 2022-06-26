@@ -198,7 +198,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	app.add_system(movement::player_move_arrows)
 		.add_system(rain)
 		.add_system(source_data)
-		// .add_system(pad_system)
+			// .add_system(pad_system)
 		// .add_plugin(LogDiagnosticsPlugin::default())
 		// .add_plugin(FrameTimeDiagnosticsPlugin::default())
 		// .add_system(ui::update_camera_transform_system)
@@ -1328,7 +1328,7 @@ pub fn rain(
 pub struct UpdateTimer {
 	timer: Timer,
 }
-
+use bevy_egui::EguiContext;
 pub fn print_events(
 	mut events: EventReader<PickingEvent>,
 	mut query2: Query<(Entity, &Details, &GlobalTransform)>,
@@ -1337,7 +1337,15 @@ pub fn print_events(
 	mut custom: EventWriter<DataSourceChangedEvent>,
 	mut dest: ResMut<Destination>,
 	mut anchor: ResMut<Anchor>,
+
+	// Is egui using the mouse?
+	mut egui_context: ResMut<EguiContext>, // TODO: this doesn't need to be mut.
 ) {
+	let ctx = &mut egui_context.ctx_mut();
+	// If we're over an egui area we should not be trying to select anything.
+	if ctx.is_pointer_over_area(){
+		return;
+	}
 	if urlbar.changed() {
 		urlbar.reset_changed();
 		let timestamp = urlbar.timestamp();
