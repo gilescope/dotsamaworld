@@ -365,7 +365,7 @@ fn source_data(
 					// let mut reconnects = 0;
 
 					// while reconnects < 20 {
-					println!("Connecting to {}", &url_clone);
+					println!("Connecting to {} as of {:?}", &url_clone, as_of);
 					let _res = async_std::task::block_on(datasource::watch_blocks(
 						lock_clone.clone(),
 						chain_info,
@@ -453,6 +453,7 @@ fn clear_world(
 ) {
 	// Stop previous data sources...
 	DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
+	println!("incremet epoc to {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
 
 	for detail in details.iter() {
 		commands.entity(detail).despawn();
@@ -679,7 +680,9 @@ fn render_block(
 							// );
 
 							// Skip data we no longer care about because the datasource has changed
-							if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+							let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+							if block.data_epoc != now_epoc {
+								println!("discarding out of date block made at {} but we are at {}", block.data_epoc, now_epoc);
 								continue
 							}
 

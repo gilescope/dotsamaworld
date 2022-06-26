@@ -217,7 +217,8 @@ pub async fn watch_blocks<S: Source>(
 	let url = &chain_info.chain_ws;
 	let para_id = chain_info.chain_url.para_id.clone();
 
-	let our_data_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+	let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
+	println!("our epoc for watching blocks is {}", our_data_epoc);
 
 	// Tell renderer to draw a new chain...
 	{
@@ -250,6 +251,7 @@ pub async fn watch_blocks<S: Source>(
 				}
 			}
 		} else {
+			println!("listening to relay chain {:?}", as_of);
 			// Relay chain.
 			let mut as_of = as_of.clone();
 			let basetime = BASETIME.load(Ordering::Relaxed);
@@ -337,10 +339,14 @@ pub async fn watch_blocks<S: Source>(
 			}
 		}
 	} else {
+		println!("listening to live");
 		let mut reconnects = 0;
 		while reconnects < 20 {
+			// println!("try subscribe!");
 			if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
+				// println!("subscribed!");
 				while let Some(Ok(block_hash)) = block_headers.next().await {
+					println!("got live block");
 					let _ = process_extrinsics(
 						&tx,
 						chain_info.chain_url.clone(),
@@ -354,6 +360,7 @@ pub async fn watch_blocks<S: Source>(
 					.await;
 					// check for stop signal
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+						println!("epoc has changed, ending for {:?}.", as_of);
 						return Ok(())
 					}
 				}
