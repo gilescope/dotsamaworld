@@ -9,6 +9,7 @@ pub fn get_block_number_near_timestamp(
 	time_for_blocknum: &mut impl FnMut(u32) -> Option<TIME>,
 	average_blocktime_in_ms: Option<u64>,
 ) -> Option<u32> {
+	debug_assert!(search_timestamp > 9_654_602_493, "you were meant to multiply that by 1000");
 	get_block_number_near_timestamp_helper(
 		search_timestamp as i64,
 		start_block as i64,

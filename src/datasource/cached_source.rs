@@ -37,7 +37,7 @@ macro_rules! memoise {
 				Ok(Some(contents))
 			}
 		} else {
-			println!("cache miss {} {}", filename, &$self.ws_url);
+			// println!("cache miss {} {}", filename, &$self.ws_url);
 			let result = $fetch.await;
 			if let Ok(result) = result {
 				if let Some(bytes) = result {

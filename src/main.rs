@@ -11,12 +11,11 @@ use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 //use bevy_kira_audio::AudioPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
-use ui::details;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
-use crate::movement::Destination;
+use crate::{movement::Destination, ui::doturl};
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
@@ -258,10 +257,13 @@ fn source_data(
 		let is_live = if let Some(timestamp) = event.timestamp {
 			BASETIME.store(timestamp, Ordering::Relaxed);
 			// if time is now or in future then we are live mode.
-			timestamp >= Utc::now().timestamp()
+			timestamp >= (Utc::now().timestamp() * 1000)
 		} else {
 			LIVE == event.source
 		};
+		if is_live {
+			event.timestamp = None;
+		}
 
 		println!("event source {}", event.source);
 		sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
@@ -276,6 +278,7 @@ fn source_data(
 		println!("dot url {:?}", &dot_url);
 		//let as_of = Some(dot_url.clone());
 		println!("Block number selected for relay chains: {:?}", &as_of);
+		
 
 		// let is_self_sovereign = selected_env.is_self_sovereign();
 		let relays = networks::get_network(&selected_env)
@@ -356,6 +359,7 @@ fn source_data(
 
 				let lock_clone = chain.shared.clone();
 				let as_of = as_of.clone();
+				println!("as of for chain {:?}", &as_of);
 				let chain_info = chain.info.clone();
 				std::thread::spawn(move || {
 					// let mut reconnects = 0;
@@ -465,16 +469,6 @@ enum BuildDirection {
 	Up,
 	Down,
 }
-
-// fn focus_manager(mut windows: ResMut<Windows>, //toggle_mouse_capture:
-// Res<movement::MouseCapture> ) {
-//     // let window = windows.get_primary_mut().unwrap();
-//     // if window.is_focused() {
-//     //     window.set_cursor_lock_mode(toggle_mouse_capture.0);
-//     // } else {
-//     //     window.set_cursor_lock_mode(false);
-//     // }
-// }
 
 fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 	let res = match entity {
@@ -676,13 +670,13 @@ fn render_block(
 						DataUpdate::NewBlock(block) => {
 							BLOCKS.fetch_add(1, Ordering::Relaxed);
 
-							println!(
-								"chains {} blocks {} txs {} events {}",
-								CHAINS.load(Ordering::Relaxed),
-								BLOCKS.load(Ordering::Relaxed),
-								EXTRINSICS.load(Ordering::Relaxed),
-								EVENTS.load(Ordering::Relaxed)
-							);
+							// println!(
+							// 	"chains {} blocks {} txs {} events {}",
+							// 	CHAINS.load(Ordering::Relaxed),
+							// 	BLOCKS.load(Ordering::Relaxed),
+							// 	EXTRINSICS.load(Ordering::Relaxed),
+							// 	EVENTS.load(Ordering::Relaxed)
+							// );
 
 							// Skip data we no longer care about because the datasource has changed
 							if block.data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
@@ -1558,6 +1552,10 @@ fn setup(
 		source: "dotsama:/1//10504599".to_string(), // LIVE.to_string(),
 		timestamp: None,
 	});
+	// datasource_events.send(DataSourceChangedEvent {
+	// 	source: LIVE.to_string(),
+	// 	timestamp: None,
+	// });
 }
 
 #[derive(Inspectable, Default)]

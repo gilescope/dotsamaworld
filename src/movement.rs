@@ -68,7 +68,7 @@ pub fn player_move_arrows(
 			toggle_mouse_capture.0 = !toggle_mouse_capture.0;
 		}
 
-		for key in keys.get_pressed() {
+		for _key in keys.get_pressed() {
 			if window.is_focused() {
 				// match key {
 				//     // KeyCode::Up => velocity += forward,

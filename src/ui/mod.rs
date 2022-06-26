@@ -174,7 +174,7 @@ impl UrlBar {
 	pub fn timestamp(&self) -> Option<i64> {
 		//self.timestamp.map(|timestamp| {
 		let datetime: DateTime<chrono::Utc> = DateTime::from_utc(self.timestamp, Utc);
-		Some(datetime.timestamp())
+		Some(datetime.timestamp() * 1000)
 		//})
 	}
 

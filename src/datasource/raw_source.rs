@@ -86,13 +86,13 @@ impl RawDataSource {
 
 		const MAX_RETRIES: usize = 6;
 		let mut retries = 0;
-		println!("retries1 {}", retries);
+		// println!("retries1 {}", retries);
 		let client = loop {
-			println!("retries2 {}", retries);
+			// println!("retries2 {}", retries);
 			if retries >= MAX_RETRIES {
 				println!("Cannot connect to substrate node after {} retries", retries);
 			}
-			println!("retries {}", retries);
+			// println!("retries {}", retries);
 
 			// It might take a while for substrate node that spin up the RPC server.
 			// Thus, the connection might get rejected a few times.
@@ -107,7 +107,7 @@ impl RawDataSource {
 			};
 		};
 
-		println!("Client created........................");
+		// println!("Client created........................");
 		self.api = Some(
 			client
 				.to_runtime_api::<polkadot::RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>(

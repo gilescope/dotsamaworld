@@ -117,7 +117,7 @@ pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<
 
 	if let Some(subxt::sp_core::storage::StorageData(val)) = call {
 		let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
-		println!("{} is para id {}", &url, para_id);
+		// println!("{} is para id {}", &url, para_id);
 		let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
 		Some(para_id)
 	} else {
@@ -226,6 +226,7 @@ pub async fn watch_blocks<S: Source>(
 	}
 
 	if let Some(as_of) = as_of {
+		debug_assert!(as_of.block_number.is_some());
 		// if we are a parachain then we need the relay chain to tell us which numbers it is
 		// interested in
 		if para_id.is_some() {
@@ -270,7 +271,7 @@ pub async fn watch_blocks<S: Source>(
 						block_on(get_block_hash(&mut source, blocknum)).unwrap();
 
 					block_on(find_timestamp(
-						chain_info.chain_url.clone(),
+						// chain_info.chain_url.clone(),
 						block_hash,
 						url,
 						&mut source,
@@ -283,6 +284,7 @@ pub async fn watch_blocks<S: Source>(
 					&mut time_for_blocknum,
 					None,
 				);
+				debug_assert!(as_of.block_number.is_some(), "could not convert time {} to blocknum for {}", basetime, as_of);
 			}
 
 			let mut last_timestamp = None;
@@ -422,7 +424,25 @@ async fn process_extrinsics<S: Source>(
 					exts.push(entity);
 				}
 			} else {
-				println!("can't decode block ext {}-{} {}", block_number, i, &url);
+				// println!("can't decode block ext {}-{} {}", block_number, i, &url);
+				exts.push(DataEntity::Extrinsic {
+					// id: (block_number, extrinsic_url.extrinsic.unwrap()),
+					args:vec![],
+					contains: vec![],
+					raw: ex_slice.as_slice().to_vec(),
+					start_link: vec![],
+					end_link:vec![],
+					details: Details {
+						hover: "".to_string(),
+						doturl: DotUrl{extrinsic:Some(i as u32), ..blockurl.clone()},
+						flattern:"can't yet decode.".to_string(),
+						url: url.to_string(),
+						parent: None,
+						success: crate::ui::details::Success::Worried,
+						pallet: "?".to_string(),
+						variant: "?".to_string(),
+					},
+				});
 			}
 		}
 		let (events, _start_link) = get_events_for_block(
@@ -457,37 +477,28 @@ async fn process_extrinsics<S: Source>(
 
 // Find the timestamp for a block (cut down version of `process_extrinsics`)
 async fn find_timestamp<S: Source>(
-	mut blockurl: DotUrl,
+	// mut blockurl: DotUrl,
 	block_hash: H256,
 	url: &str,
 	source: &mut S,
 	metad: &Metadata,
 ) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
-		blockurl.block_number = Some(block.block_number);
-
 		for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
 			let ex_slice =
 				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 			if let Ok(extrinsic) =
 				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
 			{
-				let entity = process_extrisic(
-					(ex_slice).clone(),
-					&extrinsic,
-					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-					url,
-				)
-				.await;
-				if let Some(entity) = entity {
-					if entity.pallet() == "Timestamp" && entity.variant() == "set" {
-						if let ValueDef::Primitive(Primitive::U64(val)) =
-							extrinsic.call_data.arguments[0].value
-						{
-							// Timestamps are usually represented as i64
-							// I'm sure i64 time will be enough for a while.
-							return Some(val as i64)
-						}
+				let pallet = extrinsic.call_data.pallet_name.to_string();
+				let variant = extrinsic.call_data.ty.name().to_owned();
+				if pallet == "Timestamp" && variant == "set" {
+					if let ValueDef::Primitive(Primitive::U64(val)) =
+						extrinsic.call_data.arguments[0].value
+					{
+						// Timestamps are usually represented as i64
+						// I'm sure i64 time will be enough for a while.
+						return Some(val as i64)
 					}
 				}
 			}
@@ -1045,6 +1056,11 @@ async fn process_extrisic<'a>(
 	// let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode
 	// extrinsic");
 }
+
+
+
+
+
 use desub_current::TypeId;
 async fn check_reserve_asset<'a, 'b>(
 	args: &Vec<Value<TypeId>>,
@@ -1621,5 +1637,33 @@ mod tests {
 		}
 
 		assert_eq!(3, block.extrinsics.len());
+	}
+
+	#[test]
+	fn get_block_num() {
+		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
+		let url = "wss://rpc.polkadot.io:443";
+			let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
+	
+		let mut time_for_blocknum = |blocknum: u32| {
+			println!("asked for {}", blocknum);
+			let block_hash: sp_core::H256 =
+				block_on(get_block_hash(&mut source, blocknum)).unwrap();
+
+			block_on(find_timestamp(
+				// chain_info.chain_url.clone(),
+				block_hash,
+				"wss://rpc.polkadot.io:443",
+				&mut source,
+				&metad,
+			))
+		};
+		let block_number = time_predictor::get_block_number_near_timestamp(
+			1654602493,
+			10_000_000,
+			&mut time_for_blocknum,
+			None,
+		);
+		assert!(block_number.is_some());
 	}
 }
