@@ -1457,6 +1457,7 @@ fn update_visibility(
 
 	// If nothing's visible because we're far away make a few things visible so you know which dir
 	// to go in and can double click to get there...
+	#[cfg(feature="adaptive-fps")]
 	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
 		let min = diag.history_len();
 		if let Some(avg) = diag.values().map(|&i| i as u32).min() {

@@ -12,6 +12,7 @@ default = ["normalmouse"]
 # 3d mouse support (it's best not to have both features enabled at once).
 spacemouse = ["bevy_spacemouse"]
 normalmouse = ["bevy_flycam"]
+adaptive-fps = []
 
 [dependencies]
 sp-core = "*"
