@@ -269,12 +269,19 @@ pub async fn watch_blocks<S: Source>(
 				let metad_current = get_desub_metadata(url, &mut source, None).await.unwrap();
 				let basetime = BASETIME.load(Ordering::Relaxed);
 				let mut time_for_blocknum = |blocknum: u32| {
-					let block_hash: sp_core::H256 =
-						block_on(get_block_hash(&mut source, blocknum)).unwrap();
+					let mut block_hash: Option<sp_core::H256> =
+							block_on(get_block_hash(&mut source, blocknum));
+					for _ in 0..10 {
+						if block_hash.is_some() {
+							break;
+						}
+						block_hash =
+							block_on(get_block_hash(&mut source, blocknum));
+					}
 
 					block_on(find_timestamp(
 						// chain_info.chain_url.clone(),
-						block_hash,
+						block_hash.unwrap(),
 						url,
 						&mut source,
 						&metad_current,

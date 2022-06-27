@@ -2,7 +2,7 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
 #![feature(slice_group_by)]
-
+use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
@@ -241,6 +241,8 @@ fn source_data(
 	mut sovereigns: ResMut<Sovereigns>,
 	details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<Entity, With<ClearMe>>,
+	mut dest: ResMut<Destination>,
+	mut spec: ResMut<UrlBar>,
 ) {
 	for event in datasource_events.iter() {
 		println!("data source changes to {} {:?}", event.source, event.timestamp);
@@ -255,9 +257,17 @@ fn source_data(
 		let dot_url = DotUrl::parse(&event.source);
 
 		let is_live = if let Some(timestamp) = event.timestamp {
-			BASETIME.store(timestamp, Ordering::Relaxed);
+			
 			// if time is now or in future then we are live mode.
-			timestamp >= (Utc::now().timestamp() * 1000)
+			let is_live = timestamp >= (Utc::now().timestamp() * 1000);
+			if is_live {
+				BASETIME.store(Utc::now().timestamp() * 1000, Ordering::Relaxed);
+				spec.timestamp = Utc::now().naive_utc();
+				spec.reset_changed();
+			} else {
+				BASETIME.store(timestamp, Ordering::Relaxed);
+			}
+			is_live
 		} else {
 			LIVE == event.source
 		};
@@ -740,6 +750,8 @@ fn render_block(
 								..default()
 							};
 
+							// println!("block.timestamp {:?}", block.timestamp);
+							// println!("base_time {:?}",base_time);
 							let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
 
 							// Add the new block as a large square on the ground:
@@ -749,6 +761,15 @@ fn render_block(
 								} else {
 									block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
 								} / 400;
+
+								let transform = Transform::from_translation(Vec3::new(
+										0. + (block_num as f32),
+										if is_relay { 0. } else { LAYER_GAP },
+										(RELAY_CHAIN_CHASM_WIDTH +
+											BLOCK_AND_SPACER *
+												chain_info.chain_index.abs() as f32) * rflip,
+									));
+								// println!("block created at {:?} blocknum {}", transform, block_num);
 
 								let mut bun = commands.spawn_bundle(PbrBundle {
 									mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
@@ -766,15 +787,10 @@ fn render_block(
 										},
 										..default()
 									}),
-									transform: Transform::from_translation(Vec3::new(
-										0. + (block_num as f32),
-										if is_relay { 0. } else { LAYER_GAP },
-										(RELAY_CHAIN_CHASM_WIDTH +
-											BLOCK_AND_SPACER *
-												chain_info.chain_index.abs() as f32) * rflip,
-									)),
+									transform,
 									..Default::default()
 								});
+
 								bun.insert(ClearMe);
 								// bun.insert(Aabb::from_min_max(
 								//     Vec3::new(0., 0., 0.),
