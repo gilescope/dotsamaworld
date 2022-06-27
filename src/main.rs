@@ -1416,17 +1416,22 @@ pub fn print_events(
 				}
 			},
 			PickingEvent::Clicked(entity) => {
-				let now = Utc::now().timestamp();
+				let now = Utc::now().timestamp_millis();
 				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
 				inspector.selected = Some(details.clone());
 				// info!("Gee Willikers, it's a click! {:?}", e)
 
 				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
-				if now - prev < 1 {
+				if now - prev < 400 {
 					println!("double click {}", now - prev);
-					anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away from
+					// if you double clicked on just a chain then you really don't want to get sent to
+					// the middle of nowhere!
+					if details.doturl.extrinsic.is_some() || details.doturl.event.is_some() {
+						println!("double clicked to {}", details.doturl);
+						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away from
 							 // it.
-					dest.location = Some(global_location.translation);
+						dest.location = Some(global_location.translation);
+					}
 				}
 			},
 		}

@@ -122,7 +122,7 @@ pub fn player_move_arrows(
 				dest.location = None;
 				return
 			}
-			// velocity = (loc - transform.translation);
+			velocity = (loc - transform.translation).normalize();
 			// TODO if near stop....
 			// let current_look = transform.rotation.normalize();
 			// let ideal_look_direction = Quat::from_euler(
@@ -158,11 +158,12 @@ pub fn player_move_arrows(
         	// Calculate the exponential blending based on frame time
         	let interp_t = 1.0
             - (-SMOOTHNESS_MULT * time.delta_seconds() / smoothness_param.max(1e-5)).exp();
-
 			transform.translation = transform.translation.interpolate(loc, interp_t);
-				// velocity * time.delta_seconds() * settings.speed * dist.sqrt() / 5.;
+			//transform.translation += //transform.translation.interpolate(loc, interp_t);
+			//	 velocity * time.delta_seconds() * settings.speed * dist.sqrt() / 5.;
 			if let Some(look_at) = dest.look_at {
-				transform.rotation = transform.rotation.interpolate(look_at, interp_t);
+				//transform.rotation = transform.rotation.interpolate(look_at, interp_t);
+				transform.rotation = transform.rotation.slerp(look_at, 0.05);
 			} // println!("our step forward: {} ", velocity * time.delta_seconds() * settings.speed *
 			 // 3.); println!("dest: {} {}", loc,  ideal_look_direction);
 		} else {
