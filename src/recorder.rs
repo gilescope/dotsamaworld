@@ -89,7 +89,7 @@ pub fn player(time: Res<Time>, mut script: ResMut<Script>, mut dest: ResMut<Dest
 			dest.location = Some(top.1);
 			dest.look_at = Some(top.2);
 			script.moments.pop();
-			println!("playing event");
+			// println!("playing event");
 		}
 	}
 }
