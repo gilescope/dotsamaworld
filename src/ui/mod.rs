@@ -42,7 +42,7 @@ ui.separator();
 				ui.heading(&selected.variant);
 				ui.heading(&selected.pallet);
 					ui.separator();
-			ui.hyperlink(&selected.url);
+			ui.add(egui::Hyperlink::from_label_and_url("open in polkadot.js", &selected.url));
 			}
 		
 	    })

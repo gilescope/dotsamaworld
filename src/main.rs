@@ -174,7 +174,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	//     present_mode: PresentMode::Immediate,
 	//     ..default()
 	// });
-	//app.add_plugins(DefaultPickingPlugins)
+	app.add_plugin(HighlightablePickingPlugin);
 
 	app.add_plugin(PickingPlugin)
 		// .insert_resource(camera_rig
