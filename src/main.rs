@@ -14,7 +14,7 @@ use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
-// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use crate::{movement::Destination, ui::doturl};
 use bevy::window::RequestRedraw;
@@ -149,6 +149,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(NoCameraPlayerPlugin);
 	app.insert_resource(movement::MouseCapture::default());
 	app.insert_resource(Anchor::default());
+	app.insert_resource(Width(500.));
 	app.insert_resource(Inspector::default());
 
 	#[cfg(feature = "spacemouse")]
@@ -203,7 +204,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		.add_system(source_data)
 			// .add_system(pad_system)
 		// .add_plugin(LogDiagnosticsPlugin::default())
-		// .add_plugin(FrameTimeDiagnosticsPlugin::default())
+		.add_plugin(FrameTimeDiagnosticsPlugin::default())
 		// .add_system(ui::update_camera_transform_system)
 		.add_system(right_click_system)
 		.add_system_to_stage(CoreStage::PostUpdate, update_visibility)
@@ -1094,7 +1095,7 @@ fn add_blocks<'a>(
 				}
 
 				for (link, link_type) in block.start_link() {
-					println!("inserting source of rainbow!");
+					// println!("inserting source of rainbow!");
 					create_source
 						.push(MessageSource { id: link.to_string(), link_type: *link_type });
 				}
@@ -1238,7 +1239,7 @@ fn add_blocks<'a>(
 			// ));
 
 			for (link, link_type) in &event.start_link {
-				println!("inserting source of rainbow (an event)!");
+				// println!("inserting source of rainbow (an event)!");
 				event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
 			}
 		}
@@ -1438,19 +1439,37 @@ pub fn print_events(
 	}
 }
 
+struct Width(f32);
+
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
-
+use bevy::diagnostic::Diagnostics;
 fn update_visibility(
 	mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
 	player_query: Query<&Transform, With<Viewport>>,
+	diagnostics: Res<'_, Diagnostics>, 
+	mut visible_width: ResMut<Width>
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
 	let transform: &Transform = player_query.get_single().unwrap();
 	let x = transform.translation.x;
 
-	let width = 500.;
+	// If nothing's visible because we're far away make a few things visible so you know which dir
+	// to go in and can double click to get there...
+	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+		let min = diag.history_len();
+		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
+			// println!("avg {}\t{}", avg, visible_width.0);
+			let target = 30.;
+			let avg = avg as f32;
+			if avg < target && visible_width.0 > 100. { visible_width.0 -= (target - avg)/4.; }
+			// Because of frame rate differences it will go up much faster than it will go down!
+			else if avg > target && visible_width.0 < 1000. { visible_width.0 += (avg - target)/32.; }
+		}
+	}
+
+	let width = visible_width.0;
 	let (min, max) = (x - width, x + width);
 
 	let mut vis_count = 0;
@@ -1461,8 +1480,7 @@ fn update_visibility(
 		}
 	}
 
-	// If nothing's visible because we're far away make a few things visible so you know which dir
-	// to go in and can double click to get there...
+
 	if vis_count == 0 {
 		for (mut vis, transform, _) in entity_query.iter_mut().take(1000) {
 			vis.is_visible = true;

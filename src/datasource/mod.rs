@@ -157,10 +157,10 @@ async fn get_metadata_version(
 
 			let pos = err.find(needle);
 			if let Some(_pos) = pos {
-				eprintln!(
-					"{} is not alas an archive node and does not go back this far in time.",
-					&url
-				);
+				// eprintln!(
+				// 	"{} is not alas an archive node and does not go back this far in time.",
+				// 	&url
+				// );
 				return None // If you get this error you need to point to an archive node.
 				 // println!("error message (recoverable) {}", &err);
 				 // let pos = pos + needle.len() + "0x".len();
@@ -926,32 +926,32 @@ async fn process_extrisic<'a>(
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				println!("SEND MSG v0 hash {}", msg_id);
+				// println!("SEND MSG v0 hash {}", msg_id);
 				start_link.push((msg_id, LinkType::Teleport));
 			}
-			println!("first time seeen");
-			println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
+			// println!("first time seeen");
+			// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
 		} else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 			let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 			let dest: NonZeroU32 = dest.parse().unwrap();
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				println!("SEND MSG v0 hash {}", msg_id);
+				// println!("SEND MSG v0 hash {}", msg_id);
 				start_link.push((msg_id, LinkType::Teleport));
 			}
-			println!("first time seeen");
-			println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
+			// println!("first time seeen");
+			// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
 		} else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 			let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 			let dest: NonZeroU32 = dest.parse().unwrap();
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				println!("SEND MSG v0 hash {}", msg_id);
+				// println!("SEND MSG v0 hash {}", msg_id);
 				start_link.push((msg_id, LinkType::Teleport));
 			}
-			println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
+			// println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
 		}
 
 		// println!("FLATTERN {:#?}", flat1);
@@ -1096,10 +1096,10 @@ async fn check_reserve_asset<'a, 'b>(
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			println!("SEND MSG v2 hash {}", msg_id);
+			// println!("SEND MSG v2 hash {}", msg_id);
 			start_link.push((msg_id, LinkType::ReserveTransfer));
 		}
-		println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
 	if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
@@ -1109,10 +1109,10 @@ async fn check_reserve_asset<'a, 'b>(
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			println!("SEND MSG v1 hash {}", msg_id);
+			// println!("SEND MSG v1 hash {}", msg_id);
 			start_link.push((msg_id, LinkType::ReserveTransfer));
 		}
-		println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
 	if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
@@ -1122,10 +1122,10 @@ async fn check_reserve_asset<'a, 'b>(
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			println!("SEND MSG v0 hash {}", msg_id);
+			// println!("SEND MSG v0 hash {}", msg_id);
 			start_link.push((msg_id, LinkType::ReserveTransfer));
 		}
-		println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
 }
 
