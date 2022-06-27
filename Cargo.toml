@@ -39,7 +39,7 @@ parity-scale-codec = { package = "parity-scale-codec", version = "2", default-fe
 bevy_atmosphere = "0.3"
 palette = "0.6"              # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
-bevy-inspector-egui = "0.10"
+# bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 serde_json = "*"
 #rayon = "*"

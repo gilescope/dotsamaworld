@@ -3,10 +3,10 @@ use super::DotUrl;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiSettings;
-use bevy_inspector_egui::{
-	options::{NumberAttributes, StringAttributes},
-	Context, Inspectable,
-};
+// use bevy_inspector_egui::{
+// 	options::{NumberAttributes, StringAttributes},
+// 	Context, Inspectable,
+// };
 
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum Success {
@@ -29,52 +29,52 @@ pub struct Details {
 	pub url: String,
 }
 
-use egui::Grid;
-impl Inspectable for Details {
-	type Attributes = ();
+// use egui::Grid;
+// impl Inspectable for Details {
+// 	type Attributes = ();
 
-	fn ui(
-		&mut self,
-		ui: &mut bevy_egui::egui::Ui,
-		_options: Self::Attributes,
-		context: &mut Context,
-	) -> bool {
-		let mut changed = false;
-		ui.vertical_centered(|ui| {
-			Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
-				// ui.label("Pallet");
-				changed |=
-					self.doturl.to_string().ui(ui, StringAttributes { multiline: false }, context);
-				ui.end_row();
-				changed |= self.pallet.ui(ui, StringAttributes { multiline: false }, context);
-				ui.end_row();
-				// ui.label("Method");
-				changed |= self.variant.ui(ui, StringAttributes { multiline: false }, context);
-				ui.end_row();
-				changed |=
-					self.parent.unwrap_or_default().ui(ui, NumberAttributes::default(), context);
-				ui.end_row();
-				changed |= self.hover.ui(ui, StringAttributes { multiline: true }, context);
-				ui.end_row();
-				changed |= self.flattern.ui(ui, StringAttributes { multiline: true }, context);
-				ui.end_row();
-				// ui.label("Rotation");
-				// changed |= self.rotation.ui(ui, Default::default(), context);
-				// self.rotation = self.rotation.normalize();
-				// ui.end_row();
+// 	fn ui(
+// 		&mut self,
+// 		ui: &mut bevy_egui::egui::Ui,
+// 		_options: Self::Attributes,
+// 		context: &mut Context,
+// 	) -> bool {
+// 		let mut changed = false;
+// 		ui.vertical_centered(|ui| {
+// 			Grid::new(context.id()).min_col_width(400.).show(ui, |ui| {
+// 				// ui.label("Pallet");
+// 				changed |=
+// 					self.doturl.to_string().ui(ui, StringAttributes { multiline: false }, context);
+// 				ui.end_row();
+// 				changed |= self.pallet.ui(ui, StringAttributes { multiline: false }, context);
+// 				ui.end_row();
+// 				// ui.label("Method");
+// 				changed |= self.variant.ui(ui, StringAttributes { multiline: false }, context);
+// 				ui.end_row();
+// 				changed |=
+// 					self.parent.unwrap_or_default().ui(ui, NumberAttributes::default(), context);
+// 				ui.end_row();
+// 				changed |= self.hover.ui(ui, StringAttributes { multiline: true }, context);
+// 				ui.end_row();
+// 				changed |= self.flattern.ui(ui, StringAttributes { multiline: true }, context);
+// 				ui.end_row();
+// 				// ui.label("Rotation");
+// 				// changed |= self.rotation.ui(ui, Default::default(), context);
+// 				// self.rotation = self.rotation.normalize();
+// 				// ui.end_row();
 
-				// ui.label("Scale");
-				// let scale_attributes = NumberAttributes {
-				//     min: Some(Vec3::splat(0.0)),
-				//     ..Default::default()
-				// };
-				// changed |= self.scale.ui(ui, scale_attributes, context);
-				// ui.end_row();
-			});
-		});
-		changed
-	}
-}
+// 				// ui.label("Scale");
+// 				// let scale_attributes = NumberAttributes {
+// 				//     min: Some(Vec3::splat(0.0)),
+// 				//     ..Default::default()
+// 				// };
+// 				// changed |= self.scale.ui(ui, scale_attributes, context);
+// 				// ui.end_row();
+// 			});
+// 		});
+// 		changed
+// 	}
+// }
 
 pub fn configure_visuals(
 	// egui_ctx: ResMut<EguiContext>,

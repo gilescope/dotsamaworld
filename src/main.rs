@@ -5,11 +5,12 @@
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
+use bevy_egui::EguiPlugin;
 use bevy_ecs::prelude::Component;
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 //use bevy_kira_audio::AudioPlugin;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+// use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
@@ -39,7 +40,7 @@ mod style;
 use egui::Ui;
 mod ui;
 use crate::ui::{Details, DotUrl};
-use bevy_inspector_egui::RegisterInspectable;
+// use bevy_inspector_egui::RegisterInspectable;
 // use bevy_inspector_egui::WorldInspectorPlugin;
 use bevy::winit::WinitSettings;
 #[cfg(feature = "spacemouse")]
@@ -148,6 +149,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(NoCameraPlayerPlugin);
 	app.insert_resource(movement::MouseCapture::default());
 	app.insert_resource(Anchor::default());
+	app.insert_resource(Inspector::default());
 
 	#[cfg(feature = "spacemouse")]
 	app.add_plugin(SpaceMousePlugin);
@@ -183,10 +185,11 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		.add_plugin(InteractablePickingPlugin)
 		// .add_plugin(HighlightablePickingPlugin)
 		// .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
-		.add_plugin(InspectorPlugin::<Inspector>::new())
-		.register_inspectable::<Details>()
+		// .add_plugin(InspectorPlugin::<Inspector>::new())
+		// .register_inspectable::<Details>()
 		// .add_plugin(DebugEventsPickingPlugin)
 		.add_plugin(PolylinePlugin)
+.add_plugin(EguiPlugin)
 		.insert_resource(ui::OccupiedScreenSpace::default())
 		.add_system(movement::scroll)
 		.add_startup_system(setup);
@@ -1585,55 +1588,55 @@ fn setup(
 	// });
 }
 
-#[derive(Inspectable, Default)]
+#[derive(Default)]
 pub struct Inspector {
 	// #[inspectable(deletable = false)]
 	// #[inspectable(collapse)]
 	// start_location: UrlBar,
 	// timestamp: DateTime,
-	#[inspectable(deletable = false)]
+	// #[inspectable(deletable = false)]
 	selected: Option<Details>,
 
 	hovered: Option<String>,
 }
 
-struct DateTime(NaiveDateTime, bool);
+// struct DateTime(NaiveDateTime, bool);
 
-impl DateTime {
-	fn timestamp(&self) -> Option<i64> {
-		if self.1 {
-			Some(self.0.timestamp() as i64 * 1000)
-		} else {
-			None
-		}
-	}
-}
+// impl DateTime {
+// 	fn timestamp(&self) -> Option<i64> {
+// 		if self.1 {
+// 			Some(self.0.timestamp() as i64 * 1000)
+// 		} else {
+// 			None
+// 		}
+// 	}
+// }
 
-impl Default for DateTime {
-	fn default() -> Self {
-		Self(chrono::offset::Utc::now().naive_utc(), false)
-	}
-}
+// impl Default for DateTime {
+// 	fn default() -> Self {
+// 		Self(chrono::offset::Utc::now().naive_utc(), false)
+// 	}
+// }
 
-impl Inspectable for DateTime {
-	type Attributes = ();
+// impl Inspectable for DateTime {
+// 	type Attributes = ();
 
-	fn ui(
-		&mut self,
-		ui: &mut Ui,
-		_: <Self as Inspectable>::Attributes,
-		_: &mut bevy_inspector_egui::Context<'_>,
-	) -> bool {
-		// let mut changed = false;
-		ui.checkbox(&mut self.1, "Point in time:");
-		ui.add(
-			DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut self.0)
-				.highlight_weekend(true),
-		);
-		true
-		//        true // todo inefficient?
-	}
-}
+// 	fn ui(
+// 		&mut self,
+// 		ui: &mut Ui,
+// 		_: <Self as Inspectable>::Attributes,
+// 		_: &mut bevy_inspector_egui::Context<'_>,
+// 	) -> bool {
+// 		// let mut changed = false;
+// 		ui.checkbox(&mut self.1, "Point in time:");
+// 		ui.add(
+// 			DatePicker::<std::ops::Range<NaiveDateTime>>::new("noweekendhighlight", &mut self.0)
+// 				.highlight_weekend(true),
+// 		);
+// 		true
+// 		//        true // todo inefficient?
+// 	}
+// }
 
 #[derive(Component)]
 pub struct Viewport;
