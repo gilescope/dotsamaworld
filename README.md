@@ -42,6 +42,9 @@ If you right click on an extrinsic it will open the polkadot-js decode screen fo
  - Hold `.` to rise and `,` to lower (or space and right shift). 
  - Escape switches the mouse from being able to select something to being able to look around.
  - Tab lowers or raises the anchor so that you do or don't follow the chain.
+ - roll x, z
+ - yaw q, e
+ - pitch [, ]
 
 ## Prerequisites
 
