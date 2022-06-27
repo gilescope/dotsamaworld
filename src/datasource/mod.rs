@@ -1652,32 +1652,4 @@ mod tests {
 
 		assert_eq!(3, block.extrinsics.len());
 	}
-
-	#[test]
-	fn get_block_num() {
-		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
-		let url = "wss://rpc.polkadot.io:443";
-			let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
-	
-		let mut time_for_blocknum = |blocknum: u32| {
-			println!("asked for {}", blocknum);
-			let block_hash: sp_core::H256 =
-				block_on(get_block_hash(&mut source, blocknum)).unwrap();
-
-			block_on(find_timestamp(
-				// chain_info.chain_url.clone(),
-				block_hash,
-				"wss://rpc.polkadot.io:443",
-				&mut source,
-				&metad,
-			))
-		};
-		let block_number = time_predictor::get_block_number_near_timestamp(
-			1654602493,
-			10_000_000,
-			&mut time_for_blocknum,
-			None,
-		);
-		assert!(block_number.is_some());
-	}
 }
