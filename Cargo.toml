@@ -47,7 +47,7 @@ serde_json = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
 serde = "*"
 bevy_egui = "*"
-egui = "*"
+egui = "0.17"
 url = "*"
 color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
@@ -59,6 +59,8 @@ desub-current = { git = "https://github.com/paritytech/desub/" }
 # bevy_kira_audio = "*"
 # dolly = "0.3"
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
+egui_extras = { version="0.17", features = ["image", "image"] }
+image = { version = "0.24", features = ["jpeg"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"

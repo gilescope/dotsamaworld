@@ -2,6 +2,7 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
 #![feature(slice_group_by)]
+#![feature(option_get_or_insert_default)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
@@ -97,7 +98,7 @@ pub struct ChainInfo {
 	// Negative is other direction from center.
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
-	pub chain_name: String,
+	// pub chain_name: String,
 }
 
 pub type ABlocks = Arc<
@@ -318,8 +319,8 @@ fn source_data(
 						);
 						let para_id = datasource::get_parachain_id_from_url(&mut source)
 							.unwrap_or(Some(9999u32.try_into().unwrap()));
-						let parachain_name =
-							datasource::get_parachain_name_sync(&mut source).unwrap();
+						// let parachain_name =
+							// datasource::get_parachain_name_sync(&mut source).unwrap();
 
 						(
 							Chain {
@@ -334,7 +335,7 @@ fn source_data(
 										(chain_index + 2) as isize
 									},
 									chain_url: DotUrl { para_id, ..relay_url.clone() },
-									chain_name: parachain_name,
+									// chain_name: parachain_name,
 								},
 							},
 							source,
@@ -507,7 +508,7 @@ fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
 			} else {
 				format!(" contains {} extrinsics", contains.len())
 			};
-			format!("{}\n{} {} {}\n{:#?}", chain_name, details.pallet, details.variant, kids, args)
+			format!("{} {} {}\n{:#?}", details.pallet, details.variant, kids, args)
 		},
 	};
 
@@ -809,16 +810,17 @@ fn render_block(
 								//     Vec3::new(0., 0., 0.),
 								//     Vec3::new(1., 1., 1.),
 								// ));
+								let chain_str = details.doturl.chain_str();
 
 								bun.insert(details)
 									.insert(Name::new("Block"))
 									.with_children(|parent| {
-										let name = chain_info
-											.chain_name
-											.replace(" ", "-")
-											.replace("-Testnet", "");
+										// let name = chain_info
+											// .chain_name
+											// .replace(" ", "-")
+											// .replace("-Testnet", "");
 										let texture_handle =
-											asset_server.load(&format!("branding/{}.jpeg", name));
+											asset_server.load(&format!("branding/{}.jpeg", chain_str));
 										let aspect = 1. / 3.;
 
 										// create a new quad mesh. this is what we will apply the
@@ -1438,6 +1440,7 @@ pub fn print_events(
 					}
 				}
 				inspector.selected = Some(details.clone());
+				inspector.texture = None;
 
 				// info!("Gee Willikers, it's a click! {:?}", e)
 
@@ -1670,6 +1673,8 @@ pub struct Inspector {
 	selected: Option<Details>,
 
 	hovered: Option<String>,
+
+	texture: Option<egui::TextureHandle>,
 }
 
 // struct DateTime(NaiveDateTime, bool);

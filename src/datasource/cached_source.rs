@@ -107,17 +107,17 @@ where
 		}
 	}
 
-	async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
-		memoise!(
-			"chainname",
-			self,
-			b"chainname".as_slice(),
-			self.underlying_source
-				.fetch_chainname()
-				.map_ok(|res| res.map(|name| name.as_bytes().to_vec()))
-		)
-		.map(|op| op.map(|bytes| String::from_utf8_lossy(bytes.as_slice()).to_string()))
-	}
+	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
+	// 	memoise!(
+	// 		"chainname",
+	// 		self,
+	// 		b"chainname".as_slice(),
+	// 		self.underlying_source
+	// 			.fetch_chainname()
+	// 			.map_ok(|res| res.map(|name| name.as_bytes().to_vec()))
+	// 	)
+	// 	.map(|op| op.map(|bytes| String::from_utf8_lossy(bytes.as_slice()).to_string()))
+	// }
 
 	async fn fetch_storage(
 		&mut self,

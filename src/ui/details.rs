@@ -27,6 +27,7 @@ pub struct Details {
 	pub flattern: String,
 	// #[inspectable(label = "Url:")]
 	pub url: String,
+	// pub chain_name: String,
 	// pub raw: Vec<u8>
 }
 

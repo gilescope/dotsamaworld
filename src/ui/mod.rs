@@ -1,6 +1,8 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
+ use egui::ImageData;
+use crate::NonZeroU32;
 use crate::{Anchor, Env, Inspector, Viewport};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
@@ -27,7 +29,7 @@ pub fn ui_bars_system(
 	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
 	mut spec: ResMut<UrlBar>,
 	mut anchor: ResMut<Anchor>,
-	inspector: Res<Inspector>,
+	mut inspector: ResMut<Inspector>,
 ) {
 	if inspector.selected.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -39,6 +41,20 @@ pub fn ui_bars_system(
 					ui.heading("Selected Details:");
 				});
 				ui.separator();
+
+				if inspector.selected.is_some() {
+					let name = inspector.selected.as_ref().map(|d|d.doturl.chain_str()).unwrap();
+											
+					if let Ok(bytes) =	std::fs::read(&format!("assets/branding/{}.jpeg", name)) {
+						let img = egui_extras::image::load_image_bytes( bytes.as_slice()).unwrap();
+						let texture: &egui::TextureHandle = inspector.texture.get_or_insert_with(|| {
+							// Load the texture only once.
+							ui.ctx().load_texture(name,
+							egui::ImageData::Color(img))
+						});
+					}
+				}
+
 				if let Some(selected) = &inspector.selected {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
@@ -47,6 +63,15 @@ pub fn ui_bars_system(
 						"open in polkadot.js",
 						&selected.url,
 					));
+				
+					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+						if let Some(hand) =  inspector.texture.as_ref() {
+							let texture: &egui::TextureHandle = hand;
+							
+							let l =200.; // occupied_screen_space.left - 10.;
+							ui.add(egui::Image::new(texture, egui::Vec2::new(l,l/3.)));
+						}
+					});
 				}
 			})
 			.response

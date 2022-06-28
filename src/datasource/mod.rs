@@ -185,9 +185,9 @@ async fn get_metadata_version(source: &mut impl Source, hash: sp_core::H256) -> 
 	}
 }
 
-pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<String> {
-	Some(block_on(source.fetch_chainname()).unwrap().unwrap())
-}
+// pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<String> {
+// 	Some(block_on(source.fetch_chainname()).unwrap().unwrap())
+// }
 
 async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<sp_core::H256> {
 	if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {

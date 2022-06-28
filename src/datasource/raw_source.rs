@@ -39,7 +39,7 @@ pub trait Source {
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError>;
 
-	async fn fetch_chainname(&mut self) -> Result<Option<String>, BError>;
+	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError>;
 
 	async fn fetch_storage(
 		&mut self,
@@ -162,9 +162,9 @@ impl Source for RawDataSource {
 		}
 	}
 
-	async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
-		self.client().await.rpc().system_chain().await.map(|res| Some(res))
-	}
+	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
+	// 	self.client().await.rpc().system_chain().await.map(|res| Some(res))
+	// }
 
 	async fn fetch_storage(
 		&mut self,
