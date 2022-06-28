@@ -158,4 +158,8 @@ where
 	) -> Result<Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>, ()> {
 		self.underlying_source.subscribe_finalised_blocks().await
 	}
+
+	fn url(&self) -> &str {
+		&self.underlying_source.url()
+	}
 }

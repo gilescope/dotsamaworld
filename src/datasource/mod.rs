@@ -39,10 +39,10 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
 }
 
 async fn get_desub_metadata<S: Source>(
-	url: &str,
 	source: &mut S,
 	version: Option<(String, H256)>,
 ) -> Option<Metadata> {
+	let url = source.url().to_string();
 	let hash = please_hash(&url);
 
 	let mut metadata_path = format!("target/{hash}.metadata.scale");
@@ -60,17 +60,17 @@ async fn get_desub_metadata<S: Source>(
 		let metadata_bytes: sp_core::Bytes = {
 			const MAX_RETRIES: usize = 6;
 			let mut retries = 0;
-
 			loop {
 				if retries >= MAX_RETRIES {
 					panic!("Cannot connect to substrate node after {} retries", retries);
 				}
 
-				println!("trying to get metadata from {url}");
+				println!("trying to get metadata from {}", source.url());
 				// It might take a while for substrate node that spin up the RPC server.
 				// Thus, the connection might get rejected a few times.
+				
 				let res = source.fetch_metadata(as_of).await;
-				println!("finished trying {url}");
+				println!("finished trying {}", url);
 				match res {
 					Ok(Some(res)) => {
 						// let _ = cmd.kill();
@@ -99,14 +99,14 @@ async fn get_desub_metadata<S: Source>(
 	result.ok()
 }
 
-pub async fn get_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<NonZeroU32> {
-	if is_relay_chain(url) {
+pub async fn get_parachain_id<S: Source>(source: &mut S) -> Option<NonZeroU32> {
+	if is_relay_chain(source.url()) {
 		return None
 	}
-	fetch_parachain_id::<S>(source, url).await
+	fetch_parachain_id::<S>(source).await
 }
 
-pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<NonZeroU32> {
+pub async fn fetch_parachain_id<S: Source>(source: &mut S) -> Option<NonZeroU32> {
 	// parachainInfo / parachainId returns u32 paraId
 	let storage_key =
 		hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
@@ -122,7 +122,7 @@ pub async fn fetch_parachain_id<S: Source>(source: &mut S, url: &str) -> Option<
 		Some(para_id)
 	} else {
 		// This is expected for relay chains...
-		warn!("could not find para id for {}", &url);
+		warn!("could not find para id for {}", &source.url());
 		None
 	}
 }
@@ -133,14 +133,12 @@ pub fn is_relay_chain(url: &str) -> bool {
 
 pub fn get_parachain_id_from_url<S: Source>(
 	source: &mut S,
-	url: &str,
 ) -> Result<Option<NonZeroU32>, ()> {
-	Ok(async_std::task::block_on(get_parachain_id(source, &url)))
+	Ok(async_std::task::block_on(get_parachain_id(source)))
 }
 
 async fn get_metadata_version(
 	source: &mut impl Source,
-	url: &str,
 	hash: sp_core::H256,
 ) -> Option<String> {
 	let storage_key =
@@ -187,7 +185,7 @@ async fn get_metadata_version(
 	if let Some(subxt::sp_core::storage::StorageData(val)) = call {
 		Some(hex::encode(val.as_slice()))
 	} else {
-		warn!("could not find metadata id for {}", &url);
+		warn!("could not find metadata id for {}", &source.url());
 		None
 	}
 }
@@ -239,7 +237,6 @@ pub async fn watch_blocks<S: Source>(
 					&tx,
 					chain_info.chain_url.clone(),
 					block_hash,
-					url,
 					&mut source,
 					&sender,
 					our_data_epoc,
@@ -266,7 +263,7 @@ pub async fn watch_blocks<S: Source>(
 				}
 
 				// Timestamp is unlikely to change so we can use generic metadata
-				let metad_current = get_desub_metadata(url, &mut source, None).await.unwrap();
+				let metad_current = get_desub_metadata( &mut source, None).await.unwrap();
 				let basetime = BASETIME.load(Ordering::Relaxed);
 				let mut time_for_blocknum = |blocknum: u32| {
 					let mut block_hash: Option<sp_core::H256> =
@@ -282,7 +279,6 @@ pub async fn watch_blocks<S: Source>(
 					block_on(find_timestamp(
 						// chain_info.chain_url.clone(),
 						block_hash.unwrap(),
-						url,
 						&mut source,
 						&metad_current,
 					))
@@ -329,7 +325,6 @@ pub async fn watch_blocks<S: Source>(
 					&tx,
 					chain_info.chain_url.clone(),
 					block_hash,
-					url,
 					&mut source,
 					&sender,
 					our_data_epoc,
@@ -358,7 +353,6 @@ pub async fn watch_blocks<S: Source>(
 						&tx,
 						chain_info.chain_url.clone(),
 						block_hash,
-						url,
 						&mut source,
 						&None,
 						our_data_epoc,
@@ -384,7 +378,6 @@ async fn process_extrinsics<S: Source>(
 	tx: &ABlocks,
 	mut blockurl: DotUrl,
 	block_hash: H256,
-	url: &str,
 	source: &mut S,
 	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
@@ -397,12 +390,12 @@ async fn process_extrinsics<S: Source>(
 		blockurl.block_number = Some(got_block_num);
 		let block_number = blockurl.block_number.unwrap();
 
-		let version = get_metadata_version(source, &url, block_hash).await;
+		let version = get_metadata_version(source, block_hash).await;
 		let metad = if let Some(version) = version {
-			get_desub_metadata(&url, source, Some((version, block_hash))).await
+			get_desub_metadata( source, Some((version, block_hash))).await
 		} else {
 			//TODO: This is unlikely to work. we should try the oldest metadata we have instead...
-			get_desub_metadata(&url, source, None).await
+			get_desub_metadata(source, None).await
 		};
 		if metad.is_none() {
 			//println!("skip")
@@ -424,7 +417,7 @@ async fn process_extrinsics<S: Source>(
 					(ex_slice).clone(),
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-					url,
+					source.url(),
 				)
 				.await;
 				if let Some(entity) = entity {
@@ -450,7 +443,7 @@ async fn process_extrinsics<S: Source>(
 						hover: "".to_string(),
 						doturl: DotUrl{extrinsic:Some(i as u32), ..blockurl.clone()},
 						flattern:"can't yet decode.".to_string(),
-						url: url.to_string(),
+						url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
@@ -461,7 +454,6 @@ async fn process_extrinsics<S: Source>(
 		}
 		let (events, _start_link) = get_events_for_block(
 			source,
-			&url,
 			block_hash,
 			&sender,
 			&blockurl,
@@ -491,9 +483,7 @@ async fn process_extrinsics<S: Source>(
 
 // Find the timestamp for a block (cut down version of `process_extrinsics`)
 async fn find_timestamp<S: Source>(
-	// mut blockurl: DotUrl,
 	block_hash: H256,
-	url: &str,
 	source: &mut S,
 	metad: &Metadata,
 ) -> Option<i64> {
@@ -1148,7 +1138,6 @@ pub struct PolkaBlock {
 // Timestamp only needs to be provided when relay chain.
 async fn get_events_for_block(
 	source: &mut impl Source,
-	url: &str,
 	blockhash: H256,
 	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
@@ -1188,7 +1177,7 @@ async fn get_events_for_block(
 					let start_link = vec![];
 					// let end_link = vec![];
 					let mut details = Details::default();
-					details.url = url.to_string();
+					details.url = source.url().to_string();
 					details.doturl = DotUrl { ..block_url.clone() };
 
 					// println!("start event");
@@ -1401,7 +1390,7 @@ async fn get_events_for_block(
 				}
 			}
 		} else {
-			println!("can't decode events {} / {}", &url, blocknum);
+			println!("can't decode events {} / {}", &source.url(), blocknum);
 		};
 	} else {
 		warn!("could not find events {}", &blocknum);

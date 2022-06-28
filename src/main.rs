@@ -312,7 +312,7 @@ fn source_data(
 							&url,
 							datasource::RawDataSource::new(&url),
 						);
-						let para_id = datasource::get_parachain_id_from_url(&mut source, &url)
+						let para_id = datasource::get_parachain_id_from_url(&mut source)
 							.unwrap_or(Some(9999u32.try_into().unwrap()));
 						let parachain_name =
 							datasource::get_parachain_name_sync(&mut source).unwrap();
@@ -1421,6 +1421,19 @@ pub fn print_events(
 				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
 				inspector.selected = Some(details.clone());
 				// info!("Gee Willikers, it's a click! {:?}", e)
+
+// use async_std::task::block_on;
+// 				use serde_json::json;
+// 				let metad = block_on(datasource::get_desub_metadata(&url, &mut source, None)).unwrap();
+// 				if let Ok(extrinsic) =
+// 					decoder::decode_unwrapped_extrinsic(&metad, &mut details.raw.as_slice())
+// 				{
+// 					println!("{:#?}", extrinsic);
+// 				} else {
+// 					println!("could not decode.");
+// 				}
+// 				serde_json::to_value(&value);
+
 
 				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
 				if now - prev < 400 {

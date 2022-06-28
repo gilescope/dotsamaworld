@@ -60,6 +60,8 @@ pub trait Source {
 		Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
 		(),
 	>;
+
+	fn url(&self) -> &str;
 }
 
 pub struct RawDataSource {
@@ -115,6 +117,7 @@ impl RawDataSource {
 		);
 		self.api.as_mut().unwrap()
 	}
+
 }
 
 #[async_trait(?Send)]
@@ -223,5 +226,9 @@ impl Source for RawDataSource {
 		} else {
 			Err(())
 		}
+	}
+
+	fn url(&self) -> &str {
+		&self.ws_url
 	}
 }

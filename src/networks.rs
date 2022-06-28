@@ -131,7 +131,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<&'static str>> {
 					// Auction Batch 6
 					"prod-kusama-collator-01.mangatafinance.cloud", // 26th
 					// 27th renewal
-					// 28th renewal
+					// 28th renewal     double click faster, yaw and pitch
 					// 29th renewal
 					"rpc.turing.oak.tech", /* 30th
 											* Auction Batch 7
