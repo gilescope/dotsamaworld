@@ -5,8 +5,8 @@
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
-use bevy_egui::EguiPlugin;
 use bevy_ecs::prelude::Component;
+use bevy_egui::EguiPlugin;
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 //use bevy_kira_audio::AudioPlugin;
@@ -140,8 +140,8 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		boost: 5.,
 	});
 	app.insert_resource(ui::UrlBar::new(
-		 "dotsama:/1//10504599".to_string()
-		, Utc::now().naive_utc(),
+		"dotsama:/1//10504599".to_string(),
+		Utc::now().naive_utc(),
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
@@ -190,7 +190,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 		// .register_inspectable::<Details>()
 		// .add_plugin(DebugEventsPickingPlugin)
 		.add_plugin(PolylinePlugin)
-.add_plugin(EguiPlugin)
+		.add_plugin(EguiPlugin)
 		.insert_resource(ui::OccupiedScreenSpace::default())
 		.add_system(movement::scroll)
 		.add_startup_system(setup);
@@ -202,7 +202,7 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	app.add_system(movement::player_move_arrows)
 		.add_system(rain)
 		.add_system(source_data)
-			// .add_system(pad_system)
+		// .add_system(pad_system)
 		// .add_plugin(LogDiagnosticsPlugin::default())
 		.add_plugin(FrameTimeDiagnosticsPlugin::default())
 		// .add_system(ui::update_camera_transform_system)
@@ -261,7 +261,6 @@ fn source_data(
 		let dot_url = DotUrl::parse(&event.source);
 
 		let is_live = if let Some(timestamp) = event.timestamp {
-			
 			// if time is now or in future then we are live mode.
 			let is_live = timestamp >= (Utc::now().timestamp() * 1000);
 			if is_live {
@@ -292,7 +291,6 @@ fn source_data(
 		println!("dot url {:?}", &dot_url);
 		//let as_of = Some(dot_url.clone());
 		println!("Block number selected for relay chains: {:?}", &as_of);
-		
 
 		// let is_self_sovereign = selected_env.is_self_sovereign();
 		let relays = networks::get_network(&selected_env)
@@ -696,7 +694,10 @@ fn render_block(
 							// Skip data we no longer care about because the datasource has changed
 							let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
 							if block.data_epoc != now_epoc {
-								println!("discarding out of date block made at {} but we are at {}", block.data_epoc, now_epoc);
+								println!(
+									"discarding out of date block made at {} but we are at {}",
+									block.data_epoc, now_epoc
+								);
 								continue
 							}
 
@@ -767,13 +768,14 @@ fn render_block(
 								} / 400;
 
 								let transform = Transform::from_translation(Vec3::new(
-										0. + (block_num as f32),
-										if is_relay { 0. } else { LAYER_GAP },
-										(RELAY_CHAIN_CHASM_WIDTH +
-											BLOCK_AND_SPACER *
-												chain_info.chain_index.abs() as f32) * rflip,
-									));
-								// println!("block created at {:?} blocknum {}", transform, block_num);
+									0. + (block_num as f32),
+									if is_relay { 0. } else { LAYER_GAP },
+									(RELAY_CHAIN_CHASM_WIDTH +
+										BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+										rflip,
+								));
+								// println!("block created at {:?} blocknum {}", transform,
+								// block_num);
 
 								let mut bun = commands.spawn_bundle(PbrBundle {
 									mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
@@ -1051,7 +1053,7 @@ fn add_blocks<'a>(
 					//if this id already exists then this is the destination, not the source...
 					for (entity, id, source_global) in links.iter() {
 						if id.id == *link {
-							println!("creating rainbow!");
+							// println!("creating rainbow!");
 
 							let mut vertices = vec![
 								source_global.translation,
@@ -1363,8 +1365,8 @@ pub fn print_events(
 ) {
 	let ctx = &mut egui_context.ctx_mut();
 	// If we're over an egui area we should not be trying to select anything.
-	if ctx.is_pointer_over_area(){
-		return;
+	if ctx.is_pointer_over_area() {
+		return
 	}
 	if urlbar.changed() {
 		urlbar.reset_changed();
@@ -1418,32 +1420,38 @@ pub fn print_events(
 			},
 			PickingEvent::Clicked(entity) => {
 				let now = Utc::now().timestamp_millis();
+				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
 				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+				if let Some(selected) = &inspector.selected {
+					if selected.doturl == details.doturl && !(now - prev < 400) {
+						inspector.selected = None;
+						return
+					}
+				}
 				inspector.selected = Some(details.clone());
+
 				// info!("Gee Willikers, it's a click! {:?}", e)
 
-// use async_std::task::block_on;
-// 				use serde_json::json;
-// 				let metad = block_on(datasource::get_desub_metadata(&url, &mut source, None)).unwrap();
-// 				if let Ok(extrinsic) =
-// 					decoder::decode_unwrapped_extrinsic(&metad, &mut details.raw.as_slice())
-// 				{
-// 					println!("{:#?}", extrinsic);
-// 				} else {
-// 					println!("could not decode.");
-// 				}
-// 				serde_json::to_value(&value);
+				// use async_std::task::block_on;
+				// 				use serde_json::json;
+				// 				let metad = block_on(datasource::get_desub_metadata(&url, &mut source,
+				// None)).unwrap(); 				if let Ok(extrinsic) =
+				// 					decoder::decode_unwrapped_extrinsic(&metad, &mut details.raw.as_slice())
+				// 				{
+				// 					println!("{:#?}", extrinsic);
+				// 				} else {
+				// 					println!("could not decode.");
+				// 				}
+				// 				serde_json::to_value(&value);
 
-
-				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
 				if now - prev < 400 {
 					println!("double click {}", now - prev);
-					// if you double clicked on just a chain then you really don't want to get sent to
-					// the middle of nowhere!
+					// if you double clicked on just a chain then you really don't want to get sent
+					// to the middle of nowhere!
 					if details.doturl.extrinsic.is_some() || details.doturl.event.is_some() {
 						println!("double clicked to {}", details.doturl);
-						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away from
-							 // it.
+						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away
+							 // from it.
 						dest.location = Some(global_location.translation);
 					}
 				}
@@ -1460,8 +1468,8 @@ use bevy::diagnostic::Diagnostics;
 fn update_visibility(
 	mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
 	player_query: Query<&Transform, With<Viewport>>,
-	diagnostics: Res<'_, Diagnostics>, 
-	mut visible_width: ResMut<Width>
+	diagnostics: Res<'_, Diagnostics>,
+	mut visible_width: ResMut<Width>,
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
@@ -1470,16 +1478,20 @@ fn update_visibility(
 
 	// If nothing's visible because we're far away make a few things visible so you know which dir
 	// to go in and can double click to get there...
-	#[cfg(feature="adaptive-fps")]
+	#[cfg(feature = "adaptive-fps")]
 	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
 		let min = diag.history_len();
 		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
 			// println!("avg {}\t{}", avg, visible_width.0);
 			let target = 30.;
 			let avg = avg as f32;
-			if avg < target && visible_width.0 > 100. { visible_width.0 -= (target - avg)/4.; }
+			if avg < target && visible_width.0 > 100. {
+				visible_width.0 -= (target - avg) / 4.;
+			}
 			// Because of frame rate differences it will go up much faster than it will go down!
-			else if avg > target && visible_width.0 < 1000. { visible_width.0 += (avg - target)/32.; }
+			else if avg > target && visible_width.0 < 1000. {
+				visible_width.0 += (avg - target) / 32.;
+			}
 		}
 	}
 
@@ -1493,7 +1505,6 @@ fn update_visibility(
 			vis_count += 1;
 		}
 	}
-
 
 	if vis_count == 0 {
 		for (mut vis, transform, _) in entity_query.iter_mut().take(1000) {

@@ -1,7 +1,7 @@
 use crate::Env;
 use std::num::NonZeroU32;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct DotUrl {
 	pub env: Env,
 	// 0 is the no mans land in the middle

@@ -68,7 +68,7 @@ async fn get_desub_metadata<S: Source>(
 				println!("trying to get metadata from {}", source.url());
 				// It might take a while for substrate node that spin up the RPC server.
 				// Thus, the connection might get rejected a few times.
-				
+
 				let res = source.fetch_metadata(as_of).await;
 				println!("finished trying {}", url);
 				match res {
@@ -131,16 +131,11 @@ pub fn is_relay_chain(url: &str) -> bool {
 	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
 
-pub fn get_parachain_id_from_url<S: Source>(
-	source: &mut S,
-) -> Result<Option<NonZeroU32>, ()> {
+pub fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, ()> {
 	Ok(async_std::task::block_on(get_parachain_id(source)))
 }
 
-async fn get_metadata_version(
-	source: &mut impl Source,
-	hash: sp_core::H256,
-) -> Option<String> {
+async fn get_metadata_version(source: &mut impl Source, hash: sp_core::H256) -> Option<String> {
 	let storage_key =
 		hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8").unwrap();
 	let call = source
@@ -263,17 +258,16 @@ pub async fn watch_blocks<S: Source>(
 				}
 
 				// Timestamp is unlikely to change so we can use generic metadata
-				let metad_current = get_desub_metadata( &mut source, None).await.unwrap();
+				let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
 				let basetime = BASETIME.load(Ordering::Relaxed);
 				let mut time_for_blocknum = |blocknum: u32| {
 					let mut block_hash: Option<sp_core::H256> =
-							block_on(get_block_hash(&mut source, blocknum));
+						block_on(get_block_hash(&mut source, blocknum));
 					for _ in 0..10 {
 						if block_hash.is_some() {
-							break;
+							break
 						}
-						block_hash =
-							block_on(get_block_hash(&mut source, blocknum));
+						block_hash = block_on(get_block_hash(&mut source, blocknum));
 					}
 
 					block_on(find_timestamp(
@@ -289,7 +283,12 @@ pub async fn watch_blocks<S: Source>(
 					&mut time_for_blocknum,
 					None,
 				);
-				debug_assert!(as_of.block_number.is_some(), "could not convert time {} to blocknum for {}", basetime, as_of);
+				debug_assert!(
+					as_of.block_number.is_some(),
+					"could not convert time {} to blocknum for {}",
+					basetime,
+					as_of
+				);
 			}
 
 			let mut last_timestamp = None;
@@ -392,7 +391,7 @@ async fn process_extrinsics<S: Source>(
 
 		let version = get_metadata_version(source, block_hash).await;
 		let metad = if let Some(version) = version {
-			get_desub_metadata( source, Some((version, block_hash))).await
+			get_desub_metadata(source, Some((version, block_hash))).await
 		} else {
 			//TODO: This is unlikely to work. we should try the oldest metadata we have instead...
 			get_desub_metadata(source, None).await
@@ -434,15 +433,15 @@ async fn process_extrinsics<S: Source>(
 				// println!("can't decode block ext {}-{} {}", block_number, i, &url);
 				exts.push(DataEntity::Extrinsic {
 					// id: (block_number, extrinsic_url.extrinsic.unwrap()),
-					args:vec![],
+					args: vec![],
 					contains: vec![],
 					raw: ex_slice.as_slice().to_vec(),
 					start_link: vec![],
-					end_link:vec![],
+					end_link: vec![],
 					details: Details {
 						hover: "".to_string(),
-						doturl: DotUrl{extrinsic:Some(i as u32), ..blockurl.clone()},
-						flattern:"can't yet decode.".to_string(),
+						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
+						flattern: "can't yet decode.".to_string(),
 						url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
@@ -452,16 +451,10 @@ async fn process_extrinsics<S: Source>(
 				});
 			}
 		}
-		let (events, _start_link) = get_events_for_block(
-			source,
-			block_hash,
-			&sender,
-			&blockurl,
-			&metad,
-			timestamp.clone(),
-		)
-		.await
-		.or(Err(()))?;
+		let (events, _start_link) =
+			get_events_for_block(source, block_hash, &sender, &blockurl, &metad, timestamp.clone())
+				.await
+				.or(Err(()))?;
 
 		let mut handle = tx.lock().unwrap();
 
@@ -919,8 +912,8 @@ async fn process_extrisic<'a>(
 				// println!("SEND MSG v0 hash {}", msg_id);
 				start_link.push((msg_id, LinkType::Teleport));
 			}
-			// println!("first time seeen");
-			// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
+		// println!("first time seeen");
+		// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
 		} else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 			let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 			let dest: NonZeroU32 = dest.parse().unwrap();
@@ -930,8 +923,8 @@ async fn process_extrisic<'a>(
 				// println!("SEND MSG v0 hash {}", msg_id);
 				start_link.push((msg_id, LinkType::Teleport));
 			}
-			// println!("first time seeen");
-			// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
+		// println!("first time seeen");
+		// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
 		} else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 			let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 			let dest: NonZeroU32 = dest.parse().unwrap();
@@ -1060,10 +1053,6 @@ async fn process_extrisic<'a>(
 	// let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode
 	// extrinsic");
 }
-
-
-
-
 
 use desub_current::TypeId;
 async fn check_reserve_asset<'a, 'b>(

@@ -117,7 +117,6 @@ impl RawDataSource {
 		);
 		self.api.as_mut().unwrap()
 	}
-
 }
 
 #[async_trait(?Send)]

@@ -24,24 +24,23 @@ impl Default for MouseCapture {
 // From dolly but not exposed
 // https://github.com/h3r2tic/dolly/blob/0276fb4b5fe2e11c70919af7dbbcd645711c8f48/src/util.rs
 pub(crate) trait Interpolate {
-    fn interpolate(self, other: Self, t: f32) -> Self;
+	fn interpolate(self, other: Self, t: f32) -> Self;
 }
 
 impl Interpolate for Vec3 {
-    fn interpolate(self, other: Self, t: f32) -> Self {
-        Vec3::lerp(self, other, t)
-    }
+	fn interpolate(self, other: Self, t: f32) -> Self {
+		Vec3::lerp(self, other, t)
+	}
 }
 
 impl Interpolate for Quat {
-    fn interpolate(self, other: Self, t: f32) -> Self {
-        // Technically should be a `slerp` for framerate independence, but the latter
-        // will rotate in the negative direction when interpolating a 180..360 degree rotation
-        // to the 0..180 range. See the comment about `yaw_degrees` in `YawPitch` for more details.
-        Quat::lerp(self.normalize(), other.normalize(), t).normalize()
-    }
+	fn interpolate(self, other: Self, t: f32) -> Self {
+		// Technically should be a `slerp` for framerate independence, but the latter
+		// will rotate in the negative direction when interpolating a 180..360 degree rotation
+		// to the 0..180 range. See the comment about `yaw_degrees` in `YawPitch` for more details.
+		Quat::lerp(self.normalize(), other.normalize(), t).normalize()
+	}
 }
-
 
 #[derive(Default)]
 pub struct Destination {
@@ -154,10 +153,10 @@ pub fn player_move_arrows(
 			// transform.rotation = final_transform.rotation;
 			// println!("dolly: {} {}",  final_transform.position,  final_transform.rotation);
 			const SMOOTHNESS_MULT: f32 = 8.0;
-			let smoothness_param : f32 = 3.;
-        	// Calculate the exponential blending based on frame time
-        	let interp_t = 1.0
-            - (-SMOOTHNESS_MULT * time.delta_seconds() / smoothness_param.max(1e-5)).exp();
+			let smoothness_param: f32 = 3.;
+			// Calculate the exponential blending based on frame time
+			let interp_t =
+				1.0 - (-SMOOTHNESS_MULT * time.delta_seconds() / smoothness_param.max(1e-5)).exp();
 			transform.translation = transform.translation.interpolate(loc, interp_t);
 			//transform.translation += //transform.translation.interpolate(loc, interp_t);
 			//	 velocity * time.delta_seconds() * settings.speed * dist.sqrt() / 5.;

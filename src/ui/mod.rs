@@ -8,8 +8,8 @@ use bevy_egui::EguiContext;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+use egui::ComboBox;
 use egui_datepicker::DatePicker;
- use egui::ComboBox;
 use std::ops::DerefMut;
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
@@ -29,26 +29,30 @@ pub fn ui_bars_system(
 	mut anchor: ResMut<Anchor>,
 	inspector: Res<Inspector>,
 ) {
-	occupied_screen_space.left = egui::SidePanel::left("left_panel")
-	    .resizable(true)
-	    .show(egui_context.ctx_mut(), |ui| {
-	        // ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+	if inspector.selected.is_some() {
+		occupied_screen_space.left = egui::SidePanel::left("left_panel")
+			.resizable(true)
+			.show(egui_context.ctx_mut(), |ui| {
+				// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 
-			ui.horizontal(|ui| {
-				ui.heading("Selected Details:");
-			});
-ui.separator();
-			if let Some(selected) = &inspector.selected {
-				ui.heading(&selected.variant);
-				ui.heading(&selected.pallet);
+				ui.horizontal(|ui| {
+					ui.heading("Selected Details:");
+				});
+				ui.separator();
+				if let Some(selected) = &inspector.selected {
+					ui.heading(&selected.variant);
+					ui.heading(&selected.pallet);
 					ui.separator();
-			ui.add(egui::Hyperlink::from_label_and_url("open in polkadot.js", &selected.url));
-			}
-		
-	    })
-	    .response
-	    .rect
-	    .width();
+					ui.add(egui::Hyperlink::from_label_and_url(
+						"open in polkadot.js",
+						&selected.url,
+					));
+				}
+			})
+			.response
+			.rect
+			.width();
+	}
 	// occupied_screen_space.right = egui::SidePanel::right("right_panel")
 	//     .resizable(true)
 	//     .show(egui_context.ctx_mut(), |ui| {
@@ -73,7 +77,7 @@ ui.separator();
 				// 			ui.selectable_value(&mut spec.env, Env::Local, "local");
 				// 		}
 				// 	);
-				
+
 				ui.add(
 					DatePicker::<std::ops::Range<NaiveDateTime>>::new(
 						"noweekendhighlight",
