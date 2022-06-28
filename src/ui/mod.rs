@@ -1,8 +1,7 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
- use egui::ImageData;
-use crate::NonZeroU32;
+//  use egui::ImageData;
 use crate::{Anchor, Env, Inspector, Viewport};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
@@ -17,7 +16,7 @@ use std::ops::DerefMut;
 pub struct OccupiedScreenSpace {
 	left: f32,
 	top: f32,
-	right: f32,
+	// right: f32,
 	bottom: f32,
 }
 
@@ -47,7 +46,7 @@ pub fn ui_bars_system(
 											
 					if let Ok(bytes) =	std::fs::read(&format!("assets/branding/{}.jpeg", name)) {
 						let img = egui_extras::image::load_image_bytes( bytes.as_slice()).unwrap();
-						let texture: &egui::TextureHandle = inspector.texture.get_or_insert_with(|| {
+						let _texture: &egui::TextureHandle = inspector.texture.get_or_insert_with(|| {
 							// Load the texture only once.
 							ui.ctx().load_texture(name,
 							egui::ImageData::Color(img))

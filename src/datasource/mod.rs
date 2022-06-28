@@ -398,7 +398,7 @@ async fn process_extrinsics<S: Source>(
 		let got_block_num = block.block_number;
 		let extrinsics = block.extrinsics;
 		blockurl.block_number = Some(got_block_num);
-		let block_number = blockurl.block_number.unwrap();
+		// let block_number = blockurl.block_number.unwrap();
 
 		let version = get_metadata_version(source, block_hash).await;
 		let metad = if let Some(version) = version {
@@ -450,7 +450,7 @@ async fn process_extrinsics<S: Source>(
 					start_link: vec![],
 					end_link: vec![],
 					details: Details {
-						hover: "".to_string(),
+						// hover: "".to_string(),
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 						flattern: "can't yet decode.".to_string(),
 						url: source.url().to_string(),
@@ -492,15 +492,15 @@ async fn find_timestamp<S: Source>(
 	metad: &Metadata,
 ) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
-		for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
+		for encoded_extrinsic in block.extrinsics.iter() {
 			let ex_slice =
 				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 			if let Ok(extrinsic) =
 				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
 			{
-				let pallet = extrinsic.call_data.pallet_name.to_string();
-				let variant = extrinsic.call_data.ty.name().to_owned();
-				if pallet == "Timestamp" && variant == "set" {
+				// let pallet = extrinsic.call_data.pallet_name.to_string();
+				// let variant = extrinsic.call_data.ty.name().to_owned();
+				if extrinsic.call_data.pallet_name == "Timestamp" && extrinsic.call_data.ty.name() == "set" {
 					if let ValueDef::Primitive(Primitive::U64(val)) =
 						extrinsic.call_data.arguments[0].value
 					{
@@ -531,7 +531,7 @@ async fn process_extrisic<'a>(
 	url: &str,
 ) -> Option<DataEntity> {
 	let block_number = extrinsic_url.block_number.unwrap();
-	let para_id = extrinsic_url.para_id.clone();
+	// let para_id = extrinsic_url.para_id.clone();
 	// let s : String = ext_bytes;
 	// ext_bytes.using_encoded(|ref slice| {
 	//     assert_eq!(slice, &b"\x0f");
@@ -914,9 +914,9 @@ async fn process_extrisic<'a>(
 		let mut flat1 = HashMap::new();
 		flattern(&ext.call_data.arguments[1].value, "", &mut flat1);
 
-		if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+		if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
 			let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
+			// let dest: NonZeroU32 = dest.parse().unwrap();
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
@@ -925,9 +925,9 @@ async fn process_extrisic<'a>(
 			}
 		// println!("first time seeen");
 		// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
-		} else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+		} else if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 			let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
+			// let dest: NonZeroU32 = dest.parse().unwrap();
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
@@ -936,9 +936,9 @@ async fn process_extrisic<'a>(
 			}
 		// println!("first time seeen");
 		// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
-		} else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+		} else if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 			let to = flat1.get(".V0.0.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
+			// let dest: NonZeroU32 = dest.parse().unwrap();
 
 			if let Some(to) = to {
 				let msg_id = format!("{}-{}", block_number, please_hash(to));
@@ -1050,7 +1050,7 @@ async fn process_extrisic<'a>(
 		start_link,
 		end_link,
 		details: Details {
-			hover: "".to_string(),
+			// hover: "".to_string(),
 			doturl: extrinsic_url,
 			flattern: format!("{results:#?}"),
 			url: url.to_string(),
@@ -1077,12 +1077,12 @@ async fn check_reserve_asset<'a, 'b>(
 	let mut flat1 = HashMap::new();
 	flattern(&args[1].value, "", &mut flat1);
 
-	if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+	if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
 		let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
 
 		println!("first time!");
 		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
+		// let dest: NonZeroU32 = dest.parse().unwrap();
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
@@ -1091,11 +1091,11 @@ async fn check_reserve_asset<'a, 'b>(
 		}
 		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
-	if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+	if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 
 		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
+		// let dest: NonZeroU32 = dest.parse().unwrap();
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
@@ -1104,11 +1104,11 @@ async fn check_reserve_asset<'a, 'b>(
 		}
 		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
-	if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+	if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 
 		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
+		// let dest: NonZeroU32 = dest.parse().unwrap();
 
 		if let Some(to) = to {
 			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));

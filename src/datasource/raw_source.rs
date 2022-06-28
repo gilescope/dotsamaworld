@@ -25,10 +25,6 @@ impl AgnosticBlock {
 /// A way to source untransformed raw data.
 #[async_trait(?Send)]
 pub trait Source {
-	// async fn client(&mut self) -> &mut Client<DefaultConfig>;
-
-	// async fn get_api(&mut self) -> &mut RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>;
-
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
@@ -38,8 +34,6 @@ pub trait Source {
 		&mut self,
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError>;
-
-	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError>;
 
 	async fn fetch_storage(
 		&mut self,
@@ -161,10 +155,6 @@ impl Source for RawDataSource {
 			}
 		}
 	}
-
-	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
-	// 	self.client().await.rpc().system_chain().await.map(|res| Some(res))
-	// }
 
 	async fn fetch_storage(
 		&mut self,

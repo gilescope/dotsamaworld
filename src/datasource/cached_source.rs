@@ -5,7 +5,6 @@ use futures::TryFutureExt;
 use sp_core::H256;
 
 pub struct CachedDataSource<S: Source> {
-	ws_url: String,
 	underlying_source: S,
 	urlhash: u64,
 }
@@ -18,7 +17,7 @@ where
 {
 	pub fn new(url: &str, underlying_source: S) -> Self {
 		let urlhash = super::please_hash(&url);
-		Self { ws_url: url.to_string(), underlying_source, urlhash }
+		Self { underlying_source, urlhash }
 	}
 }
 
@@ -106,18 +105,6 @@ where
 			self.underlying_source.fetch_block(None).await
 		}
 	}
-
-	// async fn fetch_chainname(&mut self) -> Result<Option<String>, BError> {
-	// 	memoise!(
-	// 		"chainname",
-	// 		self,
-	// 		b"chainname".as_slice(),
-	// 		self.underlying_source
-	// 			.fetch_chainname()
-	// 			.map_ok(|res| res.map(|name| name.as_bytes().to_vec()))
-	// 	)
-	// 	.map(|op| op.map(|bytes| String::from_utf8_lossy(bytes.as_slice()).to_string()))
-	// }
 
 	async fn fetch_storage(
 		&mut self,

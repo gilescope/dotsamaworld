@@ -20,6 +20,8 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use crate::movement::Destination;
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
+#[cfg(feature = "adaptive-fps")]
+use bevy::diagnostic::Diagnostics;
 // use scale_info::build;
 use std::{
 	collections::HashMap,
@@ -491,33 +493,33 @@ enum BuildDirection {
 	Down,
 }
 
-fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
-	let res = match entity {
-		DataEntity::Event(DataEvent { details, .. }) => {
-			format!("{:#?}", details)
-		},
-		DataEntity::Extrinsic {
-			// id: _,
-			args,
-			contains,
-			details,
-			..
-		} => {
-			let kids = if contains.is_empty() {
-				String::new()
-			} else {
-				format!(" contains {} extrinsics", contains.len())
-			};
-			format!("{} {} {}\n{:#?}", details.pallet, details.variant, kids, args)
-		},
-	};
+// fn format_entity(entity: &DataEntity) -> String {
+// 	let res = match entity {
+// 		DataEntity::Event(DataEvent { details, .. }) => {
+// 			format!("{:#?}", details)
+// 		},
+// 		DataEntity::Extrinsic {
+// 			// id: _,
+// 			args,
+// 			contains,
+// 			details,
+// 			..
+// 		} => {
+// 			let kids = if contains.is_empty() {
+// 				String::new()
+// 			} else {
+// 				format!(" contains {} extrinsics", contains.len())
+// 			};
+// 			format!("{} {} {}\n{:#?}", details.pallet, details.variant, kids, args)
+// 		},
+// 	};
 
-	// if let Some(pos) = res.find("data: Bytes(") {
-	//     res.truncate(pos + "data: Bytes(".len());
-	//     res.push_str("...");
-	// }
-	res
-}
+// 	// if let Some(pos) = res.find("data: Bytes(") {
+// 	//     res.truncate(pos + "data: Bytes(".len());
+// 	//     res.push_str("...");
+// 	// }
+// 	res
+// }
 
 #[derive(Clone)]
 pub enum DataEntity {
@@ -1121,7 +1123,7 @@ fn add_blocks<'a>(
 
 				bun.insert_bundle(PickableBundle::default())
 					.insert(Details {
-						hover: format_entity(&chain_info.chain_ws, block),
+						// hover: format_entity(block),
 						// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
 						doturl: block.dot().clone(),
 						flattern: block.details().flattern.clone(),
@@ -1417,7 +1419,7 @@ pub fn print_events(
 
 				match e {
 					HoverEvent::JustEntered(entity) => {
-						let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+						let (_entity, details, _global_location) = query2.get_mut(*entity).unwrap();
 						inspector.hovered = Some(if details.doturl.extrinsic.is_some() {
 							format!("{} - {} ({})", details.doturl, details.variant, details.pallet)
 						} else {
@@ -1476,14 +1478,18 @@ struct Width(f32);
 
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
-use bevy::diagnostic::Diagnostics;
+
 fn update_visibility(
 	mut entity_low_midfi: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>, Without<HiFi>, Without<MedFi>)>,
 	mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
 	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
+	#[cfg(feature = "adaptive-fps")]
 	diagnostics: Res<'_, Diagnostics>,
+	#[cfg(feature = "adaptive-fps")]
 	mut visible_width: ResMut<Width>,
+	#[cfg(not(feature = "adaptive-fps"))]
+	visible_width: Res<Width>,
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
@@ -1534,7 +1540,7 @@ fn update_visibility(
 	}
 
 	if vis_count == 0 {
-		for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
+		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
 			vis.is_visible = true;
 		}
 	}
