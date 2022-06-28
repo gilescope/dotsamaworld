@@ -45,6 +45,8 @@ If you right click on an extrinsic it will open the polkadot-js decode screen fo
  - roll x, z
  - yaw q, e
  - pitch [, ]
+ - p = toggle to pause/unpause data feeds.
+ - o = hold down for slow motion mode.
 
 ## Prerequisites
 

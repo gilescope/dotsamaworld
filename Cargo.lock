@@ -751,7 +751,7 @@ dependencies = [
 [[package]]
 name = "bevy_flycam"
 version = "0.7.0"
-source = "git+https://github.com/gilescope/bevy_flycam?rev=239b8977b4c8948806e7d5e88d8e2fa934ac46a2#239b8977b4c8948806e7d5e88d8e2fa934ac46a2"
+source = "git+https://github.com/gilescope/bevy_flycam?rev=38f8fa45b72b3546c754e62e54a1505ed2723bac#38f8fa45b72b3546c754e62e54a1505ed2723bac"
 dependencies = [
  "bevy 0.7.0",
 ]

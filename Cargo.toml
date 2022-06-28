@@ -30,7 +30,7 @@ chrono= { version = "*", default-features = false }
 #[target.'cfg(target_os = "linux")'.dependencies]
 
 winit = { version = "*", features = ["x11"] }
-bevy_flycam = { git="https://github.com/gilescope/bevy_flycam", optional = true, rev="239b8977b4c8948806e7d5e88d8e2fa934ac46a2" }
+bevy_flycam = { git="https://github.com/gilescope/bevy_flycam", optional = true, rev="38f8fa45b72b3546c754e62e54a1505ed2723bac" }
 bevy_mod_picking = "0.6"
 hex = "*"
 # bevy-inspector-egui-derive = "*"
