@@ -16,7 +16,7 @@ use bevy_mod_picking::*;
 //use bevy::window::PresentMode;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
-use crate::{movement::Destination, ui::doturl};
+use crate::movement::Destination;
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
@@ -37,7 +37,6 @@ use std::sync::atomic::AtomicI64;
 mod datasource;
 mod movement;
 mod style;
-use egui::Ui;
 mod ui;
 use crate::ui::{Details, DotUrl};
 // use bevy_inspector_egui::RegisterInspectable;
@@ -47,7 +46,6 @@ use bevy::winit::WinitSettings;
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use chrono::prelude::*;
 use datasource::DataUpdate;
-use egui_datepicker::DatePicker;
 use sp_core::H256;
 use std::convert::{AsRef, TryInto};
 #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
@@ -83,6 +81,9 @@ static BASETIME: AtomicI64 = AtomicI64::new(0);
 
 /// Bump this to tell the current datasources to stop.
 static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
+
+/// if you need bestest fps...
+static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 
 static LIVE: &str = "dotsama:live";
 
@@ -245,7 +246,7 @@ fn source_data(
 	mut sovereigns: ResMut<Sovereigns>,
 	details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<Entity, With<ClearMe>>,
-	mut dest: ResMut<Destination>,
+	// mut dest: ResMut<Destination>,
 	mut spec: ResMut<UrlBar>,
 ) {
 	for event in datasource_events.iter() {
@@ -455,7 +456,8 @@ fn draw_chain_rect(
 		})
 		.insert(Name::new("Blockchain"))
 		.insert(ClearMeAlwaysVisible)
-		.insert_bundle(PickableBundle::default());
+		// .insert_bundle(PickableBundle::default())
+		;
 }
 
 fn clear_world(
