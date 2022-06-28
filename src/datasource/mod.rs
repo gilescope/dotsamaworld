@@ -354,7 +354,6 @@ pub async fn watch_blocks<S: Source>(
 			if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
 				// println!("subscribed!");
 				while let Some(Ok(block_hash)) = block_headers.next().await {
-					println!("got live block");
 					let _ = process_extrinsics(
 						&tx,
 						chain_info.chain_url.clone(),
@@ -500,7 +499,9 @@ async fn find_timestamp<S: Source>(
 			{
 				// let pallet = extrinsic.call_data.pallet_name.to_string();
 				// let variant = extrinsic.call_data.ty.name().to_owned();
-				if extrinsic.call_data.pallet_name == "Timestamp" && extrinsic.call_data.ty.name() == "set" {
+				if extrinsic.call_data.pallet_name == "Timestamp" &&
+					extrinsic.call_data.ty.name() == "set"
+				{
 					if let ValueDef::Primitive(Primitive::U64(val)) =
 						extrinsic.call_data.arguments[0].value
 					{
