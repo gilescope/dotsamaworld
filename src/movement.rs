@@ -1,6 +1,6 @@
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
-use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME};
+use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
 use bevy::{
 	core::Time,
 	ecs::system::{Query, Res},
@@ -12,7 +12,6 @@ use bevy::{
 #[cfg(feature = "normalmouse")]
 use bevy_flycam::MovementSettings;
 use std::sync::atomic::Ordering;
-
 pub struct MouseCapture(pub bool);
 
 impl Default for MouseCapture {
@@ -88,7 +87,12 @@ pub fn player_move_arrows(
 		if keys.just_released(KeyCode::Escape) {
 			toggle_mouse_capture.0 = !toggle_mouse_capture.0;
 		}
-
+		if keys.just_released(KeyCode::P) {
+			let current = PAUSE_DATA_FETCH.load(Ordering::Relaxed);
+			let new = if current == 0 { 1 } else { 0 };
+			PAUSE_DATA_FETCH.store(new, Ordering::Relaxed);
+			println!("fetching new data set to {}", new);
+		}
 		for _key in keys.get_pressed() {
 			if window.is_focused() {
 				// match key {
@@ -109,7 +113,7 @@ pub fn player_move_arrows(
 				//     //     }
 				//     // }
 
-				//     _ => (),
+				// _ => (),
 				// }
 				LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
 				break

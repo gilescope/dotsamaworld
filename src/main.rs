@@ -122,6 +122,11 @@ pub struct Anchor {
 	pub follow_chain: bool,
 }
 
+#[derive(Component)]
+pub struct HiFi;
+#[derive(Component)]
+pub struct MedFi;
+
 #[async_std::main]
 async fn main() -> color_eyre::eyre::Result<()> {
 	color_eyre::install()?;
@@ -1129,7 +1134,8 @@ fn add_blocks<'a>(
 					})
 					.insert(ClearMe)
 					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-					.insert(Name::new("Extrinsic"));
+					.insert(Name::new("Extrinsic"))
+				    .insert(MedFi);
 				// .insert(Aabb::from_min_max(
 				//     Vec3::new(0., 0., 0.),
 				//     Vec3::new(1., 1., 1.),
@@ -1236,7 +1242,8 @@ fn add_blocks<'a>(
 				.insert(entity.details.clone())
 				.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
 				.insert(Name::new("BlockEvent"))
-				.insert(ClearMe);
+				.insert(ClearMe)
+				.insert(HiFi);
 			// .insert(Aabb::from_min_max(
 			//     Vec3::new(0., 0., 0.),
 			//     Vec3::new(1., 1., 1.),
@@ -1450,7 +1457,7 @@ pub fn print_events(
 					println!("double click {}", now - prev);
 					// if you double clicked on just a chain then you really don't want to get sent
 					// to the middle of nowhere!
-					if details.doturl.extrinsic.is_some() || details.doturl.event.is_some() {
+					if details.doturl.block_number.is_some() {
 						println!("double clicked to {}", details.doturl);
 						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away
 							 // from it.
@@ -1468,7 +1475,9 @@ static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
 use bevy::diagnostic::Diagnostics;
 fn update_visibility(
-	mut entity_query: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>)>,
+	mut entity_low_midfi: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>, Without<HiFi>, Without<MedFi>)>,
+	mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
+	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
 	diagnostics: Res<'_, Diagnostics>,
 	mut visible_width: ResMut<Width>,
@@ -1477,6 +1486,7 @@ fn update_visibility(
 
 	let transform: &Transform = player_query.get_single().unwrap();
 	let x = transform.translation.x;
+	let y = transform.translation.y;
 
 	// If nothing's visible because we're far away make a few things visible so you know which dir
 	// to go in and can double click to get there...
@@ -1484,7 +1494,7 @@ fn update_visibility(
 	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
 		let min = diag.history_len();
 		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-			// println!("avg {}\t{}", avg, visible_width.0);
+			println!("avg {}\t{}", avg, visible_width.0);
 			let target = 30.;
 			let avg = avg as f32;
 			if avg < target && visible_width.0 > 100. {
@@ -1501,15 +1511,27 @@ fn update_visibility(
 	let (min, max) = (x - width, x + width);
 
 	let mut vis_count = 0;
-	for (mut vis, transform, _) in entity_query.iter_mut() {
+	for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
 		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
 		if vis.is_visible {
 			vis_count += 1;
 		}
 	}
+	for (mut vis, transform, _,_) in entity_hifi.iter_mut() {
+		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+		if y > 500.{
+			vis.is_visible = false;
+		}
+	}
+	for (mut vis, transform, _,_) in entity_medfi.iter_mut() {
+		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+		if y > 800.{
+			vis.is_visible = false;
+		}
+	}
 
 	if vis_count == 0 {
-		for (mut vis, transform, _) in entity_query.iter_mut().take(1000) {
+		for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
 			vis.is_visible = true;
 		}
 	}

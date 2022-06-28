@@ -10,7 +10,10 @@ impl Script {
 	fn parse(contents: &str) -> Result<Script, ()> {
 		let mut result = Script::default();
 		for line in contents.lines() {
-			let parts: Vec<_> = line.split(',').collect();
+			let mut parts: Vec<_> = line.split(',').collect();
+			if parts.len() < 3 {
+				parts = line.split(';').collect();
+			}
 			result.moments.push((
 				parts[0].parse().unwrap(),
 				Vec3::new(

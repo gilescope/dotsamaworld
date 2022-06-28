@@ -3,7 +3,7 @@ use self::raw_source::AgnosticBlock;
 use super::polkadot;
 use crate::{
 	polkadot::runtime_types::xcm::VersionedXcm, ui::DotUrl, ABlocks, ChainInfo, DataEntity,
-	DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
+	DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
 use async_std::{stream::StreamExt, task::block_on};
 use bevy::prelude::warn;
@@ -241,6 +241,9 @@ pub async fn watch_blocks<S: Source>(
 				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 					return Ok(())
 				}
+				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+					async_std::task::sleep(Duration::from_secs(2)).await;
+				}
 			}
 		} else {
 			println!("listening to relay chain {:?}", as_of);
@@ -337,6 +340,10 @@ pub async fn watch_blocks<S: Source>(
 				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 					return Ok(())
 				}
+
+				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+					async_std::task::sleep(Duration::from_secs(2)).await;
+				}
 			}
 		}
 	} else {
@@ -362,6 +369,10 @@ pub async fn watch_blocks<S: Source>(
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 						println!("epoc has changed, ending for {:?}.", as_of);
 						return Ok(())
+					}
+
+					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+						async_std::task::sleep(Duration::from_secs(2)).await;
 					}
 				}
 			}
