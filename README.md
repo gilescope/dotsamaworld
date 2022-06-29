@@ -83,16 +83,8 @@ The `r` ones are rotation as a quaternion.
 
 ## Donations
 
-If you like this project please consider participating in the gitcoin grant's round 14 
-where you can help projects get considerable matched funding or to https://www.mriyaaid.org/ .
+If you like this project please consider donating to https://www.mriyaaid.org/ .
 
 ## License
 
 License: MIT/Apache2 just like rust.
-
-## crazy idea holding ground:
-
-https://bevyengine.org/examples/3d/spherical-area-lights/
-https://github.com/therawmeatball/meme-cli
-
-When we go back to being able to run on web would be great to be able to be able to hyperlink to a point in time.
