@@ -115,27 +115,74 @@ pub fn ui_bars_system(
 
 				//TODO: location = alpha blend to 10% everything but XXXX
 				let response = ui.text_edit_singleline(&mut spec.find);
-				let mut found = 0;
 				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
+					let mut results = FindResults { 
+						results: vec![],
+						current_result: 0
+					};
 					if spec.find.len() <= 4 {
 						if let Ok(para_id) = spec.find.parse() {
 							for (loc, details) in entities.iter() {
 								if details.doturl.para_id == Some(para_id) {
 									if details.doturl.block_number.is_some() {
-										destination.location = Some(loc.translation);
-										inspector.selected = Some(details.clone());
-										found += 1;
+										results.results.push((details.clone(), loc.translation));									
 									}
 								}
 							}
 						}
+					} else {
+						if let Ok(maybe_blocknum) = spec.find.parse() {
+							for (loc, details) in entities.iter() {
+								if details.doturl.block_number == Some(maybe_blocknum) {
+									results.results.push((details.clone(), loc.translation));									
+								}
+							}
+						} else {
+							//try hash
+							let find = spec.find().to_lowercase();
+							for (loc, details) in entities.iter() {
+								if details.pallet.to_lowercase().contains(&spec.find) {
+									results.results.push((details.clone(), loc.translation));									
+								}
+							}
+							for (loc, details) in entities.iter() {
+								if details.variant.to_lowercase().contains(&spec.find) {
+									results.results.push((details.clone(), loc.translation));									
+								}
+							}
+
+						}
 					}
 
-					println!("find {}", spec.find);
+					if !results.results.is_empty() {
+						destination.location = Some(results.results[0].1);
+						inspector.selected = Some(results.results[0].0.clone());
+					}
+
+					//println!("find {}", spec.find);
 				}
-				if !spec.find.is_empty() {
-					ui.heading(format!("found: {}", found));
+				if let Some(find_results) = &mut spec.find_results {
+					if ui.button("<").clicked() {
+						if find_results.current_result == 1 {
+							find_results.current_result = find_results.results.len();
+						} else {
+							find_results.current_result -= 1;
+						}
+						destination.location = Some(find_results.results[find_results.current_result].1);
+						inspector.selected = Some(find_results.results[find_results.current_result].0.clone());
+					};
+					ui.heading(format!("{} of {}", find_results.current_result, find_results.results.len()));
+					if ui.button(">").clicked() {
+						if find_results.current_result == find_results.results.len() {
+							find_results.current_result = 1;
+						} else {
+							find_results.current_result += 1;
+						}
+						destination.location = Some(find_results.results[find_results.current_result].1);
+						inspector.selected = Some(find_results.results[find_results.current_result].0.clone());
+					};
 				}
+
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
 					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
 					ui.heading("Follow:");
@@ -213,12 +260,18 @@ pub fn ui_bars_system(
 // 	}
 // }
 
+pub struct FindResults {
+	pub current_result: usize,
+	pub results: Vec<(Details, Vec3)>
+}
+
 pub struct UrlBar {
 	// Maybe this is a find?
 	pub location: String,
 	was_location: String,
 
 	pub find: String,
+	pub find_results: Option<FindResults>,
 
 	pub timestamp: NaiveDateTime,
 	was_timestamp: NaiveDateTime,
@@ -234,6 +287,7 @@ impl UrlBar {
 			was_location: loc_clone,
 			find: String::new(),
 			timestamp,
+			find_results: None,
 			was_timestamp: time_clone,
 			env: Env::Prod,
 		}
