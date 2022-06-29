@@ -71,8 +71,10 @@ You will need to change Cargo.toml to wayland if your using that - at the moment
 
 Note: spacemouse is on by default at the moment.
 
-| Feature    | Description                       |
-| spacemouse | n-degrees of freedom mouse support |
+| Feature      | Description                                        |
+| ------------ | -------------------------------------------------- |
+| spacemouse   | n-degrees of freedom mouse support                 |
+| adaptive-fps | show as far back as your graphics card can support |
 
 ## Recording and Playback
 
