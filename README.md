@@ -1,8 +1,8 @@
-# Dotsama Town
+# Dotsama World
 
 ![code quality](https://badgen.net/badge/code%20quality:/yolo/green?icon=awesome)
 
-Dotsama town is one vision of what's happening in the polkadot ecosystem.
+Dotsama world is one vision of what's happening in the polkadot ecosystem.
 It's an experiment to see what we can see and I look forward to evolving it
 and seeing where it leads to.
 
@@ -18,7 +18,7 @@ Thank you Bevy and all your plugin ecosystem for making this project a real joy 
 
 Pictures are stored in a separate repo to not bloat this one: 
 
-[Dotsama Town - A Visual History](https://github.com/gilescope/dotsamaworld-visual-history)
+[Dotsama World - A Visual History](https://github.com/gilescope/dotsamaworld-visual-history)
 
 There are long roads streatching into the distance - these are the parachains with the two relay chains side by side in the middle.
 
