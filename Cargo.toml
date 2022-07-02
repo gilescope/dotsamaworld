@@ -25,7 +25,7 @@ jsonrpsee-types = "*"
 
 crossbeam-channel = "*"
 egui-datepicker = { git="https://github.com/HU90m/egui-datepicker.git", branch = "for-project-use", default-features = false }
-chrono= { version = "*", default-features = false }
+chrono= { version = "0.4", default-features = false }
 #wasm-bindgen-rayon = "1.0"
 #[target.'cfg(target_os = "linux")'.dependencies]
 
@@ -34,7 +34,9 @@ bevy_flycam = { git="https://github.com/gilescope/bevy_flycam", optional = true,
 bevy_mod_picking = "0.6"
 hex = "*"
 # bevy-inspector-egui-derive = "*"
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+smoldot-light-wasm = { path="/run/media/gilescope/scratch/smoldot/bin/wasm-node/rust", defalult-features = false }
+smoldot-light-base = {path="/run/media/gilescope/scratch/smoldot/bin/light-base", defalult-features = false }
+# smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }m
 parity-scale-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
 bevy_atmosphere = "0.3"
@@ -45,7 +47,7 @@ serde_bytes = "0.11"
 serde_json = "*"
 #rayon = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
-serde = "*"
+serde = "1.0.137"
 bevy_egui = "*"
 egui = "*"
 url = "*"
@@ -60,8 +62,9 @@ desub-current = { git = "https://github.com/paritytech/desub/" }
 # dolly = "0.3"
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.5"
+# smoldot not happy with that
+# [target.'cfg(not(target_env = "msvc"))'.dependencies]
+# tikv-jemallocator = "0.5"
 
 
 # Dependencies for native only.
@@ -89,7 +92,6 @@ wasm-bindgen = "*"
 
 #console_error_panic_hook = { version = "0.1", optional = true }
 
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 
 #subxt = {git= "https://github.com/paritytech/subxt.git"}
 

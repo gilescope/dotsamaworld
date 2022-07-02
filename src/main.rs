@@ -52,13 +52,13 @@ use std::convert::{AsRef, TryInto};
 pub mod polkadot {}
 pub mod recorder;
 
-/// Pick a faster allocator.
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
+// /// Pick a faster allocator if not smoldot.
+// #[cfg(not(target_env = "msvc"))]
+// use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+// #[cfg(not(target_env = "msvc"))]
+// #[global_allocator]
+// static GLOBAL: Jemalloc = Jemalloc;
 
 #[cfg(feature = "spacemouse")]
 pub struct MovementSettings {

@@ -2,10 +2,18 @@ use super::polkadot;
 use crate::polkadot::RuntimeApi;
 use async_std::stream::StreamExt;
 use async_trait::async_trait;
+use core::future;
 use parity_scale_codec::Encode;
+// use core::{
+//     future::Future,
+//     pin::Pin,
+//     task::{Context, Poll},
+//     time::Duration,
+// };
 use sp_core::{Decode, H256};
 use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
-
+use futures::{channel::mpsc};
+use futures::future::BoxFuture;
 #[derive(Encode, Decode)]
 pub struct AgnosticBlock {
 	pub block_number: u32,
@@ -68,6 +76,91 @@ pub struct RawDataSource {
 	ws_url: String,
 	api: Option<RuntimeApi<DefaultConfig, DefaultExtra<DefaultConfig>>>,
 }
+use futures::future::AbortHandle;
+use smoldot_light_wasm::bindings::database_content;
+ use smoldot_light_base::Platform;
+pub struct SmolDataSource{
+	ws_url: String,
+}
+
+impl SmolDataSource {
+	pub fn new(url: &str) -> Self {
+		
+    let (new_task_tx, mut new_task_rx) =
+        mpsc::unbounded::<(String, BoxFuture<'static, ()>)>();
+		let mut client: smoldot_light_base::Client<Vec<futures::future::AbortHandle>, smoldot_light_wasm::platform::Platform> = smoldot_light_base::Client::new(new_task_tx, env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"));
+
+		let json_rpc_running: u32 = 0;
+
+		    // Retrieve the potential relay chains parameter passed through the FFI layer.
+		let potential_relay_chains: Vec<smoldot_light_base::ChainId> = vec![
+			smoldot_light_base::ChainId::from(1000) //TODO: this is not a relay chain.
+		];
+		// let potential_relay_chains: Vec<_> = {
+		// 	let allowed_relay_chains_ptr = usize::try_from(potential_relay_chains_ptr).unwrap();
+		// 	let allowed_relay_chains_len = usize::try_from(potential_relay_chains_len).unwrap();
+
+		// 	let raw_data = unsafe {
+		// 		Box::from_raw(core::slice::from_raw_parts_mut(
+		// 			allowed_relay_chains_ptr as *mut u8,
+		// 			allowed_relay_chains_len * 4,
+		// 		))
+		// 	};
+
+		// 	raw_data
+		// 		.chunks(4)
+		// 		.map(|c| u32::from_le_bytes(<[u8; 4]>::try_from(c).unwrap()))
+		// 		.map(smoldot_light_base::ChainId::from)
+		// 		.collect()
+		// };
+
+		// If `json_rpc_running` is non-zero, then we pass a `Sender<String>` to the `add_client`
+		// function. The client will push on this channel the JSON-RPC responses and notifications.
+		//
+		// After the client has pushed a response or notification, we must then propagate it to the
+		// FFI layer. This is achieved by spawning a task that continuously polls the `Receiver` (see
+		// below).
+		//
+		// When the chain is later removed, we want the task to immediately stop without sending any
+		// additional response or notification to the FFI. This is achieved by storing an
+		// `AbortHandle` as the "user data" of the chain within the client. When the chain is removed,
+		// the client will yield back this `AbortHandle` and we can use it to abort the task.
+		let (json_rpc_responses, responses_rx_and_reg, abort_handle) = if json_rpc_running != 0 {
+			let (tx, rx) = mpsc::channel::<String>(64);
+			let (handle, reg) = futures::future::AbortHandle::new_pair();
+			(Some(tx), Some((rx, reg)), Some(handle))
+		} else {
+			(None, None, None)
+		};
+
+		let polkadot_relay = include_str!("/home/gilescope/git/chainspecs/polkadot/relaychain/chainspec.json");
+
+		let chain_id = client.add_chain(
+			smoldot_light_base::AddChainConfig {
+                user_data: abort_handle.into_iter().collect(),
+                specification: polkadot_relay,
+                database_content: "", // start with empty database TODO optimize
+                json_rpc_responses,
+                potential_relay_chains: potential_relay_chains.into_iter(),
+            }
+		);
+		// smoldot_light_wasm::bindings::init(0,0,0);
+// 
+		// let chain = client.chains_by_key.values().next().unwrap();
+
+
+
+		Self { ws_url: url.to_string() }
+	}
+}
+
+// struct Platform;
+
+// impl smoldot_light_base::Platform for Platform {
+
+// }
+
 
 type BError = subxt::GenericError<std::convert::Infallible>; // Box<dyn std::error::Error>;
 
