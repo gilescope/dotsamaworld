@@ -63,6 +63,29 @@ pub trait Source {
 
 	fn url(&self) -> &str;
 }
+use sube::ws::Backend;
+use std::error::Error;
+use sube::Sube;
+ use subxt::rpc::JsonValue;
+pub struct SubeSource {
+	
+}
+impl SubeSource {
+	async fn new(url: &str) -> Result<(),Box<dyn Error>> {
+		let client: Sube<_> = Backend::new_ws2(url).await.unwrap().into();
+		let meta = client.metadata().await.unwrap();
+	
+		let latest_block = client.query("system/number").await.unwrap();
+		println!("subesnacks {:?}", latest_block);
+		// assert!(
+		// 	latest_block.as_u64().unwrap() > 0,
+		// 	"block {} is greater than 0",
+		// 	latest_block
+		// );
+		Ok(())
+	}
+}
+
 
 pub struct RawDataSource {
 	ws_url: String,
@@ -74,10 +97,12 @@ type BError = subxt::GenericError<std::convert::Infallible>; // Box<dyn std::err
 /// This is the only type that should know about subxt
 impl RawDataSource {
 	pub fn new(url: &str) -> Self {
+		
 		RawDataSource { ws_url: url.to_string(), api: None }
 	}
 
 	async fn client(&mut self) -> &mut Client<DefaultConfig> {
+		SubeSource::new(&self.ws_url).await;
 		&mut self.get_api().await.client
 	}
 

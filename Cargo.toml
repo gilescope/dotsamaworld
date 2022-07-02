@@ -22,6 +22,7 @@ async-trait = "0.1"
 
 futures = "0.3.13"
 jsonrpsee-types = "*"
+sube = {git="https://github.com/virto-network/sube.git", default-features = false, features= ["v14", "wss"] }
 
 crossbeam-channel = "*"
 egui-datepicker = { git="https://github.com/HU90m/egui-datepicker.git", branch = "for-project-use", default-features = false }
