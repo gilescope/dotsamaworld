@@ -72,6 +72,18 @@ impl DotUrl {
 			1
 		}
 	}
+
+	pub fn chain_str(&self) -> String {
+		let mut sov = self.sovereign.unwrap();
+		if sov == -1 {
+			sov = 0;
+		}
+		if let Some(para_id) = self.para_id {
+			format!("{}-{}", sov, u32::from(para_id))
+		} else {
+			format!("{}", sov)
+		}
+	}
 }
 
 impl std::fmt::Display for DotUrl {

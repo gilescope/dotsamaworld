@@ -57,7 +57,7 @@ pub fn player_move_arrows(
 	windows: Res<Windows>,
 	datasource: Res<super::Sovereigns>,
 	mut anchor: ResMut<Anchor>,
-	mut settings: ResMut<MovementSettings>,
+	settings: Res<MovementSettings>,
 	mut query: Query<&mut Transform, With<Viewport>>,
 	mut toggle_mouse_capture: ResMut<MouseCapture>,
 	mut dest: ResMut<Destination>,
@@ -76,10 +76,10 @@ pub fn player_move_arrows(
 		}
 
 		// Don't change the Y axis.
-		let forward = transform.forward();
-		let right = transform.right();
-		let forward = Vec3::new(forward.x, 0., forward.z);
-		let right = Vec3::new(right.x, 0., right.z);
+		// let forward = transform.forward();
+		// let right = transform.right();
+		// let forward = Vec3::new(forward.x, 0., forward.z);
+		// let right = Vec3::new(right.x, 0., right.z);
 
 		if keys.just_released(KeyCode::Tab) {
 			anchor.follow_chain = !anchor.follow_chain;
@@ -125,7 +125,7 @@ pub fn player_move_arrows(
 				dest.location = None;
 				return
 			}
-			velocity = (loc - transform.translation).normalize();
+			// velocity = (loc - transform.translation).normalize();
 			// TODO if near stop....
 			// let current_look = transform.rotation.normalize();
 			// let ideal_look_direction = Quat::from_euler(
@@ -182,13 +182,11 @@ pub fn player_move_arrows(
 pub fn scroll(
 	time: Res<Time>,
 	mut mouse_wheel_events: EventReader<MouseWheel>,
-	windows: Res<Windows>,
 	mut query: Query<&mut Transform, With<Viewport>>,
 ) {
 	for event in mouse_wheel_events.iter() {
 		LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
 		for mut viewport in query.iter_mut() {
-			//  viewport.translation.y -= event.y / 4.;
 			let forward = viewport.forward();
 			viewport.translation += forward * event.y;
 		}

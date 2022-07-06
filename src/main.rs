@@ -2,6 +2,7 @@
 #![feature(hash_drain_filter)]
 #![feature(slice_pattern)]
 #![feature(slice_group_by)]
+#![feature(option_get_or_insert_default)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
@@ -17,6 +18,8 @@ use bevy_mod_picking::*;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use crate::movement::Destination;
+#[cfg(feature = "adaptive-fps")]
+use bevy::diagnostic::Diagnostics;
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 // use scale_info::build;
@@ -97,7 +100,7 @@ pub struct ChainInfo {
 	// Negative is other direction from center.
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
-	pub chain_name: String,
+	// pub chain_name: String,
 }
 
 pub type ABlocks = Arc<
@@ -318,8 +321,8 @@ fn source_data(
 						);
 						let para_id = datasource::get_parachain_id_from_url(&mut source)
 							.unwrap_or(Some(9999u32.try_into().unwrap()));
-						let parachain_name =
-							datasource::get_parachain_name_sync(&mut source).unwrap();
+						// let parachain_name =
+						// datasource::get_parachain_name_sync(&mut source).unwrap();
 
 						(
 							Chain {
@@ -334,7 +337,7 @@ fn source_data(
 										(chain_index + 2) as isize
 									},
 									chain_url: DotUrl { para_id, ..relay_url.clone() },
-									chain_name: parachain_name,
+									// chain_name: parachain_name,
 								},
 							},
 							source,
@@ -454,7 +457,7 @@ fn draw_chain_rect(
 			..Default::default()
 		})
 		.insert(Details {
-			doturl: chain_info.chain_url.clone(),
+			doturl: DotUrl { block_number:None, ..chain_info.chain_url.clone()},
 			flattern: chain_info.chain_ws.to_string(),
 			url: format!("https://polkadot.js.org/apps/?{}", &encoded),
 			..default()
@@ -490,33 +493,33 @@ enum BuildDirection {
 	Down,
 }
 
-fn format_entity(chain_name: &str, entity: &DataEntity) -> String {
-	let res = match entity {
-		DataEntity::Event(DataEvent { details, .. }) => {
-			format!("{:#?}", details)
-		},
-		DataEntity::Extrinsic {
-			// id: _,
-			args,
-			contains,
-			details,
-			..
-		} => {
-			let kids = if contains.is_empty() {
-				String::new()
-			} else {
-				format!(" contains {} extrinsics", contains.len())
-			};
-			format!("{}\n{} {} {}\n{:#?}", chain_name, details.pallet, details.variant, kids, args)
-		},
-	};
+// fn format_entity(entity: &DataEntity) -> String {
+// 	let res = match entity {
+// 		DataEntity::Event(DataEvent { details, .. }) => {
+// 			format!("{:#?}", details)
+// 		},
+// 		DataEntity::Extrinsic {
+// 			// id: _,
+// 			args,
+// 			contains,
+// 			details,
+// 			..
+// 		} => {
+// 			let kids = if contains.is_empty() {
+// 				String::new()
+// 			} else {
+// 				format!(" contains {} extrinsics", contains.len())
+// 			};
+// 			format!("{} {} {}\n{:#?}", details.pallet, details.variant, kids, args)
+// 		},
+// 	};
 
-	// if let Some(pos) = res.find("data: Bytes(") {
-	//     res.truncate(pos + "data: Bytes(".len());
-	//     res.push_str("...");
-	// }
-	res
-}
+// 	// if let Some(pos) = res.find("data: Bytes(") {
+// 	//     res.truncate(pos + "data: Bytes(".len());
+// 	//     res.push_str("...");
+// 	// }
+// 	res
+// }
 
 #[derive(Clone)]
 pub enum DataEntity {
@@ -809,16 +812,17 @@ fn render_block(
 								//     Vec3::new(0., 0., 0.),
 								//     Vec3::new(1., 1., 1.),
 								// ));
+								let chain_str = details.doturl.chain_str();
 
 								bun.insert(details)
 									.insert(Name::new("Block"))
 									.with_children(|parent| {
-										let name = chain_info
-											.chain_name
-											.replace(" ", "-")
-											.replace("-Testnet", "");
-										let texture_handle =
-											asset_server.load(&format!("branding/{}.jpeg", name));
+										// let name = chain_info
+										// .chain_name
+										// .replace(" ", "-")
+										// .replace("-Testnet", "");
+										let texture_handle = asset_server
+											.load(&format!("branding/{}.jpeg", chain_str));
 										let aspect = 1. / 3.;
 
 										// create a new quad mesh. this is what we will apply the
@@ -1119,7 +1123,7 @@ fn add_blocks<'a>(
 
 				bun.insert_bundle(PickableBundle::default())
 					.insert(Details {
-						hover: format_entity(&chain_info.chain_ws, block),
+						// hover: format_entity(block),
 						// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
 						doturl: block.dot().clone(),
 						flattern: block.details().flattern.clone(),
@@ -1135,7 +1139,7 @@ fn add_blocks<'a>(
 					.insert(ClearMe)
 					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
 					.insert(Name::new("Extrinsic"))
-				    .insert(MedFi);
+					.insert(MedFi);
 				// .insert(Aabb::from_min_max(
 				//     Vec3::new(0., 0., 0.),
 				//     Vec3::new(1., 1., 1.),
@@ -1415,7 +1419,7 @@ pub fn print_events(
 
 				match e {
 					HoverEvent::JustEntered(entity) => {
-						let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+						let (_entity, details, _global_location) = query2.get_mut(*entity).unwrap();
 						inspector.hovered = Some(if details.doturl.extrinsic.is_some() {
 							format!("{} - {} ({})", details.doturl, details.variant, details.pallet)
 						} else {
@@ -1438,6 +1442,7 @@ pub fn print_events(
 					}
 				}
 				inspector.selected = Some(details.clone());
+				inspector.texture = None;
 
 				// info!("Gee Willikers, it's a click! {:?}", e)
 
@@ -1473,14 +1478,21 @@ struct Width(f32);
 
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
-use bevy::diagnostic::Diagnostics;
+
 fn update_visibility(
-	mut entity_low_midfi: Query<(&mut Visibility, &GlobalTransform, With<ClearMe>, Without<HiFi>, Without<MedFi>)>,
+	mut entity_low_midfi: Query<(
+		&mut Visibility,
+		&GlobalTransform,
+		With<ClearMe>,
+		Without<HiFi>,
+		Without<MedFi>,
+	)>,
 	mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
 	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
-	diagnostics: Res<'_, Diagnostics>,
-	mut visible_width: ResMut<Width>,
+	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
+	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
+	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
@@ -1517,21 +1529,21 @@ fn update_visibility(
 			vis_count += 1;
 		}
 	}
-	for (mut vis, transform, _,_) in entity_hifi.iter_mut() {
+	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
 		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-		if y > 500.{
+		if y > 500. {
 			vis.is_visible = false;
 		}
 	}
-	for (mut vis, transform, _,_) in entity_medfi.iter_mut() {
+	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
 		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-		if y > 800.{
+		if y > 800. {
 			vis.is_visible = false;
 		}
 	}
 
 	if vis_count == 0 {
-		for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
+		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
 			vis.is_visible = true;
 		}
 	}
@@ -1670,6 +1682,8 @@ pub struct Inspector {
 	selected: Option<Details>,
 
 	hovered: Option<String>,
+
+	texture: Option<egui::TextureHandle>,
 }
 
 // struct DateTime(NaiveDateTime, bool);

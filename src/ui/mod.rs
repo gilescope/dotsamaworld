@@ -1,10 +1,12 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
+//  use egui::ImageData;
 use crate::{Anchor, Env, Inspector, Viewport};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
+use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
@@ -15,7 +17,7 @@ use std::ops::DerefMut;
 pub struct OccupiedScreenSpace {
 	left: f32,
 	top: f32,
-	right: f32,
+	// right: f32,
 	bottom: f32,
 }
 
@@ -27,7 +29,9 @@ pub fn ui_bars_system(
 	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
 	mut spec: ResMut<UrlBar>,
 	mut anchor: ResMut<Anchor>,
-	inspector: Res<Inspector>,
+	mut inspector: ResMut<Inspector>,
+	entities: Query<(&GlobalTransform, &Details)>,
+	mut destination: ResMut<Destination>,
 ) {
 	if inspector.selected.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -39,6 +43,20 @@ pub fn ui_bars_system(
 					ui.heading("Selected Details:");
 				});
 				ui.separator();
+
+				if inspector.selected.is_some() {
+					let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
+
+					if let Ok(bytes) = std::fs::read(&format!("assets/branding/{}.jpeg", name)) {
+						let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
+						let _texture: &egui::TextureHandle =
+							inspector.texture.get_or_insert_with(|| {
+								// Load the texture only once.
+								ui.ctx().load_texture(name, egui::ImageData::Color(img))
+							});
+					}
+				}
+
 				if let Some(selected) = &inspector.selected {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
@@ -47,6 +65,15 @@ pub fn ui_bars_system(
 						"open in polkadot.js",
 						&selected.url,
 					));
+
+					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+						if let Some(hand) = inspector.texture.as_ref() {
+							let texture: &egui::TextureHandle = hand;
+
+							let l = 200.; // occupied_screen_space.left - 10.;
+							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+						}
+					});
 				}
 			})
 			.response
@@ -87,7 +114,28 @@ pub fn ui_bars_system(
 				);
 
 				//TODO: location = alpha blend to 10% everything but XXXX
-				//ui.text_edit_singleline(&mut spec.location);
+				let response = ui.text_edit_singleline(&mut spec.find);
+				let mut found = 0;
+				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
+					if spec.find.len() <= 4 {
+						if let Ok(para_id) = spec.find.parse() {
+							for (loc, details) in entities.iter() {
+								if details.doturl.para_id == Some(para_id) {
+									if details.doturl.block_number.is_some() {
+										destination.location = Some(loc.translation);
+										inspector.selected = Some(details.clone());
+										found += 1;
+									}
+								}
+							}
+						}
+					}
+
+					println!("find {}", spec.find);
+				}
+				if !spec.find.is_empty() {
+					ui.heading(format!("found: {}", found));
+				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
 					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
 					ui.heading("Follow:");
@@ -169,6 +217,9 @@ pub struct UrlBar {
 	// Maybe this is a find?
 	pub location: String,
 	was_location: String,
+
+	pub find: String,
+
 	pub timestamp: NaiveDateTime,
 	was_timestamp: NaiveDateTime,
 	pub env: Env,
@@ -181,6 +232,7 @@ impl UrlBar {
 		Self {
 			location,
 			was_location: loc_clone,
+			find: String::new(),
 			timestamp,
 			was_timestamp: time_clone,
 			env: Env::Prod,

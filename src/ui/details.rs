@@ -23,10 +23,11 @@ pub struct Details {
 	pub parent: Option<u32>,
 	pub variant: String,
 	pub success: Success,
-	pub hover: String,
+	// pub hover: String,
 	pub flattern: String,
 	// #[inspectable(label = "Url:")]
 	pub url: String,
+	// pub chain_name: String,
 	// pub raw: Vec<u8>
 }
 
