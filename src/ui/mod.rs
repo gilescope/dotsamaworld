@@ -10,6 +10,7 @@ use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+use egui::ComboBox;
 // use egui::ComboBox;
 use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
@@ -93,17 +94,14 @@ pub fn ui_bars_system(
 		.show(egui_context.ctx_mut(), |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
-				// let combo =	ComboBox::from_label("Env")
-				// 	.selected_text(format!("{}", spec.env))
-				// 	.show_ui(
-				// 		ui,
-				// 		|ui| {
-				// 			ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
-				// 			ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
-				// 			ui.selectable_value(&mut spec.env, Env::Test, "westend");
-				// 			ui.selectable_value(&mut spec.env, Env::Local, "local");
-				// 		}
-				// 	);
+				let combo = ComboBox::from_label("Env")
+					.selected_text(format!("{}", spec.env))
+					.show_ui(ui, |ui| {
+						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
+						ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
+						ui.selectable_value(&mut spec.env, Env::Test, "test");
+						ui.selectable_value(&mut spec.env, Env::Local, "local");
+					});
 
 				ui.add(
 					DatePicker::<std::ops::Range<NaiveDateTime>>::new(
@@ -223,6 +221,7 @@ pub struct UrlBar {
 	pub timestamp: NaiveDateTime,
 	was_timestamp: NaiveDateTime,
 	pub env: Env,
+	was_env: Env,
 }
 
 impl UrlBar {
@@ -236,6 +235,7 @@ impl UrlBar {
 			timestamp,
 			was_timestamp: time_clone,
 			env: Env::Prod,
+			was_env: Env::Prod,
 		}
 	}
 
@@ -247,12 +247,15 @@ impl UrlBar {
 	}
 
 	pub fn changed(&self) -> bool {
-		self.was_location != self.location || self.was_timestamp != self.timestamp
+		self.was_location != self.location ||
+			self.was_timestamp != self.timestamp ||
+			self.was_env != self.env
 	}
 
 	pub fn reset_changed(&mut self) {
 		self.was_location = self.location.clone();
 		self.was_timestamp = self.timestamp.clone();
+		self.was_env = self.env.clone();
 	}
 }
 // use bevy_inspector_egui::{options::StringAttributes, Context};

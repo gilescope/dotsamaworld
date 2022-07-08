@@ -31,6 +31,7 @@ use std::{
 		Arc,
 	},
 };
+use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
 //use bevy_kira_audio::Audio;
@@ -51,8 +52,8 @@ use chrono::prelude::*;
 use datasource::DataUpdate;
 use sp_core::H256;
 use std::convert::{AsRef, TryInto};
-#[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
-pub mod polkadot {}
+// #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
+// pub mod polkadot {}
 pub mod recorder;
 
 /// Pick a faster allocator.
@@ -301,49 +302,50 @@ fn source_data(
 		//let as_of = Some(dot_url.clone());
 		println!("Block number selected for relay chains: {:?}", &as_of);
 
+
+		let networks = networks::get_network(&selected_env);
+
 		// let is_self_sovereign = selected_env.is_self_sovereign();
-		let relays = networks::get_network(&selected_env)
+		let relays = networks
 			.into_iter()
 			.enumerate()
-			.map(|(relay_index, relay)| {
+			.map(|(relay_index, relay)| {				
 				let relay_url = DotUrl {
 					sovereign: Some(if relay_index == 0 { -1 } else { 1 }),
 					..dot_url.clone()
 				};
-				relay
-					.iter()
-					.enumerate()
-					.map(|(chain_index, chain_name)| {
-						let url = chain_name_to_url(&chain_name);
-						let mut source = datasource::CachedDataSource::new(
-							&url,
-							datasource::RawDataSource::new(&url),
-						);
-						let para_id = datasource::get_parachain_id_from_url(&mut source)
-							.unwrap_or(Some(9999u32.try_into().unwrap()));
-						// let parachain_name =
-						// datasource::get_parachain_name_sync(&mut source).unwrap();
 
-						(
-							Chain {
-								shared: ABlocks::default(),
-								// name: chain_name.to_string(),
-								info: ChainInfo {
-									chain_ws: url,
-									// +2 to skip 0 and relay chain.
-									chain_index: if relay_url.is_darkside() {
-										-((chain_index + 2) as isize)
-									} else {
-										(chain_index + 2) as isize
-									},
-									chain_url: DotUrl { para_id, ..relay_url.clone() },
-									// chain_name: parachain_name,
+				relay.as_slice().par_iter().enumerate().filter_map(|(chain_index, chain_name)| {
+					let url = chain_name_to_url(&chain_name);
+					let mut source = datasource::CachedDataSource::new(
+						&url,
+						datasource::RawDataSource::new(&url),
+					);
+					let para_id = datasource::get_parachain_id_from_url(&mut source);
+					if para_id.is_err() {
+						return None;
+					}
+					let para_id = para_id.unwrap();
+
+					Some((
+						Chain {
+							shared: ABlocks::default(),
+							// name: chain_name.to_string(),
+							info: ChainInfo {
+								chain_ws: url,
+								// +2 to skip 0 and relay chain.
+								chain_index: if relay_url.is_darkside() {
+									-((chain_index + 2) as isize)
+								} else {
+									(chain_index + 2) as isize
 								},
+								chain_url: DotUrl { para_id, ..relay_url.clone() },
+								// chain_name: parachain_name,
 							},
-							source,
-						)
-					})
-					.collect::<Vec<(Chain, datasource::CachedDataSource<datasource::RawDataSource>)>>(
+						},
+						source,
+					))
+				}).collect::<Vec<(Chain, datasource::CachedDataSource<datasource::RawDataSource>)>>(
 					)
 			})
 			.collect::<Vec<Vec<_>>>();

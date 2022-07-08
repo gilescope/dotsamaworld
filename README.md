@@ -51,7 +51,7 @@ If you right click on an extrinsic it will open the polkadot-js decode screen fo
 ## Prerequisites
 
 There's probably some prerequites but if you have nix or run nixos then you can just 
-`nix-shell` to install whatever is needed. I've seen it running on Linux and OSX. Not yet on windows.
+`nix-shell` to install whatever is needed. I've seen it running on Linux and OSX. Not yet on windows. sudo apt-get install libxcb-shape0-dev libxcb-xfixes0-dev
 
 ## Build and serve WASM version
 

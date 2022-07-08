@@ -35,27 +35,31 @@ bevy_mod_picking = "0.6"
 hex = "*"
 # bevy-inspector-egui-derive = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
-parity-scale-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
+parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
 bevy_atmosphere = "0.3"
-palette = "0.6"              # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
+palette = {version="0.6", defalult-features= false}              # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
 # bevy-inspector-egui = "0.10"
 serde_bytes = "0.11"
 serde_json = "*"
+rayon = "*"
 #rayon = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
 serde = "*"
 bevy_egui = "*"
 egui = "0.17"
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191", features = ["wss"]}
 url = "*"
+async-tungstenite = "*"
+async-tls = "*"
 color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
 # bevy_hanabi = "0.2"
-frame-metadata = "*"
+frame-metadata = "15.0.0"
 scale-info = { version = "*", features = ["serde"] }
 # desub = { git = "https://github.com/paritytech/desub/" }
-desub-current = { git = "https://github.com/paritytech/desub/" }
+desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # bevy_kira_audio = "*"
 # dolly = "0.3"
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
@@ -70,7 +74,7 @@ tikv-jemallocator = "0.5"
 # dynamic
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
-subxt = { git = "https://github.com/paritytech/subxt.git", rev = "5c04b09c785c1b009ba6a0e18ab6bb5c516d6a71" }
+# subxt = { git = "https://github.com/paritytech/subxt.git" }
 open = "1"
 
 # Dependencies for WASM only.

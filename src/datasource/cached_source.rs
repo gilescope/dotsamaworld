@@ -9,7 +9,7 @@ pub struct CachedDataSource<S: Source> {
 	urlhash: u64,
 }
 
-type BError = subxt::GenericError<std::convert::Infallible>; // Box<dyn std::error::Error>;
+type BError = polkapipe::Error; //  Box<dyn std::error::Error>;
 
 impl<S> CachedDataSource<S>
 where
@@ -108,10 +108,10 @@ where
 
 	async fn fetch_storage(
 		&mut self,
-		key: subxt::sp_core::storage::StorageKey,
+		key: &[u8],
 		as_of: Option<H256>,
-	) -> Result<Option<subxt::sp_core::storage::StorageData>, BError> {
-		let mut cache_key = key.0.clone();
+	) -> Result<Option<Vec<u8>>, BError> {
+		let mut cache_key = key.to_vec();
 		if let Some(as_of) = as_of {
 			cache_key.extend(as_of.as_bytes());
 		}
@@ -119,23 +119,22 @@ where
 			"storage",
 			self,
 			cache_key.as_slice(),
-			self.underlying_source
-				.fetch_storage(key, as_of)
-				.map_ok(|res| res.map(|subxt::sp_core::storage::StorageData(bytes)| bytes))
+			self.underlying_source.fetch_storage(key, as_of) /* .map_ok(|res|
+			                                                  * res.map(|subxt::sp_core::
+			                                                  * storage::StorageData(bytes)|
+			                                                  * bytes)) */
 		)
-		.map(|op| op.map(|bytes| subxt::sp_core::storage::StorageData(bytes)))
 	}
 
-	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<sp_core::Bytes>, ()> {
+	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()> {
 		memoise!(
 			"metadata",
 			self,
 			as_of.unwrap_or_default().as_bytes(),
-			self.underlying_source
-				.fetch_metadata(as_of)
-				.map_ok(|res| res.map(|sp_core::Bytes(bytes)| bytes))
+			self.underlying_source.fetch_metadata(as_of) /* .map_ok(|res|
+			                                              * res.map(|sp_core::Bytes(bytes)|
+			                                              * bytes)) */
 		)
-		.map(|op| op.map(|bytes| sp_core::Bytes(bytes)))
 	}
 
 	/// We subscribe to relay chains and self sovereign chains.
