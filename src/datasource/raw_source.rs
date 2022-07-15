@@ -2,7 +2,7 @@ use async_std::stream::StreamExt;
 use async_trait::async_trait;
 use parity_scale_codec::Encode;
 use polkapipe::Backend;
-use sp_core::H256;
+use primitive_types::H256;
 // use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
@@ -27,7 +27,7 @@ pub trait Source {
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
-	) -> Result<Option<sp_core::H256>, BError>;
+	) -> Result<Option<H256>, BError>;
 
 	async fn fetch_block(
 		&mut self,
@@ -276,7 +276,7 @@ impl Source for RawDataSource {
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
-	) -> Result<Option<sp_core::H256>, BError> {
+	) -> Result<Option<primitive_types::H256>, BError> {
 		if let Some(client) = self.client()
 			.await {
 			client

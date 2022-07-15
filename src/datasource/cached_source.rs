@@ -2,7 +2,7 @@ use crate::datasource::{raw_source::AgnosticBlock, Source};
 use async_trait::async_trait;
 use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
-use sp_core::H256;
+use primitive_types::H256;
 
 pub struct CachedDataSource<S: Source> {
 	underlying_source: S,
@@ -72,7 +72,7 @@ where
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
-	) -> Result<Option<sp_core::H256>, BError> {
+	) -> Result<Option<primitive_types::H256>, BError> {
 		memoise!(
 			"block_hash",
 			self,

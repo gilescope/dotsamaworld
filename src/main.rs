@@ -50,7 +50,7 @@ use bevy::winit::WinitSettings;
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use chrono::prelude::*;
 use datasource::DataUpdate;
-use sp_core::H256;
+use primitive_types::H256;
 use std::convert::{AsRef, TryInto};
 // #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
 // pub mod polkadot {}

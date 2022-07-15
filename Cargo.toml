@@ -15,7 +15,8 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
-sp-core = "*"
+#sp-core = "*"
+primitive-types = "0.11"
 
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
@@ -38,10 +39,10 @@ hex = "*"
 parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = ["derive", "full", "bit-vec"] }
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
 bevy_atmosphere = "0.3"
-palette = {version="0.6", defalult-features= false}              # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
+palette = {git="https://github.com/Ogeon/palette.git", defalult-features= false}              # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
 # bevy-inspector-egui = "0.10"
-serde_bytes = "0.11"
+#serde_bytes = "0.11"
 serde_json = "*"
 rayon = "*"
 #rayon = "*"
@@ -58,8 +59,10 @@ bevy_polyline = "0.2"
 # bevy_hanabi = "0.2"
 frame-metadata = "15.0.0"
 scale-info = { version = "*", features = ["serde"] }
+scale-value = { version = "*" }
+polkadyn = { git="https://github.com/gilescope/polkadyn", rev="309389d885e70b3b6df645da5c38bd43d80cf911" }
 # desub = { git = "https://github.com/paritytech/desub/" }
-desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
+# desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # bevy_kira_audio = "*"
 # dolly = "0.3"
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }

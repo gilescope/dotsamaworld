@@ -7,9 +7,8 @@ use crate::{
 };
 use async_std::{stream::StreamExt, task::block_on};
 use bevy::prelude::warn;
-use desub_current::{decoder, value::*, Metadata, ValueDef};
 use parity_scale_codec::Decode;
-use sp_core::H256;
+use primitive_types::H256;
 use std::{
 	collections::{hash_map::DefaultHasher, HashMap},
 	convert::TryFrom,
@@ -22,9 +21,11 @@ use std::{
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
+use scale_value::Value;
+use scale_value::*;
 mod time_predictor;
 mod utils;
-use utils::{flattern, print_val};
+use utils::{flattern};
 mod cached_source;
 mod raw_source;
 use crate::datasource::raw_source::Source;
@@ -41,7 +42,7 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
 async fn get_desub_metadata<S: Source>(
 	source: &mut S,
 	version: Option<(String, H256)>,
-) -> Option<Metadata> {
+) -> Option<frame_metadata::RuntimeMetadataPrefixed> {
 	let url = source.url().to_string();
 	let hash = please_hash(&url);
 
@@ -92,7 +93,8 @@ async fn get_desub_metadata<S: Source>(
 		.unwrap()
 	};
 
-	let result = Metadata::from_bytes(&metadata_bytes);
+	let result = polkadyn::decode_metadata(&metadata_bytes);
+	// let result = Metadata::from_bytes(&metadata_bytes);
 	if result.is_err() {
 		eprintln!("should be able to get metadata from {}, {:?}", &url, &result);
 	}
@@ -129,7 +131,7 @@ pub fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<Non
 	async_std::task::block_on(get_parachain_id(source))
 }
 
-async fn get_metadata_version(source: &mut impl Source, hash: sp_core::H256) -> Option<String> {
+async fn get_metadata_version(source: &mut impl Source, hash: primitive_types::H256) -> Option<String> {
 	let storage_key =
 		hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8").unwrap();
 	let call = source.fetch_storage(&storage_key[..], Some(hash)).await;
@@ -175,7 +177,7 @@ async fn get_metadata_version(source: &mut impl Source, hash: sp_core::H256) -> 
 // 	Some(block_on(source.fetch_chainname()).unwrap().unwrap())
 // }
 
-async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<sp_core::H256> {
+async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<primitive_types::H256> {
 	if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {
 		Some(block_hash)
 	} else {
@@ -250,7 +252,7 @@ pub async fn watch_blocks<S: Source>(
 				let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
 				let basetime = BASETIME.load(Ordering::Relaxed);
 				let mut time_for_blocknum = |blocknum: u32| {
-					let mut block_hash: Option<sp_core::H256> =
+					let mut block_hash: Option<primitive_types::H256> =
 						block_on(get_block_hash(&mut source, blocknum));
 					for _ in 0..10 {
 						if block_hash.is_some() {
@@ -283,7 +285,7 @@ pub async fn watch_blocks<S: Source>(
 			let mut last_timestamp = None;
 			for block_number in as_of.block_number.unwrap().. {
 				async_std::task::sleep(std::time::Duration::from_secs(2)).await;
-				let block_hash: Option<sp_core::H256> =
+				let block_hash: Option<primitive_types::H256> =
 					get_block_hash(&mut source, block_number).await;
 
 				if block_hash.is_none() {
@@ -301,7 +303,7 @@ pub async fn watch_blocks<S: Source>(
 							block_number: Some(block_number),
 							..chain_info.chain_url.clone()
 						},
-						blockhash: sp_core::H256::default(),
+						blockhash: primitive_types::H256::default(),
 						extrinsics: vec![],
 						events: vec![],
 					}));
@@ -386,6 +388,7 @@ async fn process_extrinsics<S: Source>(
 		// let block_number = blockurl.block_number.unwrap();
 
 		let version = get_metadata_version(source, block_hash).await;
+
 		let metad = if let Some(version) = version {
 			get_desub_metadata(source, Some((version, block_hash))).await
 		} else {
@@ -401,12 +404,13 @@ async fn process_extrinsics<S: Source>(
 		let mut exts = vec![];
 		for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-			let ex_slice =
-				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
+			//TODO: did we need to double decode extrinsics????
+			// let ex_slice =
+			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 
 			// let ex_slice = &ext_bytes.0;
 			if let Ok(extrinsic) =
-				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+				polkadyn::decode_extrinsic(&metad, ex_slice.as_slice())
 			{
 				let entity = process_extrisic(
 					(ex_slice).clone(),
@@ -417,7 +421,7 @@ async fn process_extrinsics<S: Source>(
 				.await;
 				if let Some(entity) = entity {
 					if entity.pallet() == "Timestamp" && entity.variant() == "set" {
-						if let ValueDef::Primitive(Primitive::U64(val)) =
+						if let ValueDef::Primitive(Primitive::U128(val)) =
 							extrinsic.call_data.arguments[0].value
 						{
 							timestamp = Some(val as i64);
@@ -474,21 +478,21 @@ async fn process_extrinsics<S: Source>(
 async fn find_timestamp<S: Source>(
 	block_hash: H256,
 	source: &mut S,
-	metad: &Metadata,
+	metad: &frame_metadata::RuntimeMetadataPrefixed
 ) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		for encoded_extrinsic in block.extrinsics.iter() {
-			let ex_slice =
-				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
+			// let ex_slice =
+			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 			if let Ok(extrinsic) =
-				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
+				polkadyn::decode_extrinsic(&metad, encoded_extrinsic.as_slice())
 			{
 				// let pallet = extrinsic.call_data.pallet_name.to_string();
 				// let variant = extrinsic.call_data.ty.name().to_owned();
 				if extrinsic.call_data.pallet_name == "Timestamp" &&
 					extrinsic.call_data.ty.name() == "set"
 				{
-					if let ValueDef::Primitive(Primitive::U64(val)) =
+					if let ValueDef::Primitive(Primitive::U128(val)) =
 						extrinsic.call_data.arguments[0].value
 					{
 						// Timestamps are usually represented as i64
@@ -512,7 +516,7 @@ async fn get_extrinsics(
 
 async fn process_extrisic<'a>(
 	ex_slice: Vec<u8>,
-	ext: &desub_current::decoder::Extrinsic<'a>,
+	ext: &scale_value::Value<()>,
 	extrinsic_url: DotUrl,
 	url: &str,
 ) -> Option<DataEntity> {
@@ -543,27 +547,27 @@ async fn process_extrisic<'a>(
 		.map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
 		.collect();
 
-	if pallet == "System" && variant == "remark" {
-		match &ext.call_data.arguments[0].value {
-			desub_current::ValueDef::Composite(desub_current::value::Composite::Unnamed(
-				chars_vals,
-			)) => {
-				let bytes = chars_vals
-					.iter()
-					.map(|arg| match arg.value {
-						desub_current::ValueDef::Primitive(
-							desub_current::value::Primitive::U8(ch),
-						) => ch,
-						_ => b'!',
-					})
-					.collect::<Vec<u8>>();
-				let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
-				args.insert(0, rmrk);
-			},
+	// if pallet == "System" && variant == "remark" {
+	// 	match &ext.call_data.arguments[0].value {
+	// 		scale_value::ValueDef::Primitive(scale_value::Composite::Unnamed(
+	// 			chars_vals,
+	// 		)) => {
+	// 			let bytes = chars_vals
+	// 				.iter()
+	// 				.map(|arg| match arg.value {
+	// 					scale_value::ValueDef::Primitive(
+	// 						scale_value::Primitive::U8(ch),
+	// 					) => ch,
+	// 					_ => b'!',
+	// 				})
+	// 				.collect::<Vec<u8>>();
+	// 			let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
+	// 			args.insert(0, rmrk);
+	// 		},
 
-			_ => {},
-		}
-	}
+	// 		_ => {},
+	// 	}
+	// }
 
 	// Maybe we can rely on the common type system for XCM versions as it has to be quite
 	// standard...
@@ -984,7 +988,7 @@ async fn process_extrisic<'a>(
 											{
 												match values {
 													Composite::Named(named) => {
-														let vec: Vec<Value<TypeId>> = named
+														let vec: Vec<Value<()>> = named
 															.iter()
 															.map(|(_n, v)| v.clone())
 															.collect();
@@ -1052,9 +1056,9 @@ async fn process_extrisic<'a>(
 	// extrinsic");
 }
 
-use desub_current::TypeId;
+
 async fn check_reserve_asset<'a, 'b>(
-	args: &Vec<Value<TypeId>>,
+	args: &Vec<Value<()>>,
 	extrinsic_url: &DotUrl,
 	start_link: &'b mut Vec<(String, LinkType)>,
 ) {
@@ -1128,7 +1132,7 @@ async fn get_events_for_block(
 	blockhash: H256,
 	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
-	metad: &Metadata,
+	metad: &frame_metadata::RuntimeMetadataPrefixed,
 	timestamp: Option<i64>,
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
 	let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
@@ -1136,22 +1140,21 @@ async fn get_events_for_block(
 
 	let blocknum = block_url.block_number.unwrap();
 
-	let storage = decoder::decode_storage(&metad);
-	let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
-	let storage_key = hex::decode(events_key).unwrap();
-	let events_entry = storage
-		.decode_key(&metad, &mut storage_key.as_slice())
-		.expect("can decode storage");
+	// let storage = decoder::decode_events(&metad, );
+	// let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
+	// let storage_key = hex::decode(events_key).unwrap();
+	// let events_entry = storage
+	// 	.decode_key(&metad, &mut storage_key.as_slice())
+	// 	.expect("can decode storage");
 
 	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await?;
 
 
 
 	if let Some(events_raw) = bytes {
-		if let Ok(val) =
-			decoder::decode_value_by_id(&metad, &events_entry.ty, &mut events_raw.as_slice())
+		if let Ok(events) =  decoder::decode_events(&metad, bytes)
 		{
-			if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
+			// if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
 				let mut inclusions = vec![];
 				let mut ext_count_map = HashMap::new();
 				for event in events.iter() {
@@ -1174,10 +1177,10 @@ async fn get_events_for_block(
 
 										if let Composite::Unnamed(ref vals) = var.values {
 											for val in vals {
-												if let ValueDef::Primitive(Primitive::U32(v)) =
+												if let ValueDef::Primitive(Primitive::U128(v)) =
 													val.value
 												{
-													details.parent = Some(v);
+													details.parent = Some(v as u32);
 													let count = ext_count_map.entry(v).or_insert(0);
 													*count += 1;
 													details.doturl.extrinsic = Some(v);
@@ -1369,7 +1372,7 @@ async fn get_events_for_block(
 						}
 					}
 				}
-			}
+			// }
 		} else {
 			println!("can't decode events {} / {}", &source.url(), blocknum);
 		};
