@@ -2288,8 +2288,10 @@ dependencies = [
  "polkapipe",
  "primitive-types",
  "rayon",
+ "scale-borrow",
  "scale-info",
  "scale-value",
+ "scale-value-to-borrowed",
  "serde",
  "serde_json",
  "tikv-jemallocator",
@@ -4474,7 +4476,7 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/polkadyn?rev=309389d885e70b3b6df645da5c38bd43d80cf911#309389d885e70b3b6df645da5c38bd43d80cf911"
+source = "git+https://github.com/gilescope/polkadyn#ee786718e0769d4821ebb1ccf95c2eed4071ff90"
 dependencies = [
  "frame-metadata",
  "hex",
@@ -4902,6 +4904,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "scale-borrow"
+version = "0.1.0"
+source = "git+https://github.com/gilescope/scale-borrow?rev=32eaadb6599895928ac9ccec133940edf1da0d35#32eaadb6599895928ac9ccec133940edf1da0d35"
+dependencies = [
+ "bitvec",
+ "parity-scale-codec",
+ "scale-info",
+]
+
+[[package]]
 name = "scale-info"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4941,6 +4953,15 @@ dependencies = [
  "serde",
  "thiserror",
  "yap",
+]
+
+[[package]]
+name = "scale-value-to-borrowed"
+version = "0.1.0"
+source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=81e3d771b043bbf7c939800c4c95753cad69670f#81e3d771b043bbf7c939800c4c95753cad69670f"
+dependencies = [
+ "scale-borrow",
+ "scale-value",
 ]
 
 [[package]]

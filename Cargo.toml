@@ -60,7 +60,9 @@ bevy_polyline = "0.2"
 frame-metadata = "15.0.0"
 scale-info = { version = "*", features = ["serde"] }
 scale-value = { version = "*" }
-polkadyn = { git="https://github.com/gilescope/polkadyn", rev="309389d885e70b3b6df645da5c38bd43d80cf911" }
+scale-borrow = { git="https://github.com/gilescope/scale-borrow", features = ["bitvec"], rev="32eaadb6599895928ac9ccec133940edf1da0d35" }
+scale-value-to-borrowed={ git = "https://github.com/gilescope/scale-value-to-borrowed", features=["bitvec"], rev="81e3d771b043bbf7c939800c4c95753cad69670f" }
+polkadyn = { git = "https://github.com/gilescope/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # bevy_kira_audio = "*"
