@@ -50,11 +50,14 @@ pub trait Source {
 		// Subscription<
 		//     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
 		// >
-		Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
+		Box<dyn futures::Stream<Item = Result<H256, ()>> + Send + Unpin>,
 		(),
 	>;
 
 	fn url(&self) -> &str;
+
+	// #[cfg(target_arch="wasm32")]
+	// async fn drive(&self);
 }
 
 // pub struct RawDataSource {
@@ -225,12 +228,23 @@ pub trait Source {
 // 	}
 // }
 
+#[cfg(not(target_arch="wasm32"))]
 use async_tungstenite::{
 	tungstenite::{Error as WsError, Message},
 	WebSocketStream,
 };
 use futures::{sink::SinkErrInto, stream::SplitSink};
+#[cfg(target_arch="wasm32")]
+use ws_stream_wasm::WsStream;
+// #[cfg(target_arch="wasm32")]
+// type Message = ws_stream_wasm::WsMessage;
+// #[cfg(target_arch="wasm32")]
+// type WS2 = SplitSink<WsStream, ws_stream_wasm::WsMessage>;
 
+#[cfg(target_arch="wasm32")]
+type WSBackend = polkapipe::ws_web::Backend;
+
+#[cfg(not(target_arch="wasm32"))]
 type WSBackend = polkapipe::ws::Backend<
 	SinkErrInto<
 		SplitSink<
@@ -261,9 +275,25 @@ impl RawDataSource {
 		RawDataSource { ws_url: url.to_string(), client: None }
 	}
 
+	#[cfg(target_arch="wasm32")]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
-			if let Ok(client) =polkapipe::ws::Backend::new_ws2(&self.ws_url).await {
+			if let Ok(client) = polkapipe::ws_web::Backend::new_ws2(&self.ws_url).await {
+				self.client = Some(client);
+			}
+		}
+		self.client.as_mut()
+	}
+
+	// #[cfg(target_arch="wasm32")]
+	// async fn drive(&self) {
+	// 	self.client.as_mut().unwrap().process_incoming_messages().await
+	// }
+
+	#[cfg(not(target_arch="wasm32"))]
+	async fn client(&mut self) -> Option<&mut WSBackend> {
+		if self.client.is_none() {
+			if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url).await {
 				self.client = Some(client);
 			}
 		}
@@ -414,7 +444,7 @@ impl Source for RawDataSource {
 		// Subscription<
 		//     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
 		// >
-		Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>,
+		Box<dyn futures::Stream<Item = Result<H256, ()>> + Send + Unpin>,
 		(),
 	> {
 		todo!();

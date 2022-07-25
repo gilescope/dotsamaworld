@@ -6,6 +6,8 @@ use crate::{
 	DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
 use async_std::{stream::StreamExt, task::block_on};
+#[cfg(not(target_arch = "wasm32"))]
+use async_tungstenite::tungstenite::util::NonBlockingResult;
 use bevy::prelude::warn;
 use parity_scale_codec::Decode;
 use primitive_types::H256;
@@ -17,7 +19,7 @@ use std::{
 	sync::atomic::Ordering,
 	time::Duration,
 };
-
+ use bevy::ecs::event::EventWriter;
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
@@ -31,6 +33,12 @@ mod raw_source;
 use crate::datasource::raw_source::Source;
 pub use cached_source::CachedDataSource;
 pub use raw_source::RawDataSource;
+
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (super::log(&format_args!($($t)*).to_string()))
+}
 
 fn please_hash<T: Hash>(val: &T) -> u64 {
 	use std::hash::Hasher;
@@ -127,8 +135,8 @@ pub fn is_relay_chain(url: &str) -> bool {
 	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
 
-pub fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
-	async_std::task::block_on(get_parachain_id(source))
+pub async fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
+	get_parachain_id(source).await
 }
 
 async fn get_metadata_version(source: &mut impl Source, hash: primitive_types::H256) -> Option<String> {
@@ -187,174 +195,173 @@ async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<
 
 pub type RelayBlockNumber = u32;
 
-pub async fn watch_blocks<S: Source>(
-	tx: ABlocks,
-	chain_info: ChainInfo,
-	as_of: Option<DotUrl>,
-	receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>,
-	sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
-	mut source: S,
-) -> Result<(), Box<dyn std::error::Error>> {
-	let url = &chain_info.chain_ws;
-	let para_id = chain_info.chain_url.para_id.clone();
+pub struct BlockWatcher {
+	pub tx: Option<ABlocks>,
+	pub chain_info: ChainInfo,
+	pub as_of: Option<DotUrl>,
+	pub receive_channel: Option<crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>>,
+	pub sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	// source: &mut S,
+}
 
-	let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
-	// println!("our epoc for watching blocks is {}", our_data_epoc);
+impl BlockWatcher 
+{
+	pub async fn watch_blocks<S>(
+			mut self,
+		// tx: ABlocks,
+		// chain_info: ChainInfo,
+		// as_of: Option<DotUrl>,
+		// receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>,
+		// sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+		
+	
+		mut source: S,
+	) -> Result<(), Box<dyn std::error::Error + Sync + Send>> 
+	where S: Source {
 
-	// Tell renderer to draw a new chain...
-	{
-		let mut handle = tx.lock().unwrap();
-		handle.push(DataUpdate::NewChain(chain_info.clone()));
-	}
+		let tx: ABlocks = self.tx.take().unwrap();
+		let chain_info: ChainInfo = self.chain_info.clone();
+		let as_of: Option<DotUrl> = self.as_of.take();
+		let receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)> = self.receive_channel.take().unwrap();
+		let sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>> = self.sender.take();
+		// let mut source = &mut self.source;
+log!("listening to as of {:?}", as_of);
 
-	if let Some(as_of) = as_of {
-		debug_assert!(as_of.block_number.is_some());
-		// if we are a parachain then we need the relay chain to tell us which numbers it is
-		// interested in
-		if para_id.is_some() {
-			// Parachain (listening for relay blocks' para include candidate included events.)
-			while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
-				receive_channel.recv()
-			{
-				let _ = process_extrinsics(
-					&tx,
-					chain_info.chain_url.clone(),
-					block_hash,
-					&mut source,
-					&sender,
-					our_data_epoc,
-					Some(timestamp_parent),
-				)
-				.await;
-				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-					return Ok(())
-				}
-				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
-					async_std::task::sleep(Duration::from_secs(2)).await;
-				}
-			}
-		} else {
-			println!("listening to relay chain {:?}", as_of);
-			// Relay chain.
-			let mut as_of = as_of.clone();
-			let basetime = BASETIME.load(Ordering::Relaxed);
+		let url = &chain_info.chain_ws;
+		let para_id = chain_info.chain_url.para_id.clone();
 
-			// Is the as of the block number of a different relay chain?
-			// (datepicker could have set basetime)
-			if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
-				// if so, we have to wait till we know what the time is of that block to proceed.
-				// then we can figure out our nearest block based on that timestamp...
-				while BASETIME.load(Ordering::Relaxed) == 0 {
-					async_std::task::sleep(Duration::from_millis(250)).await;
-				}
+		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
+		// println!("our epoc for watching blocks is {}", our_data_epoc);
 
-				// Timestamp is unlikely to change so we can use generic metadata
-				let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
-				let basetime = BASETIME.load(Ordering::Relaxed);
-				let mut time_for_blocknum = |blocknum: u32| {
-					let mut block_hash: Option<primitive_types::H256> =
-						block_on(get_block_hash(&mut source, blocknum));
-					for _ in 0..10 {
-						if block_hash.is_some() {
-							break
-						}
-						block_hash = block_on(get_block_hash(&mut source, blocknum));
-					}
-
-					block_on(find_timestamp(
-						// chain_info.chain_url.clone(),
-						block_hash.unwrap(),
-						&mut source,
-						&metad_current,
-					))
-				};
-				as_of.block_number = time_predictor::get_block_number_near_timestamp(
-					basetime,
-					10_000_000,
-					&mut time_for_blocknum,
-					None,
-				);
-				debug_assert!(
-					as_of.block_number.is_some(),
-					"could not convert time {} to blocknum for {}",
-					basetime,
-					as_of
-				);
-			}
-
-			let mut last_timestamp = None;
-			for block_number in as_of.block_number.unwrap().. {
-				async_std::task::sleep(std::time::Duration::from_secs(2)).await;
-				let block_hash: Option<primitive_types::H256> =
-					get_block_hash(&mut source, block_number).await;
-
-				if block_hash.is_none() {
-					eprintln!(
-						"should be able to get from relay chain hash for block num {} of url {}",
-						block_number, url
-					);
-					// TODO: timestamp probably incorrect
-					tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
-						data_epoc: our_data_epoc,
-						// Place it in the approximately right location...
-						timestamp: last_timestamp.map(|t| t + 12_000_000),
-						timestamp_parent: None,
-						blockurl: DotUrl {
-							block_number: Some(block_number),
-							..chain_info.chain_url.clone()
-						},
-						blockhash: primitive_types::H256::default(),
-						extrinsics: vec![],
-						events: vec![],
-					}));
-
-					continue
-				}
-				let block_hash = block_hash.unwrap();
-				if let Ok(timestamp) = process_extrinsics(
-					&tx,
-					chain_info.chain_url.clone(),
-					block_hash,
-					&mut source,
-					&sender,
-					our_data_epoc,
-					None,
-				)
-				.await
-				{
-					last_timestamp = timestamp;
-				};
-				// check for stop signal
-				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-					return Ok(())
-				}
-
-				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
-					async_std::task::sleep(Duration::from_secs(2)).await;
-				}
-			}
+		// Tell renderer to draw a new chain...
+		{
+			// log!("aquiring lock");
+			let mut handle = tx.lock().unwrap();
+			handle.push(DataUpdate::NewChain(chain_info.clone()));
+			// log!("got lock");
 		}
-	} else {
-		println!("listening to live");
-		let mut reconnects = 0;
-		while reconnects < 20 {
-			// println!("try subscribe!");
-			if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
-				// println!("subscribed!");
-				while let Some(Ok(block_hash)) = block_headers.next().await {
+
+		if let Some(as_of) = as_of {
+			log!("as of set");
+			debug_assert!(as_of.block_number.is_some());
+			// if we are a parachain then we need the relay chain to tell us which numbers it is
+			// interested in
+			if para_id.is_some() {
+				log!("polling parachain {:?}", para_id);
+				// Parachain (listening for relay blocks' para include candidate included events.)
+				while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
+					receive_channel.recv()
+				{
 					let _ = process_extrinsics(
 						&tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
-						&None,
+						&sender,
+						our_data_epoc,
+						Some(timestamp_parent),
+					)
+					.await;
+					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+						return Ok(())
+					}
+					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+						async_std::task::sleep(Duration::from_secs(2)).await;
+					}
+				}
+			} else {
+				log!("listening to relay chain {:?}", as_of);
+				// Relay chain.
+				let mut as_of = as_of.clone();
+				let basetime = *BASETIME.lock().unwrap();
+
+				// // Is the as of the block number of a different relay chain?
+				// // (datepicker could have set basetime)
+				// if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
+				// 	// if so, we have to wait till we know what the time is of that block to proceed.
+				// 	// then we can figure out our nearest block based on that timestamp...
+				// 	while BASETIME.load(Ordering::Relaxed) == 0 {
+				// 		async_std::task::sleep(Duration::from_millis(250)).await;
+				// 	}
+
+				// 	// Timestamp is unlikely to change so we can use generic metadata
+				// 	let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
+				// 	let basetime = BASETIME.load(Ordering::Relaxed);
+				// 	let mut time_for_blocknum = async move |blocknum: u32| {
+				// 		let mut block_hash: Option<primitive_types::H256> =
+				// 			get_block_hash(&mut source, blocknum).await;
+				// 		for _ in 0..10 {
+				// 			if block_hash.is_some() {
+				// 				break
+				// 			}
+				// 			block_hash = get_block_hash(&mut source, blocknum).await;
+				// 		}
+
+				// 		find_timestamp(
+				// 			// chain_info.chain_url.clone(),
+				// 			block_hash.unwrap(),
+				// 			&mut source,
+				// 			&metad_current,
+				// 		).await
+				// 	};
+				// 	as_of.block_number = time_predictor::get_block_number_near_timestamp(
+				// 		basetime,
+				// 		10_000_000,
+				// 		&mut time_for_blocknum,
+				// 		None,
+				// 	);
+				// 	debug_assert!(
+				// 		as_of.block_number.is_some(),
+				// 		"could not convert time {} to blocknum for {}",
+				// 		basetime,
+				// 		as_of
+				// 	);
+				// }
+
+				let mut last_timestamp = None;
+				for block_number in as_of.block_number.unwrap().. {
+					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
+					let block_hash: Option<primitive_types::H256> =
+						get_block_hash(&mut source, block_number).await;
+
+					if block_hash.is_none() {
+						eprintln!(
+							"should be able to get from relay chain hash for block num {} of url {}",
+							block_number, url
+						);
+						// TODO: timestamp probably incorrect
+						tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
+							data_epoc: our_data_epoc,
+							// Place it in the approximately right location...
+							timestamp: last_timestamp.map(|t| t + 12_000_000),
+							timestamp_parent: None,
+							blockurl: DotUrl {
+								block_number: Some(block_number),
+								..chain_info.chain_url.clone()
+							},
+							blockhash: primitive_types::H256::default(),
+							extrinsics: vec![],
+							events: vec![],
+						}));
+
+						continue
+					}
+					let block_hash = block_hash.unwrap();
+					if let Ok(timestamp) = process_extrinsics(
+						&tx,
+						chain_info.chain_url.clone(),
+						block_hash,
+						&mut source,
+						&sender,
 						our_data_epoc,
 						None,
 					)
-					.await;
+					.await
+					{
+						last_timestamp = timestamp;
+					};
 					// check for stop signal
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						println!("epoc has changed, ending for {:?}.", as_of);
 						return Ok(())
 					}
 
@@ -363,11 +370,41 @@ pub async fn watch_blocks<S: Source>(
 					}
 				}
 			}
-			async_std::task::sleep(std::time::Duration::from_secs(20)).await;
-			reconnects += 1;
+		} else {
+			log!("listening to live");
+			let mut reconnects = 0;
+			while reconnects < 20 {
+				// println!("try subscribe!");
+				if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
+					// println!("subscribed!");
+					while let Some(Ok(block_hash)) = block_headers.next().await {
+						let _ = process_extrinsics(
+							&tx,
+							chain_info.chain_url.clone(),
+							block_hash,
+							&mut source,
+							&None,
+							our_data_epoc,
+							None,
+						)
+						.await;
+						// check for stop signal
+						if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+							log!("epoc has changed, ending for {:?}.", as_of);
+							return Ok(())
+						}
+
+						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+							async_std::task::sleep(Duration::from_secs(2)).await;
+						}
+					}
+				}
+				async_std::task::sleep(std::time::Duration::from_secs(20)).await;
+				reconnects += 1;
+			}
 		}
+		Ok(())
 	}
-	Ok(())
 }
 
 // Returns the timestamp of the block decoded.
@@ -1144,7 +1181,7 @@ async fn get_events_for_block(
 	// 	.decode_key(&metad, &mut storage_key.as_slice())
 	// 	.expect("can decode storage");
 
-	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await?;
+	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await.unwrap();
 
 	if let Some(events_raw) = bytes {
 		if let Ok(events) =  polkadyn::decode_events(metad, &events_raw[..])
@@ -1163,19 +1200,17 @@ async fn get_events_for_block(
 				details.doturl = DotUrl { ..block_url.clone() };
 
 				if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
-					//Has extrisic
-
-	{
+				
 					details.parent = Some(*extrinsic_num as u32);
 					let count = ext_count_map.entry(extrinsic_num).or_insert(0);
 					*count += 1;
 					details.doturl.extrinsic = Some(*extrinsic_num);
 					details.doturl.event = Some(*count);
 				} else {// system event. increment the system event count:
-let count = ext_count_map.entry(&u32::MAX).or_insert(0);
-						*count += 1;
-						details.doturl.extrinsic = None;
-						details.doturl.event = Some(*count);
+					let count = ext_count_map.entry(&u32::MAX).or_insert(0);
+					*count += 1;
+					details.doturl.extrinsic = None;
+					details.doturl.event = Some(*count);
 				}
 							
 				let (pallet, variant, contents) = if let Some((pallet, "0", variant, contents)) = event.only3() {
@@ -1183,8 +1218,7 @@ let count = ext_count_map.entry(&u32::MAX).or_insert(0);
 				} else {panic!("could not find call_data.pallet_name in {:#?}", &event) };
 
 				details.pallet = pallet.to_string();
-				details.variant =
-					variant.to_string();
+				details.variant = variant.to_string();
 
 
 				if details.pallet == "ParaInclusion" &&

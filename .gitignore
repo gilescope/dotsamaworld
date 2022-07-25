@@ -5,3 +5,4 @@ play.csv
 record.csv
 .old
 *.metadata.scale
+dist

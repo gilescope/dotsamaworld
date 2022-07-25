@@ -10,11 +10,17 @@ let
     extensions = [
 	  "rust-src"
 	];
+    targets = [
+      "wasm32-unknown-unknown"
+    ];
   });
 in
 with nixpkgs; mkShell {
   nativeBuildInputs = [
     pkgconfig
+    trunk # wasm only
+    wasm-bindgen-cli # wasm only
+    binaryen # wasm only
     clang lld # To use lld linker
   ];
   buildInputs = [

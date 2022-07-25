@@ -57,7 +57,7 @@ version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "796540673305a66d127804eef19ad696f1f204b8c1025aaca4958c17eab32877"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "once_cell",
  "version_check",
 ]
@@ -68,7 +68,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "once_cell",
  "version_check",
 ]
@@ -378,6 +378,17 @@ dependencies = [
  "log",
  "pin-project-lite",
  "tungstenite",
+]
+
+[[package]]
+name = "async_io_stream"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d7b9decdf35d8908a7e3ef02f64c5e9b1695e230154c0e8de3969142d9b94c"
+dependencies = [
+ "futures",
+ "pharos",
+ "rustc_version",
 ]
 
 [[package]]
@@ -1408,7 +1419,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e864ce079f076445c5fb0024f0762de5a617a3572f7ea15c015c9171bc124fd"
 dependencies = [
  "ahash 0.6.3",
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "instant",
  "tracing",
  "uuid",
@@ -1422,7 +1433,7 @@ checksum = "2f354c584812996febd48cc885f36b23004b49d6680e73fc95a69a2bb17a48e5"
 dependencies = [
  "ahash 0.7.6",
  "bevy_derive 0.7.0",
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "hashbrown 0.11.2",
  "instant",
  "tracing",
@@ -1706,10 +1717,12 @@ version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
+ "js-sys",
  "libc",
  "num-integer",
  "num-traits",
  "time",
+ "wasm-bindgen",
  "winapi 0.3.9",
 ]
 
@@ -1830,6 +1843,16 @@ checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
 dependencies = [
  "cfg-if 1.0.0",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "console_log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "501a375961cef1a0d44767200e66e4a559283097e91d0730b1d75dfb2f8a1494"
+dependencies = [
+ "log",
+ "web-sys",
 ]
 
 [[package]]
@@ -2268,9 +2291,12 @@ dependencies = [
  "bevy_mod_picking",
  "bevy_polyline",
  "bevy_spacemouse",
+ "bevy_tasks 0.7.0",
  "bevy_webgl2",
  "chrono",
  "color-eyre",
+ "console_error_panic_hook",
+ "console_log",
  "crossbeam-channel 0.5.4",
  "egui",
  "egui-datepicker",
@@ -2278,9 +2304,11 @@ dependencies = [
  "fastrand",
  "frame-metadata",
  "futures",
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "hex",
  "image 0.24.2",
+ "lazy_static",
+ "log",
  "open",
  "palette",
  "parity-scale-codec",
@@ -2297,7 +2325,9 @@ dependencies = [
  "tikv-jemallocator",
  "url",
  "wasm-bindgen",
+ "web-sys",
  "winit 0.26.1",
+ "ws_stream_wasm",
 ]
 
 [[package]]
@@ -2667,8 +2697,7 @@ dependencies = [
 [[package]]
 name = "frame-metadata"
 version = "15.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df6bb8542ef006ef0de09a5c4420787d79823c0ed7924225822362fd2bf2ff2d"
+source = "git+https://github.com/integritee-network/frame-metadata.git#3b43da9821238681f9431276d55b92a079142083"
 dependencies = [
  "cfg-if 1.0.0",
  "parity-scale-codec",
@@ -2859,14 +2888,14 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9be70c98951c83b8d2f8f60d7065fa6d5146873094452a1008da8c2f1e4205ad"
+checksum = "4eb1a864a501629691edf6c15a593b7a51eebaa1e8468e9ddc623de7c9b58ec6"
 dependencies = [
  "cfg-if 1.0.0",
  "js-sys",
  "libc",
- "wasi 0.10.2+wasi-snapshot-preview1",
+ "wasi 0.11.0+wasi-snapshot-preview1",
  "wasm-bindgen",
 ]
 
@@ -3815,7 +3844,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
 ]
 
 [[package]]
@@ -4368,6 +4397,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pharos"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9567389417feee6ce15dd6527a8a1ecac205ef62c2932bcf3d9f6fc5b78b414"
+dependencies = [
+ "futures",
+ "rustc_version",
+]
+
+[[package]]
 name = "phf"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4476,32 +4515,43 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/polkadyn#ee786718e0769d4821ebb1ccf95c2eed4071ff90"
 dependencies = [
  "frame-metadata",
+ "getrandom 0.2.7",
  "hex",
  "parity-scale-codec",
  "scale-info",
  "scale-value",
  "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]
 name = "polkapipe"
 version = "0.5.1"
-source = "git+https://github.com/gilescope/polkapipe?rev=dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191#dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191"
 dependencies = [
  "async-mutex",
  "async-std",
  "async-tls",
  "async-trait",
  "async-tungstenite",
+ "console_error_panic_hook",
+ "console_log",
+ "futures",
  "futures-channel",
  "futures-util",
+ "getrandom 0.2.7",
  "hex",
+ "js-sys",
  "jsonrpc",
  "log",
+ "pin-utils",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-logger",
+ "wasm-sockets",
+ "ws_stream_wasm",
 ]
 
 [[package]]
@@ -4666,7 +4716,7 @@ version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
 ]
 
 [[package]]
@@ -4754,7 +4804,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "redox_syscall",
  "thiserror",
 ]
@@ -4866,6 +4916,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e75f6a532d0fd9f7f13144f392b6ad56a32696bfcd9c78f797f16bbb6f072d6"
 
 [[package]]
+name = "rustc_version"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
+dependencies = [
+ "semver",
+]
+
+[[package]]
 name = "rustls"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4942,8 +5001,6 @@ dependencies = [
 [[package]]
 name = "scale-value"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4005122df6aa30891a2f918e66cac7668c2c5eb64b6771da9c267ecdd2d23e0"
 dependencies = [
  "bitvec",
  "either",
@@ -4958,7 +5015,6 @@ dependencies = [
 [[package]]
 name = "scale-value-to-borrowed"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=81e3d771b043bbf7c939800c4c95753cad69670f#81e3d771b043bbf7c939800c4c95753cad69670f"
 dependencies = [
  "scale-borrow",
  "scale-value",
@@ -4991,6 +5047,18 @@ dependencies = [
  "ring",
  "untrusted",
 ]
+
+[[package]]
+name = "semver"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2333e6df6d6598f2b1974829f853c2b4c5f4a6e503c10af918081aa6f8564e1"
+
+[[package]]
+name = "send_wrapper"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "930c0acf610d3fdb5e2ab6213019aaa04e227ebe9547b0649ba599b16d788bd7"
 
 [[package]]
 name = "serde"
@@ -5687,7 +5755,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
- "getrandom 0.2.6",
+ "getrandom 0.2.7",
  "serde",
 ]
 
@@ -5735,12 +5803,6 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
-
-[[package]]
-name = "wasi"
-version = "0.10.2+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
 name = "wasi"
@@ -5813,6 +5875,30 @@ name = "wasm-bindgen-shared"
 version = "0.2.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d554b7f530dee5964d9a9468d95c1f8b8acae4f282807e7d27d4b03099a46744"
+
+[[package]]
+name = "wasm-logger"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8f901fc525a6361552f3d95d7439382e7be2eb7e8f5ae0c88b94e434cbca2a"
+dependencies = [
+ "log",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-sockets"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8f79197ff5b54945ab40e5fc6337dc8be541e113ff7e13884aa9ffe52c90860"
+dependencies = [
+ "js-sys",
+ "log",
+ "thiserror",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "wayland-client"
@@ -6303,6 +6389,24 @@ checksum = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 dependencies = [
  "winapi 0.2.8",
  "winapi-build",
+]
+
+[[package]]
+name = "ws_stream_wasm"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47ca1ab42f5afed7fc332b22b6e932ca5414b209465412c8cdf0ad23bc0de645"
+dependencies = [
+ "async_io_stream",
+ "futures",
+ "js-sys",
+ "pharos",
+ "rustc_version",
+ "send_wrapper",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

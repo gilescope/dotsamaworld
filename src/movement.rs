@@ -68,7 +68,7 @@ pub fn player_move_arrows(
 
 		if anchor.follow_chain {
 			// If someone has recently pressed a key to move then don't try and move...
-			if time.seconds_since_startup() as i64 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2
+			if time.seconds_since_startup() as i32 - LAST_KEYSTROKE_TIME.load(Ordering::Relaxed) > 2
 			{
 				let x = datasource.default_track_speed;
 				velocity = Vec3::new(x, 0., 0.);
@@ -115,7 +115,7 @@ pub fn player_move_arrows(
 
 				// _ => (),
 				// }
-				LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
+				LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i32, Ordering::Relaxed);
 				break
 			}
 		}
@@ -185,7 +185,7 @@ pub fn scroll(
 	mut query: Query<&mut Transform, With<Viewport>>,
 ) {
 	for event in mouse_wheel_events.iter() {
-		LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i64, Ordering::Relaxed);
+		LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i32, Ordering::Relaxed);
 		for mut viewport in query.iter_mut() {
 			let forward = viewport.forward();
 			viewport.translation += forward * event.y;

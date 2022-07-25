@@ -141,7 +141,7 @@ where
 	/// Only used by live mode so should not cache.
 	async fn subscribe_finalised_blocks(
 		&mut self,
-	) -> Result<Box<dyn futures::Stream<Item = Result<H256, ()>> + Unpin>, ()> {
+	) -> Result<Box<dyn futures::Stream<Item = Result<H256, ()>> + Send + Unpin>, ()> {
 		self.underlying_source.subscribe_finalised_blocks().await
 	}
 

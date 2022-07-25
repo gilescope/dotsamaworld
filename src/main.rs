@@ -3,6 +3,7 @@
 #![feature(slice_pattern)]
 #![feature(slice_group_by)]
 #![feature(option_get_or_insert_default)]
+// #![feature(async_closure)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
@@ -31,13 +32,16 @@ use std::{
 		Arc,
 	},
 };
+use bevy::{
+    tasks::{AsyncComputeTaskPool, Task},
+};
 use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
 //use bevy_kira_audio::Audio;
 use std::{sync::Mutex, time::Duration};
 mod content;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::AtomicI32;
 mod datasource;
 mod movement;
 mod style;
@@ -57,10 +61,10 @@ use std::convert::{AsRef, TryInto};
 pub mod recorder;
 
 /// Pick a faster allocator.
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(target_arch="wasm32")))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(target_arch="wasm32")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
@@ -79,10 +83,11 @@ impl Default for MovementSettings {
 
 /// Distance vertically between layer 0 and layer 1
 const LAYER_GAP: f32 = 10.;
-
+use  lazy_static::lazy_static;
 /// The time by which all times should be placed relative to each other on the x axis.
-static BASETIME: AtomicI64 = AtomicI64::new(0);
-
+lazy_static! {
+static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
+}
 /// Bump this to tell the current datasources to stop.
 static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
 
@@ -131,19 +136,57 @@ pub struct HiFi;
 #[derive(Component)]
 pub struct MedFi;
 
-#[async_std::main]
-async fn main() -> color_eyre::eyre::Result<()> {
-	color_eyre::install()?;
+
+#[wasm_bindgen::prelude::wasm_bindgen]
+extern "C" {
+    // Use `js_namespace` here to bind `console.log(..)` instead of just
+    // `log(..)`
+    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+
+    // The `console.log` is quite polymorphic, so we can bind it with multiple
+    // signatures. Note that we need to use `js_name` to ensure we always call
+    // `log` in JS.
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_u32(a: u32);
+
+    // Multiple arguments too!
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_many(a: &str, b: &str);
+}
+
+fn main() -> () {
+	async_std::task::block_on(async_main());
+}
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
+
+async fn async_main() -> color_eyre::eyre::Result<()> {
+	// color_eyre::install()?;
+//   console_log!("Hello {}!", "world");
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+	// let error = console_log::init_with_level(Level::Warn);
+	//.expect("Failed to enable logging");
+	use log::{error, info, Level};
 
 	// App assumes the target dir exists
+	#[cfg(not(feature="wasm23"))]
 	let _ = std::fs::create_dir_all("target");
 
 	let low_power_mode = false;
 
 	let mut app = App::new();
-	app.insert_resource(Msaa { samples: 4 }).add_plugins(DefaultPlugins);
+	// app
+	app.insert_resource(Msaa { samples: 4 });
+	app.add_plugins(DefaultPlugins);
+
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
+	app.add_event::<DataSourceStreamEvent>();
 	app.insert_resource(MovementSettings {
 		sensitivity: 0.00020, // default: 0.00012
 		speed: 12.0,          // default: 12.0
@@ -165,12 +208,12 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	#[cfg(feature = "spacemouse")]
 	app.add_plugin(SpaceMousePlugin);
 
-	// Continuous rendering for games - bevy's default.
-	// app.insert_resource(WinitSettings::game())
-	// Power-saving reactive rendering for applications.
-	if low_power_mode {
-		app.insert_resource(WinitSettings::desktop_app());
-	}
+	// // Continuous rendering for games - bevy's default.
+	// // app.insert_resource(WinitSettings::game())
+	// // Power-saving reactive rendering for applications.
+	// if low_power_mode {
+	// 	app.insert_resource(WinitSettings::desktop_app());
+	// }
 	// You can also customize update behavior with the fields of [`WinitConfig`]
 	// .insert_resource(WinitSettings {
 	//     focused_mode: bevy::winit::UpdateMode::ReactiveLowPower { max_wait:
@@ -187,23 +230,22 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(HighlightablePickingPlugin);
 
 	app.add_plugin(PickingPlugin)
-		// .insert_resource(camera_rig
-		// )
-		.insert_resource(movement::Destination::default())
-		.add_system(ui::ui_bars_system)
-		.add_plugin(recorder::RecorderPlugin)
+		// .insert_resource(camera_rig)
+		.insert_resource(movement::Destination::default());
+		app.add_system(ui::ui_bars_system);
+		// .add_plugin(recorder::RecorderPlugin)
 		// .add_system(movement::rig_system)
-		.add_plugin(InteractablePickingPlugin)
-		// .add_plugin(HighlightablePickingPlugin)
+		app.add_plugin(InteractablePickingPlugin);
+		// .add_plugin(HighlightablePickingPlugin);
 		// .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
 		// .add_plugin(InspectorPlugin::<Inspector>::new())
 		// .register_inspectable::<Details>()
 		// .add_plugin(DebugEventsPickingPlugin)
-		.add_plugin(PolylinePlugin)
-		.add_plugin(EguiPlugin)
-		.insert_resource(ui::OccupiedScreenSpace::default())
-		.add_system(movement::scroll)
-		.add_startup_system(setup);
+		app.add_plugin(PolylinePlugin);
+		app.add_plugin(EguiPlugin);
+		app.insert_resource(ui::OccupiedScreenSpace::default());
+		app.add_system(movement::scroll);
+		app.add_startup_system(setup);
 	#[cfg(feature = "spacemouse")]
 	app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
 		scale.rotate_scale = 0.00010;
@@ -211,26 +253,28 @@ async fn main() -> color_eyre::eyre::Result<()> {
 	});
 	app.add_system(movement::player_move_arrows)
 		.add_system(rain)
-		.add_system(source_data)
-		// .add_system(pad_system)
-		// .add_plugin(LogDiagnosticsPlugin::default())
-		.add_plugin(FrameTimeDiagnosticsPlugin::default())
-		// .add_system(ui::update_camera_transform_system)
-		.add_system(right_click_system)
-		.add_system_to_stage(CoreStage::PostUpdate, update_visibility)
-		.add_startup_system(ui::details::configure_visuals)
-		.insert_resource(bevy_atmosphere::AtmosphereMat::default()) // Default Earth sky
-		.add_plugin(bevy_atmosphere::AtmospherePlugin {
+		.add_system(source_data);
+		// // .add_system(pad_system)
+		// // .add_plugin(LogDiagnosticsPlugin::default())
+		app.add_plugin(FrameTimeDiagnosticsPlugin::default());
+		// // .add_system(ui::update_camera_transform_system)
+		app.add_system(right_click_system);
+		app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
+   		app.add_startup_system(ui::details::configure_visuals);
+		app.insert_resource(bevy_atmosphere::AtmosphereMat::default()); // Default Earth sky
+		app.add_plugin(bevy_atmosphere::AtmospherePlugin {
 			dynamic: false, // Set to false since we aren't changing the sky's appearance
 			sky_radius: 1000.0,
-		})
-		.add_system(render_block)
-		.add_system_to_stage(CoreStage::PostUpdate, print_events);
+		});
+		app.add_system(render_block);
+		app.add_system_to_stage(CoreStage::PostUpdate, print_events);
 
 	app.run();
 
 	Ok(())
 }
+
+struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
 
 fn chain_name_to_url(chain_name: &str) -> String {
 	let mut chain_name = chain_name.to_string();
@@ -245,26 +289,48 @@ fn chain_name_to_url(chain_name: &str) -> String {
 	}
 }
 
-// fn start_background_audio(asset_server: Res<AssetServer>, audio: Res<Audio>) {
-//     audio.play_looped(asset_server.load("sounds/backtrack.ogg"));
+// // fn start_background_audio(asset_server: Res<AssetServer>, audio: Res<Audio>) {
+// //     audio.play_looped(asset_server.load("sounds/backtrack.ogg"));
+// // }
+// fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
+// 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
+// 	mut commands: Commands<'c,'d>,
+// 	mut sovereigns: ResMut<'e, Sovereigns>,
+// 	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
+// 	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
+// 	// mut dest: ResMut<Destination>,
+// 	mut spec: ResMut<'j, UrlBar>,
+// ) {
+// 	// async_std::task::block_on(source_data_async(datasource_events, commands, sovereigns,
+// 	// 	 details, clean_me, spec));
 // }
 
-fn source_data(
-	mut datasource_events: EventReader<DataSourceChangedEvent>,
-	mut commands: Commands,
-	mut sovereigns: ResMut<Sovereigns>,
-	details: Query<Entity, With<ClearMeAlwaysVisible>>,
-	clean_me: Query<Entity, With<ClearMe>>,
+// #[cfg(target_arch="wasm32")]
+// #[derive(Component)]
+// struct SourceDataTask(bevy_tasks::FakeTask);
+
+#[cfg(not(target_arch="wasm32"))]
+#[derive(Component)]
+struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
+
+fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
+	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
+	mut commands: Commands<'c,'d>,
+	mut sovereigns: ResMut<'e, Sovereigns>,
+	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
+	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
 	// mut dest: ResMut<Destination>,
-	mut spec: ResMut<UrlBar>,
+	mut spec: ResMut<'j, UrlBar>,
+	mut writer: EventWriter<DataSourceStreamEvent>,
+	thread_pool: Res<AsyncComputeTaskPool>
 ) {
 	for event in datasource_events.iter() {
-		println!("data source changes to {} {:?}", event.source, event.timestamp);
+		log!("data source changes to {} {:?}", event.source, event.timestamp);
 
 		clear_world(&details, &mut commands, &clean_me);
 
 		if event.source.is_empty() {
-			println!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
+			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
 			return
 		}
 
@@ -274,11 +340,11 @@ fn source_data(
 			// if time is now or in future then we are live mode.
 			let is_live = timestamp >= (Utc::now().timestamp() * 1000);
 			if is_live {
-				BASETIME.store(Utc::now().timestamp() * 1000, Ordering::Relaxed);
+				*BASETIME.lock().unwrap() = Utc::now().timestamp() * 1000;
 				spec.timestamp = Utc::now().naive_utc();
 				spec.reset_changed();
 			} else {
-				BASETIME.store(timestamp, Ordering::Relaxed);
+				*BASETIME.lock().unwrap() = timestamp;
 			}
 			is_live
 		} else {
@@ -288,9 +354,9 @@ fn source_data(
 		// 	event.timestamp = None;
 		// }
 
-		println!("event source {}", event.source);
+		log!("event source {}", event.source);
 		sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
-		println!("tracking speed set to {}", sovereigns.default_track_speed);
+		log!("tracking speed set to {}", sovereigns.default_track_speed);
 		let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 			(DotUrl::default(), None)
 		} else {
@@ -298,9 +364,9 @@ fn source_data(
 		};
 
 		let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
-		println!("dot url {:?}", &dot_url);
+		log!("dot url {:?}", &dot_url);
 		//let as_of = Some(dot_url.clone());
-		println!("Block number selected for relay chains: {:?}", &as_of);
+		log!("Block number selected for relay chains: {:?}", &as_of);
 
 
 		let networks = networks::get_network(&selected_env);
@@ -314,14 +380,17 @@ fn source_data(
 					sovereign: Some(if relay_index == 0 { -1 } else { 1 }),
 					..dot_url.clone()
 				};
-
-				relay.as_slice().par_iter().enumerate().filter_map(|(chain_index, chain_name)| {
+				//relay.as_slice().par_iter().
+				relay.as_slice().iter().enumerate().filter_map( |(chain_index, chain_name)| {
 					let url = chain_name_to_url(&chain_name);
 					let mut source = datasource::CachedDataSource::new(
 						&url,
 						datasource::RawDataSource::new(&url),
 					);
-					let para_id = datasource::get_parachain_id_from_url(&mut source);
+					#[cfg(not(target_arch="wasm32"))]
+					let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
+					#[cfg(target_arch="wasm32")]
+					let para_id:  Result<Option<NonZeroU32>, polkapipe::Error> = if datasource::is_relay_chain(&url) { Ok(None) } else {Ok(Some(NonZeroU32::try_from(7777u32).unwrap()))};
 					if para_id.is_err() {
 						return None;
 					}
@@ -374,7 +443,7 @@ fn source_data(
 			let mut send_map = Some(send_map);
 			let mut sov_relay = vec![];
 			for ((chain, source), rc) in relay2 {
-				println!("listening to {}", chain.info.chain_ws);
+				log!("listening to {}", chain.info.chain_ws);
 
 				let url_clone = chain.info.chain_ws.clone();
 				let maybe_sender =
@@ -382,31 +451,54 @@ fn source_data(
 
 				let lock_clone = chain.shared.clone();
 				let as_of = as_of.clone();
-				println!("as of for chain {:?}", &as_of);
+				log!("as of for chain {:?}", &as_of);
 				let chain_info = chain.info.clone();
-				std::thread::spawn(move || {
-					// let mut reconnects = 0;
 
-					// while reconnects < 20 {
-					println!("Connecting to {} as of {:?}", &url_clone, as_of);
-					let _res = async_std::task::block_on(datasource::watch_blocks(
-						lock_clone.clone(),
-						chain_info,
-						as_of,
-						rc,
-						maybe_sender,
-						source,
-					));
-					// if res.is_ok() { break; }
-					// println!(
-					//     "Problem with {} blocks (retries left {})",
-					//     &url_clone, reconnects
-					// );
-					// std::thread::sleep(std::time::Duration::from_secs(20));
-					// reconnects += 1;
-					// }
-					println!("finished listening to {}", url_clone);
-				});
+				let mut block_watcher = datasource::BlockWatcher{
+					tx: Some(lock_clone.clone()),
+					chain_info,
+					as_of,
+					receive_channel: Some(rc),
+					sender: maybe_sender,
+					// source
+				};
+
+
+				let data_source_task = thread_pool.spawn_local(
+					block_watcher.watch_blocks(source));
+				// 	sync move || {
+				// 	// let mut reconnects = 0;
+
+				// 	// while reconnects < 20 {
+				// 	println!("Connecting to {} as of {:?}", &url_clone, as_of);
+				// 	let _res = datasource::watch_blocks(
+				// 		lock_clone.clone(),
+				// 		chain_info,
+				// 		as_of,
+				// 		rc,
+				// 		maybe_sender,
+				// 		source,
+				// 	).await;
+
+				// 	// if res.is_ok() { break; }
+				// 	// println!(
+				// 	//     "Problem with {} blocks (retries left {})",
+				// 	//     &url_clone, reconnects
+				// 	// );
+				// 	// std::thread::sleep(std::time::Duration::from_secs(20));
+				// 	// reconnects += 1;
+				// 	// }
+				// 	// println!("finished listening to {} {:?}", url_clone, my_writer);
+				// }
+
+				// We do this to signal that they are long running tasks.
+				// (essential for wasm32 as a FakeTask is returned)
+				data_source_task.detach();
+
+				// #[cfg(not(target_arch="wasm32"))]
+				// commands.spawn().insert(SourceDataTask(data_source_task));
+				// commands.spawn().insert(SourceDataTask(data_source_task));
+				
 				sov_relay.push(chain);
 			}
 			sovereigns.relays.push(sov_relay);
@@ -485,7 +577,7 @@ fn clear_world(
 	for detail in clean_me.iter() {
 		commands.entity(detail).despawn();
 	}
-	BASETIME.store(0, Ordering::Relaxed);
+	*BASETIME.lock().unwrap() = 0;
 }
 
 #[derive(Clone, Copy)]
@@ -664,12 +756,12 @@ static EVENTS: AtomicU32 = AtomicU32::new(0);
 
 // Convert from x to timestamp
 pub fn x_to_timestamp(x: f32) -> i64 {
-	let zero = BASETIME.load(Ordering::Relaxed) as i64;
+	let zero = *BASETIME.lock().unwrap();
 	(zero + (x as f64 * 400.) as i64) / 1000
 }
 
 pub fn timestamp_to_x(timestamp: i64) -> f32 {
-	let zero = BASETIME.load(Ordering::Relaxed);
+	let zero = *BASETIME.lock().unwrap();
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
@@ -684,295 +776,300 @@ fn render_block(
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
+	
+	mut reader: EventReader<DataSourceStreamEvent>,
 ) {
-	// let is_self_sovereign = false; //TODO!
+	// let is_self_sovereign = false; //TODO
 	for relay in &relays.relays {
 		for chain in relay.iter() {
-			if let Ok(ref mut block_events) = chain.shared.try_lock() {
+	// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
+		// for chain in relay.iter() {
+			 if let Ok(ref mut block_events) = chain.shared.try_lock() {
 				let chain_info = &chain.info;
 				if let Some(data_update) = (*block_events).pop() {
-					match data_update {
-						DataUpdate::NewBlock(block) => {
-							BLOCKS.fetch_add(1, Ordering::Relaxed);
+		match data_update {
+			DataUpdate::NewBlock(block) => {
+				BLOCKS.fetch_add(1, Ordering::Relaxed);
 
-							// println!(
-							// 	"chains {} blocks {} txs {} events {}",
-							// 	CHAINS.load(Ordering::Relaxed),
-							// 	BLOCKS.load(Ordering::Relaxed),
-							// 	EXTRINSICS.load(Ordering::Relaxed),
-							// 	EVENTS.load(Ordering::Relaxed)
-							// );
+				// println!(
+				// 	"chains {} blocks {} txs {} events {}",
+				// 	CHAINS.load(Ordering::Relaxed),
+				// 	BLOCKS.load(Ordering::Relaxed),
+				// 	EXTRINSICS.load(Ordering::Relaxed),
+				// 	EVENTS.load(Ordering::Relaxed)
+				// );
 
-							// Skip data we no longer care about because the datasource has changed
-							let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
-							if block.data_epoc != now_epoc {
-								println!(
-									"discarding out of date block made at {} but we are at {}",
-									block.data_epoc, now_epoc
-								);
-								continue
-							}
+				// Skip data we no longer care about because the datasource has changed
+				let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+				if block.data_epoc != now_epoc {
+					println!(
+						"discarding out of date block made at {} but we are at {}",
+						block.data_epoc, now_epoc
+					);
+					continue
+				}
 
-							let mut base_time = BASETIME.load(Ordering::Relaxed);
-							if base_time == 0 {
-								base_time = block.timestamp.unwrap_or(0);
-								BASETIME.store(base_time, Ordering::Relaxed);
-							}
+				let mut base_time = *BASETIME.lock().unwrap();
+				if base_time == 0 {
+					base_time = block.timestamp.unwrap_or(0);
+					*BASETIME.lock().unwrap() = base_time;
+				}
 
-							// let block_num = if is_self_sovereign {
-							//     block.blockurl.block_number.unwrap() as u32
-							// } else {
+				// let block_num = if is_self_sovereign {
+				//     block.blockurl.block_number.unwrap() as u32
+				// } else {
 
-							//     if base_time == 0
-							//     if rcount == 0 {
-							//         if chain == 0 &&  {
-							//             //relay
-							//             RELAY_BLOCKS.store(
-							//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-							//                 Ordering::Relaxed,
-							//             );
-							//         }
-							//         RELAY_BLOCKS.load(Ordering::Relaxed)
-							//     } else {
-							//         if chain == 0 {
-							//             //relay
-							//             RELAY_BLOCKS2.store(
-							//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-							//                 Ordering::Relaxed,
-							//             );
-							//         }
-							//         RELAY_BLOCKS2.load(Ordering::Relaxed)
-							//     }
-							// };
+				//     if base_time == 0
+				//     if rcount == 0 {
+				//         if chain == 0 &&  {
+				//             //relay
+				//             RELAY_BLOCKS.store(
+				//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+				//                 Ordering::Relaxed,
+				//             );
+				//         }
+				//         RELAY_BLOCKS.load(Ordering::Relaxed)
+				//     } else {
+				//         if chain == 0 {
+				//             //relay
+				//             RELAY_BLOCKS2.store(
+				//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+				//                 Ordering::Relaxed,
+				//             );
+				//         }
+				//         RELAY_BLOCKS2.load(Ordering::Relaxed)
+				//     }
+				// };
 
-							let rflip = chain_info.chain_url.rflip();
-							let encoded: String =
-								url::form_urlencoded::Serializer::new(String::new())
-									.append_pair("rpc", &chain_info.chain_ws)
-									.finish();
+				let rflip = chain_info.chain_url.rflip();
+				let encoded: String =
+					url::form_urlencoded::Serializer::new(String::new())
+						.append_pair("rpc", &chain_info.chain_ws)
+						.finish();
 
-							let is_relay = chain.info.chain_url.is_relay();
-							let details = Details {
-								doturl: DotUrl {
-									extrinsic: None,
-									event: None,
-									..block.blockurl.clone()
-								},
+				let is_relay = chain_info.chain_url.is_relay();
+				let details = Details {
+					doturl: DotUrl {
+						extrinsic: None,
+						event: None,
+						..block.blockurl.clone()
+					},
 
-								url: format!(
-									"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
-									&encoded,
-									hex::encode(block.blockhash)
+					url: format!(
+						"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+						&encoded,
+						hex::encode(block.blockhash)
+					),
+					..default()
+				};
+
+				// println!("block.timestamp {:?}", block.timestamp);
+				// println!("base_time {:?}",base_time);
+				let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+
+				// Add the new block as a large square on the ground:
+				{
+					let timestamp_color = if chain_info.chain_url.is_relay() {
+						block.timestamp.unwrap()
+					} else {
+						block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
+					} / 400;
+
+					let transform = Transform::from_translation(Vec3::new(
+						0. + (block_num as f32),
+						if is_relay { 0. } else { LAYER_GAP },
+						(RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							rflip,
+					));
+					// println!("block created at {:?} blocknum {}", transform,
+					// block_num);
+
+					let mut bun = commands.spawn_bundle(PbrBundle {
+						mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
+						material: materials.add(StandardMaterial {
+							base_color: style::color_block_number(
+								timestamp_color,
+								chain_info.chain_url.is_darkside(),
+							), // Color::rgba(0., 0., 0., 0.7),
+							alpha_mode: AlphaMode::Blend,
+							perceptual_roughness: 0.08,
+							unlit: if block.blockurl.is_darkside() {
+								true
+							} else {
+								false
+							},
+							..default()
+						}),
+						transform,
+						..Default::default()
+					});
+
+					bun.insert(ClearMe);
+					// bun.insert(Aabb::from_min_max(
+					//     Vec3::new(0., 0., 0.),
+					//     Vec3::new(1., 1., 1.),
+					// ));
+					let chain_str = details.doturl.chain_str();
+
+					bun.insert(details)
+						.insert(Name::new("Block"))
+						.with_children(|parent| {
+							// let name = chain_info
+							// .chain_name
+							// .replace(" ", "-")
+							// .replace("-Testnet", "");
+							let texture_handle = asset_server
+								.load(&format!("branding/{}.jpeg", chain_str));
+							let aspect = 1. / 3.;
+
+							// create a new quad mesh. this is what we will apply the
+							// texture to
+							let quad_width = BLOCK;
+							let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+								Vec2::new(quad_width, quad_width * aspect),
+							)));
+
+							// this material renders the texture normally
+							let material_handle = materials.add(StandardMaterial {
+								base_color_texture: Some(texture_handle.clone()),
+								alpha_mode: AlphaMode::Blend,
+								unlit: true, // !block_events.2.inserted_pic,
+								..default()
+							});
+
+							use std::f32::consts::PI;
+							// textured quad - normal
+							let rot =
+								Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+												// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
+												// / 2.0);
+							let transform = Transform {
+								translation: Vec3::new(
+									-7., // + (BLOCK_AND_SPACER * block_num as f32),
+									0.1, //1.5
+									0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
 								),
+								rotation: rot,
 								..default()
 							};
 
-							// println!("block.timestamp {:?}", block.timestamp);
-							// println!("base_time {:?}",base_time);
-							let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+							parent
+								.spawn_bundle(PbrBundle {
+									mesh: quad_handle.clone(),
+									material: material_handle.clone(),
 
-							// Add the new block as a large square on the ground:
-							{
-								let timestamp_color = if chain.info.chain_url.is_relay() {
-									block.timestamp.unwrap()
-								} else {
-									block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
-								} / 400;
-
-								let transform = Transform::from_translation(Vec3::new(
-									0. + (block_num as f32),
-									if is_relay { 0. } else { LAYER_GAP },
-									(RELAY_CHAIN_CHASM_WIDTH +
-										BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-										rflip,
-								));
-								// println!("block created at {:?} blocknum {}", transform,
-								// block_num);
-
-								let mut bun = commands.spawn_bundle(PbrBundle {
-									mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
-									material: materials.add(StandardMaterial {
-										base_color: style::color_block_number(
-											timestamp_color,
-											chain.info.chain_url.is_darkside(),
-										), // Color::rgba(0., 0., 0., 0.7),
-										alpha_mode: AlphaMode::Blend,
-										perceptual_roughness: 0.08,
-										unlit: if block.blockurl.is_darkside() {
-											true
-										} else {
-											false
-										},
-										..default()
-									}),
 									transform,
-									..Default::default()
-								});
+									..default()
+								})
+								.insert(Name::new("BillboardDown"))
+								.insert(ClearMe);
+							// by adding Details to the banners they are cleared down
+							// when we remove every entity with Details.
 
-								bun.insert(ClearMe);
-								// bun.insert(Aabb::from_min_max(
-								//     Vec3::new(0., 0., 0.),
-								//     Vec3::new(1., 1., 1.),
-								// ));
-								let chain_str = details.doturl.chain_str();
+							// create a new quad mesh. this is what we will apply the
+							// texture to
+							let quad_width = BLOCK;
+							let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+								Vec2::new(quad_width, quad_width * aspect),
+							)));
 
-								bun.insert(details)
-									.insert(Name::new("Block"))
-									.with_children(|parent| {
-										// let name = chain_info
-										// .chain_name
-										// .replace(" ", "-")
-										// .replace("-Testnet", "");
-										let texture_handle = asset_server
-											.load(&format!("branding/{}.jpeg", chain_str));
-										let aspect = 1. / 3.;
+							// this material renders the texture normally
+							let material_handle = materials.add(StandardMaterial {
+								base_color_texture: Some(texture_handle.clone()),
+								alpha_mode: AlphaMode::Blend,
+								unlit: true,
+								..default()
+							});
 
-										// create a new quad mesh. this is what we will apply the
-										// texture to
-										let quad_width = BLOCK;
-										let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-											Vec2::new(quad_width, quad_width * aspect),
-										)));
+							// textured quad - normal
+							let rot =
+								Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+												// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
+												// / 2.0);
+							let transform = Transform {
+								translation: Vec3::new(
+									-7., // + (BLOCK_AND_SPACER * block_num as f32),
+									0.1, //1.5
+									0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
+								),
+								rotation: rot,
+								..default()
+							};
 
-										// this material renders the texture normally
-										let material_handle = materials.add(StandardMaterial {
-											base_color_texture: Some(texture_handle.clone()),
-											alpha_mode: AlphaMode::Blend,
-											unlit: true, // !block_events.2.inserted_pic,
-											..default()
-										});
+							parent
+								.spawn_bundle(PbrBundle {
+									mesh: quad_handle.clone(),
+									material: material_handle.clone(),
+									transform,
+									..default()
+								})
+								.insert(Name::new("BillboardUp"))
+								.insert(ClearMe);
+							// .insert(Aabb::from_min_max(
+							//     Vec3::new(0., 0., 0.),
+							//     Vec3::new(1., 1., 1.),
+							// )); // TODO: should be able to add same component onto 3
+							// different entities maybe?
 
-										use std::f32::consts::PI;
-										// textured quad - normal
-										let rot =
-											Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
-														 // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-														 // / 2.0);
-										let transform = Transform {
-											translation: Vec3::new(
-												-7., // + (BLOCK_AND_SPACER * block_num as f32),
-												0.1, //1.5
-												0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
-											),
-											rotation: rot,
-											..default()
-										};
-
-										parent
-											.spawn_bundle(PbrBundle {
-												mesh: quad_handle.clone(),
-												material: material_handle.clone(),
-
-												transform,
-												..default()
-											})
-											.insert(Name::new("BillboardDown"))
-											.insert(ClearMe);
-										// by adding Details to the banners they are cleared down
-										// when we remove every entity with Details.
-
-										// create a new quad mesh. this is what we will apply the
-										// texture to
-										let quad_width = BLOCK;
-										let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-											Vec2::new(quad_width, quad_width * aspect),
-										)));
-
-										// this material renders the texture normally
-										let material_handle = materials.add(StandardMaterial {
-											base_color_texture: Some(texture_handle.clone()),
-											alpha_mode: AlphaMode::Blend,
-											unlit: true,
-											..default()
-										});
-
-										// textured quad - normal
-										let rot =
-											Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-														 // let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-														 // / 2.0);
-										let transform = Transform {
-											translation: Vec3::new(
-												-7., // + (BLOCK_AND_SPACER * block_num as f32),
-												0.1, //1.5
-												0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
-											),
-											rotation: rot,
-											..default()
-										};
-
-										parent
-											.spawn_bundle(PbrBundle {
-												mesh: quad_handle.clone(),
-												material: material_handle.clone(),
-												transform,
-												..default()
-											})
-											.insert(Name::new("BillboardUp"))
-											.insert(ClearMe);
-										// .insert(Aabb::from_min_max(
-										//     Vec3::new(0., 0., 0.),
-										//     Vec3::new(1., 1., 1.),
-										// )); // TODO: should be able to add same component onto 3
-										// different entities maybe?
-
-										//block_events.2.inserted_pic = true;
-									})
-									.insert_bundle(PickableBundle::default());
-							}
-
-							let ext_with_events =
-								datasource::associate_events(block.extrinsics, block.events);
-
-							// Leave infrastructure events underground and show user activity above
-							// ground.
-							let (boring, fun): (Vec<_>, Vec<_>) =
-								ext_with_events.into_iter().partition(|(e, _)| {
-									if let Some(ext) = e {
-										content::is_utility_extrinsic(ext)
-									} else {
-										true
-									}
-								});
-
-							add_blocks(
-								&chain_info,
-								block_num,
-								fun,
-								&mut commands,
-								&mut meshes,
-								&mut materials,
-								BuildDirection::Up,
-								&block.blockhash,
-								&links,
-								&mut polyline_materials,
-								&mut polylines,
-								&encoded,
-							);
-
-							add_blocks(
-								&chain_info,
-								block_num,
-								boring,
-								&mut commands,
-								&mut meshes,
-								&mut materials,
-								BuildDirection::Down,
-								&block.blockhash,
-								&links,
-								&mut polyline_materials,
-								&mut polylines,
-								&encoded,
-							);
-							event.send(RequestRedraw);
-						},
-						DataUpdate::NewChain(chain_info) => {
-							CHAINS.fetch_add(1, Ordering::Relaxed);
-							draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
-						},
-					}
+							//block_events.2.inserted_pic = true;
+						})
+						.insert_bundle(PickableBundle::default());
 				}
-			}
+
+				let ext_with_events =
+					datasource::associate_events(block.extrinsics.clone(), block.events.clone());
+
+				// Leave infrastructure events underground and show user activity above
+				// ground.
+				let (boring, fun): (Vec<_>, Vec<_>) =
+					ext_with_events.into_iter().partition(|(e, _)| {
+						if let Some(ext) = e {
+							content::is_utility_extrinsic(ext)
+						} else {
+							true
+						}
+					});
+
+				add_blocks(
+					&chain_info,
+					block_num,
+					fun,
+					&mut commands,
+					&mut meshes,
+					&mut materials,
+					BuildDirection::Up,
+					&block.blockhash,
+					&links,
+					&mut polyline_materials,
+					&mut polylines,
+					&encoded,
+				);
+
+				add_blocks(
+					&chain_info,
+					block_num,
+					boring,
+					&mut commands,
+					&mut meshes,
+					&mut materials,
+					BuildDirection::Down,
+					&block.blockhash,
+					&links,
+					&mut polyline_materials,
+					&mut polylines,
+					&encoded,
+				);
+				event.send(RequestRedraw);
+			},
+			DataUpdate::NewChain(chain_info) => {
+				CHAINS.fetch_add(1, Ordering::Relaxed);
+				draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
+			},
+
+		}
+	}
+}
 		}
 	}
 }
@@ -1434,8 +1531,8 @@ pub fn print_events(
 				}
 			},
 			PickingEvent::Clicked(entity) => {
-				let now = Utc::now().timestamp_millis();
-				let prev = LAST_CLICK_TIME.swap(now, Ordering::Relaxed);
+				let now = Utc::now().timestamp_millis() as i32;
+				let prev = LAST_CLICK_TIME.swap(now as i32, Ordering::Relaxed);
 				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
 				if let Some(selected) = &inspector.selected {
 					if selected.doturl == details.doturl && !(now - prev < 400) {
@@ -1478,8 +1575,8 @@ pub fn print_events(
 
 struct Width(f32);
 
-static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
-static LAST_KEYSTROKE_TIME: AtomicI64 = AtomicI64::new(0);
+static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
+static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
 fn update_visibility(
 	mut entity_low_midfi: Query<(
@@ -1645,8 +1742,8 @@ fn setup(
 		.insert(Viewport)
 		.insert_bundle(PickingCameraBundle { ..default() });
 
-	#[cfg(feature = "spacemouse")]
-	entity_comands.insert(SpaceMouseRelativeControllable);
+	// #[cfg(feature = "spacemouse")]
+	// entity_comands.insert(SpaceMouseRelativeControllable);
 
 	commands.insert_resource(UpdateTimer { timer: Timer::new(Duration::from_millis(50), true) });
 
@@ -1668,10 +1765,6 @@ fn setup(
 		source: "dotsama:/1//10504599".to_string(), // LIVE.to_string(),
 		timestamp: None,
 	});
-	// datasource_events.send(DataSourceChangedEvent {
-	// 	source: LIVE.to_string(),
-	// 	timestamp: None,
-	// });
 }
 
 #[derive(Default)]

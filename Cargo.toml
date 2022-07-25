@@ -17,16 +17,16 @@ adaptive-fps = []
 [dependencies]
 #sp-core = "*"
 primitive-types = "0.11"
-
+log = "0.4.14"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
-
+lazy_static = "*"
 futures = "0.3.13"
 #jsonrpsee-types = "*"
 
 crossbeam-channel = "*"
 egui-datepicker = { git="https://github.com/HU90m/egui-datepicker.git", branch = "for-project-use", default-features = false }
-chrono= { version = "*", default-features = false }
+
 #wasm-bindgen-rayon = "1.0"
 #[target.'cfg(target_os = "linux")'.dependencies]
 
@@ -50,19 +50,26 @@ bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev
 serde = "*"
 bevy_egui = "*"
 egui = "0.17"
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191", features = ["wss"]}
+
 url = "*"
-async-tungstenite = "*"
+# async-tungstenite = "*"
 async-tls = "*"
 color-eyre = {version = "0.5", default-features = false }
 bevy_polyline = "0.2"
 # bevy_hanabi = "0.2"
-frame-metadata = "15.0.0"
+# frame-metadata = "15.0.0"
+frame-metadata = { git="https://github.com/integritee-network/frame-metadata.git", default-features = false, features = ["v14", "full_derive"] }
+
 scale-info = { version = "*", features = ["serde"] }
-scale-value = { version = "*" }
+# scale-value = { version = "*" }
+scale-value = {path="/home/gilescope/git/scale-value" }
 scale-borrow = { git="https://github.com/gilescope/scale-borrow", features = ["bitvec"], rev="32eaadb6599895928ac9ccec133940edf1da0d35" }
-scale-value-to-borrowed={ git = "https://github.com/gilescope/scale-value-to-borrowed", features=["bitvec"], rev="81e3d771b043bbf7c939800c4c95753cad69670f" }
-polkadyn = { git = "https://github.com/gilescope/polkadyn" }
+# scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features=["bitvec"], rev="81e3d771b043bbf7c939800c4c95753cad69670f" }
+scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
+
+# polkadyn = { git = "https://github.com/gilescope/polkadyn" }
+polkadyn = { path = "/home/gilescope/git/polkadyn" }
+ 
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # bevy_kira_audio = "*"
@@ -71,24 +78,34 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn" }
 egui_extras = { version="0.17", features = ["image", "image"] }
 image = { version = "0.24", features = ["jpeg"] }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
+[target.'cfg(all(not(target_env = "msvc"),not(target_arch = "wasm32")))'.dependencies]
 tikv-jemallocator = "0.5"
-
 
 # Dependencies for native only.
 # dynamic
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+chrono= { version = "*", default-features = false }
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
 # subxt = { git = "https://github.com/paritytech/subxt.git" }
 open = "1"
+# polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191", features = ["wss"]}
+polkapipe = { path= "/run/media/gilescope/scratch/polkapipe", default-features=false, features = ["wss"]}
+async-tungstenite = { version = "0.15.0",  default-features = true, features = ["async-tls", "async-std-runtime"] }
 
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+console_log = "*"
+console_error_panic_hook = "0.1"
+bevy_tasks = "0.7"
+chrono= { version = "*", default-features = false, features=["wasmbind"] }
 bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
 bevy_webgl2 = "*"
-getrandom = { version = "*", features = ["wasm-bindgen"] }
+getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 #tracing-wasm = "*"
 wasm-bindgen = "*"
+ws_stream_wasm = "*"
+# polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="dd6f6d9ab3d5e7509ca94607f0a1ef9ade8fb191", features = ["wss"]}
+polkapipe = { path= "/run/media/gilescope/scratch/polkapipe", default-features=false, features = ["ws-web"]}
 
 # [patch.'https://github.com/bevyengine/bevy']
 # bevy = {git = "https://github.com/bevyengine/bevy//", rev="841755aaf23acfd55b375c37390daeb302c5b30b", default-features=false}
@@ -106,17 +123,19 @@ wasm-bindgen = "*"
 
 
 #async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
-# [dependencies.web-sys]
-# version = "0.3"
-# features = [
-#     'console',
-#     'Document',
-#     'HtmlElement',
-#     'HtmlInputElement',
-#     'MessageEvent',
-#     'Window',
-#     'Worker',
-# ]
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3"
+features = [
+    'console',
+    'Document',
+    'HtmlElement',
+    'HtmlInputElement',
+    'MessageEvent',
+    'Window',
+    'Worker',
+    'WebGlRenderingContext',
+    'WebGlShader'
+]
 
 [profile.dev]
 opt-level = 1
