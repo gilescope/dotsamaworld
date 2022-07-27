@@ -4,9 +4,16 @@ use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use primitive_types::H256;
 
+#[derive(Clone)]
 pub struct CachedDataSource<S: Source> {
 	underlying_source: S,
 	urlhash: u64,
+}
+
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
 }
 
 type BError = polkapipe::Error; //  Box<dyn std::error::Error>;
@@ -69,6 +76,13 @@ impl<S> Source for CachedDataSource<S>
 where
 	S: Source,
 {
+	#[cfg(target_arch="wasm32")]
+	async fn process_incoming_messages(&self) {
+		log!("cached process incoming run");
+		self.underlying_source.process_incoming_messages().await;
+		log!("cached process incoming fin");
+	}
+
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,

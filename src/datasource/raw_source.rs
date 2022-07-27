@@ -4,6 +4,7 @@ use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
 // use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
+use core::time::Duration;
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -21,9 +22,15 @@ impl AgnosticBlock {
 	}
 }
 
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
+}
+
 /// A way to source untransformed raw data.
 #[async_trait(?Send)]
-pub trait Source {
+pub trait Source : Clone {
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
@@ -56,8 +63,8 @@ pub trait Source {
 
 	fn url(&self) -> &str;
 
-	// #[cfg(target_arch="wasm32")]
-	// async fn drive(&self);
+	#[cfg(target_arch="wasm32")]
+	async fn process_incoming_messages(&self);
 }
 
 // pub struct RawDataSource {
@@ -261,6 +268,7 @@ type WSBackend = polkapipe::ws::Backend<
 	>,
 >;
 
+#[derive(Clone)]
 pub struct RawDataSource {
 	ws_url: String,
 	client: Option<WSBackend>,
@@ -285,10 +293,7 @@ impl RawDataSource {
 		self.client.as_mut()
 	}
 
-	// #[cfg(target_arch="wasm32")]
-	// async fn drive(&self) {
-	// 	self.client.as_mut().unwrap().process_incoming_messages().await
-	// }
+
 
 	#[cfg(not(target_arch="wasm32"))]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
@@ -303,12 +308,26 @@ impl RawDataSource {
 
 #[async_trait(?Send)]
 impl Source for RawDataSource {
+	#[cfg(target_arch="wasm32")]
+	async fn process_incoming_messages(&self) {
+		log!("start process incoming messages");
+
+		// while self.client.is_none() {
+		// 	async_std::task::yield_now().await;
+		// }
+		log!("await process incoming messages");
+		self.client.as_ref().unwrap().process_incoming_messages().await;
+		log!("finish process incoming messages");
+	}
+
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
 	) -> Result<Option<primitive_types::H256>, BError> {
+			log!("get client");
 		if let Some(client) = self.client()
 			.await {
+				log!("got client");
 			client
 				.query_block_hash(&vec![block_number])
 				.await
@@ -374,7 +393,7 @@ impl Source for RawDataSource {
 					if let Some(serde_json::value::Value::Array(extrinsics)) = map.get("extrinsics") {
 						for ex in extrinsics {
 							if let serde_json::value::Value::String(val) = ex {
-							/* 	pri/*  */ntln!("about to decode '{}'", &val); */
+							/* 	println!("about to decode '{}'", &val); */
 								res.extrinsics.push(hex::decode(val.trim_start_matches("0x")).unwrap());
 							} else {
 								panic!()

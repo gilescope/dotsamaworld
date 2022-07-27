@@ -30,9 +30,9 @@ mod utils;
 use utils::{flattern};
 mod cached_source;
 mod raw_source;
-use crate::datasource::raw_source::Source;
 pub use cached_source::CachedDataSource;
 pub use raw_source::RawDataSource;
+pub use raw_source::Source;
 
 macro_rules! log {
     // Note that this is using the `log` function imported above during
@@ -321,9 +321,10 @@ log!("listening to as of {:?}", as_of);
 				let mut last_timestamp = None;
 				for block_number in as_of.block_number.unwrap().. {
 					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
+					log!("get block {:?}", block_number);
 					let block_hash: Option<primitive_types::H256> =
 						get_block_hash(&mut source, block_number).await;
-
+					log!("hash is {:?}", block_hash);
 					if block_hash.is_none() {
 						eprintln!(
 							"should be able to get from relay chain hash for block num {} of url {}",

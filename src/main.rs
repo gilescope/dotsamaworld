@@ -464,8 +464,24 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 				};
 
 
+
+
+
 				let data_source_task = thread_pool.spawn_local(
-					block_watcher.watch_blocks(source));
+					block_watcher.watch_blocks(source.clone()));
+				data_source_task.detach();
+
+				use crate::datasource::Source;
+
+				let cloned = source.clone();
+				#[cfg(target_arch="wasm32")]
+				let data_source_task2 = thread_pool.spawn_local(async move {
+					log!("spawned local task run");
+					cloned.process_incoming_messages().await;
+				});
+				#[cfg(target_arch="wasm32")]
+				data_source_task2.detach();
+
 				// 	sync move || {
 				// 	// let mut reconnects = 0;
 
@@ -493,7 +509,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 
 				// We do this to signal that they are long running tasks.
 				// (essential for wasm32 as a FakeTask is returned)
-				data_source_task.detach();
+				
 
 				// #[cfg(not(target_arch="wasm32"))]
 				// commands.spawn().insert(SourceDataTask(data_source_task));

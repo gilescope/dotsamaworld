@@ -4515,6 +4515,7 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
+source = "git+https://github.com/gilescope/polkadyn#c458c0139e083d17b60ad11e7bd23d1c9e1bdfde"
 dependencies = [
  "frame-metadata",
  "getrandom 0.2.7",
@@ -4529,6 +4530,7 @@ dependencies = [
 [[package]]
 name = "polkapipe"
 version = "0.5.1"
+source = "git+https://github.com/gilescope/polkapipe?rev=de8d332bc69a2fcbd6703fbf3c9280c74c058040#de8d332bc69a2fcbd6703fbf3c9280c74c058040"
 dependencies = [
  "async-mutex",
  "async-std",
@@ -5001,6 +5003,7 @@ dependencies = [
 [[package]]
 name = "scale-value"
 version = "0.2.1"
+source = "git+https://github.com/gilescope/scale-value?branch=wasm32#b621c1966f319879c1faf552adf1c7936c088d5b"
 dependencies = [
  "bitvec",
  "either",
@@ -5015,6 +5018,7 @@ dependencies = [
 [[package]]
 name = "scale-value-to-borrowed"
 version = "0.1.0"
+source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=3a5b4bab485eb87d49e5c23cecfabd0a2d7e60c8#3a5b4bab485eb87d49e5c23cecfabd0a2d7e60c8"
 dependencies = [
  "scale-borrow",
  "scale-value",
