@@ -3,7 +3,7 @@
 #![feature(slice_pattern)]
 #![feature(slice_group_by)]
 #![feature(option_get_or_insert_default)]
-// #![feature(async_closure)]
+#![feature(async_closure)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
@@ -35,7 +35,7 @@ use std::{
 use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
-use rayon::prelude::*;
+// use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
 //use bevy_kira_audio::Audio;
@@ -171,7 +171,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
     console_error_panic_hook::set_once();
 	// let error = console_log::init_with_level(Level::Warn);
 	//.expect("Failed to enable logging");
-	use log::{error, info, Level};
+	//use log::{error, info, Level};
 
 	// App assumes the target dir exists
 	#[cfg(not(feature="wasm23"))]
@@ -192,6 +192,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		speed: 12.0,          // default: 12.0
 		boost: 5.,
 	});
+	app.insert_resource(Vec::<PollSource>::new());
 	app.insert_resource(ui::UrlBar::new(
 		"dotsama:/1//10504599".to_string(),
 		Utc::now().naive_utc(),
@@ -245,6 +246,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.add_plugin(EguiPlugin);
 		app.insert_resource(ui::OccupiedScreenSpace::default());
 		app.add_system(movement::scroll);
+		app.add_system(source_poll);
 		app.add_startup_system(setup);
 	#[cfg(feature = "spacemouse")]
 	app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
@@ -313,6 +315,28 @@ fn chain_name_to_url(chain_name: &str) -> String {
 #[derive(Component)]
 struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
 
+#[cfg(target_arch="wasm32")]
+#[derive(Clone)]
+struct PollSource(Arc<Mutex<Option<polkapipe::ws_web::Backend>>>);
+
+fn source_poll(sources: ResMut<Vec<PollSource>>, thread_pool: Res<AsyncComputeTaskPool>) {
+	// log!("polling checking for incoming messages");
+	let sources = (*sources).clone();
+	let data_source_task3 = thread_pool.spawn_local((async move || 
+	{
+		for source in sources.iter() {
+			if let Ok(source) = source.0.try_lock() {
+				if let Some(source) = &*source {
+					// log!("pulling in incoming messages");
+					source.process_incoming_messages().await;
+				}
+			} 
+		}
+	}
+	)());
+	data_source_task3.detach();
+}
+
 fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
 	mut commands: Commands<'c,'d>,
@@ -321,8 +345,9 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
 	// mut dest: ResMut<Destination>,
 	mut spec: ResMut<'j, UrlBar>,
-	mut writer: EventWriter<DataSourceStreamEvent>,
-	thread_pool: Res<AsyncComputeTaskPool>
+	writer: EventWriter<DataSourceStreamEvent>,
+	thread_pool: Res<AsyncComputeTaskPool>,
+	mut sources: ResMut<Vec<PollSource>>
 ) {
 	for event in datasource_events.iter() {
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
@@ -383,10 +408,12 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 				//relay.as_slice().par_iter().
 				relay.as_slice().iter().enumerate().filter_map( |(chain_index, chain_name)| {
 					let url = chain_name_to_url(&chain_name);
+					#[cfg(not(target_arch="wasm32"))]
 					let mut source = datasource::CachedDataSource::new(
-						&url,
 						datasource::RawDataSource::new(&url),
 					);
+					#[cfg(target_arch="wasm32")]
+					let mut source = datasource::RawDataSource::new(&url);
 					#[cfg(not(target_arch="wasm32"))]
 					let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
 					#[cfg(target_arch="wasm32")]
@@ -414,7 +441,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 						},
 						source,
 					))
-				}).collect::<Vec<(Chain, datasource::CachedDataSource<datasource::RawDataSource>)>>(
+				}).collect::<Vec<(Chain, _  )>>(
 					)
 			})
 			.collect::<Vec<Vec<_>>>();
@@ -425,7 +452,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 			//     ..dot_url.clone()
 			// };
 			let mut relay2: Vec<(
-				(Chain, datasource::CachedDataSource<datasource::RawDataSource>),
+				(Chain, _),
 				_,
 			)> = vec![];
 			let mut send_map: HashMap<
@@ -454,7 +481,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 				log!("as of for chain {:?}", &as_of);
 				let chain_info = chain.info.clone();
 
-				let mut block_watcher = datasource::BlockWatcher{
+				let block_watcher = datasource::BlockWatcher{
 					tx: Some(lock_clone.clone()),
 					chain_info,
 					as_of,
@@ -473,14 +500,26 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 
 				use crate::datasource::Source;
 
-				let cloned = source.clone();
+				let mut cloned = source.clone();
 				#[cfg(target_arch="wasm32")]
-				let data_source_task2 = thread_pool.spawn_local(async move {
-					log!("spawned local task run");
-					cloned.process_incoming_messages().await;
-				});
-				#[cfg(target_arch="wasm32")]
-				data_source_task2.detach();
+				// let data_source_task2 = thread_pool.spawn_local(async move {
+				// 	log!("spawned local task run");
+				// 	let to_poll = cloned.process_incoming_messages();
+				// });
+				let poll_source = PollSource(Arc::new(Mutex::new(None)));
+				let clone = poll_source.0.clone();
+				let data_source_task3 = thread_pool.spawn_local((async move || 
+					{
+						let backend = cloned.process_incoming_messages().await;
+						// We can't really return things in wasm tasks so return via mutex.
+						*clone.lock().unwrap() = Some(backend);
+					}
+				)());
+				sources.push(poll_source);
+				data_source_task3.detach();
+
+				// #[cfg(target_arch="wasm32")]
+				// data_source_task2.detach();
 
 				// 	sync move || {
 				// 	// let mut reconnects = 0;
@@ -793,7 +832,7 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	
-	mut reader: EventReader<DataSourceStreamEvent>,
+	reader: EventReader<DataSourceStreamEvent>,
 ) {
 	// let is_self_sovereign = false; //TODO
 	for relay in &relays.relays {

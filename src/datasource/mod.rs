@@ -19,7 +19,7 @@ use std::{
 	sync::atomic::Ordering,
 	time::Duration,
 };
- use bevy::ecs::event::EventWriter;
+//  use bevy::ecs::event::EventWriter;
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
@@ -54,18 +54,20 @@ async fn get_desub_metadata<S: Source>(
 	let url = source.url().to_string();
 	let hash = please_hash(&url);
 
-	let mut metadata_path = format!("target/{hash}.metadata.scale");
+	// let mut metadata_path = format!("target/{hash}.metadata.scale");
 	let as_of = if let Some((version, hash)) = version {
-		metadata_path = format!("{}.{}", metadata_path, version);
+		// metadata_path = format!("{}.{}", metadata_path, version);
 		Some(hash)
 	} else {
 		None
 	};
 
-	let metadata_bytes = if let Ok(result) = std::fs::read(&metadata_path) {
-		result
-	} else {
-		println!("cache miss metadata for {} from {}", url, metadata_path);
+	let metadata_bytes = 
+	// if let Ok(result) = std::fs::read(&metadata_path) {
+	// 	result
+	// } else 
+	{
+		// println!("cache miss metadata for {} from {}", url, metadata_path);
 		let metadata_bytes: Vec<u8> = {
 			const MAX_RETRIES: usize = 6;
 			let mut retries = 0;
@@ -82,7 +84,6 @@ async fn get_desub_metadata<S: Source>(
 				println!("finished trying {}", url);
 				match res {
 					Ok(Some(res)) => {
-						// let _ = cmd.kill();
 						break res
 					},
 					_ => {
@@ -92,13 +93,14 @@ async fn get_desub_metadata<S: Source>(
 				};
 			}
 		};
+		metadata_bytes
 
-		println!("writing to {:?}", metadata_path);
-		std::fs::write(&metadata_path, &metadata_bytes).expect("Couldn't write metadata output");
-		std::fs::read(
-			metadata_path, //    "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale"
-		)
-		.unwrap()
+		// println!("writing to {:?}", metadata_path);
+		// std::fs::write(&metadata_path, &metadata_bytes).expect("Couldn't write metadata output");
+		// std::fs::read(
+		// 	metadata_path, //    "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale"
+		// )
+		// .unwrap()
 	};
 
 	let result = polkadyn::decode_metadata(&metadata_bytes);

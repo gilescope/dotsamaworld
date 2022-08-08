@@ -64,7 +64,7 @@ pub trait Source : Clone {
 	fn url(&self) -> &str;
 
 	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&self);
+	async fn process_incoming_messages(&mut self) -> WSBackend;
 }
 
 // pub struct RawDataSource {
@@ -306,18 +306,28 @@ impl RawDataSource {
 	}
 }
 
+
+// #[async_trait(?Send)]
+// trait ProcessIncoming {
+// 	async fn process_incoming_messages(&self);
+// }
+
 #[async_trait(?Send)]
 impl Source for RawDataSource {
 	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&self) {
-		log!("start process incoming messages");
+	async fn process_incoming_messages(&mut self) -> WSBackend {
+		log!("get message processor");
 
 		// while self.client.is_none() {
 		// 	async_std::task::yield_now().await;
 		// }
-		log!("await process incoming messages");
-		self.client.as_ref().unwrap().process_incoming_messages().await;
-		log!("finish process incoming messages");
+		// log!("await process incoming messages");
+		let client = self.client();
+			if let Some(client) = client.await {
+				log!("got message processor");
+				self.client.as_ref().unwrap().clone()
+			} else { panic!("no client could be gottet")}
+		// log!("finish process incoming messages");
 	}
 
 	async fn fetch_block_hash(
@@ -332,7 +342,9 @@ impl Source for RawDataSource {
 				.query_block_hash(&vec![block_number])
 				.await
 				.map(|res| Some(H256::from_slice(&res[..])))
-		} else { Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url))) }
+		} else { 
+			log!("could not get client");
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url))) }
 	}
 
 	/// Return then in bin form rather than link to subxt:
@@ -365,7 +377,7 @@ impl Source for RawDataSource {
 								num = format!("0{}", num);
 							}
 							
-							let mut bytes = hex::decode(&num).unwrap();
+							let bytes = hex::decode(&num).unwrap();
 
 						//	bytes.reverse(); //TODO: why is this needed? it gets the right number but...
 							/* while bytes.len() < 4 {

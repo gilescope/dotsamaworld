@@ -10,6 +10,9 @@ pub struct CachedDataSource<S: Source> {
 	urlhash: u64,
 }
 
+#[cfg(target_arch="wasm32")]
+type WSBackend = polkapipe::ws_web::Backend;
+
 macro_rules! log {
     // Note that this is using the `log` function imported above during
     // `bare_bones`
@@ -22,8 +25,8 @@ impl<S> CachedDataSource<S>
 where
 	S: Source,
 {
-	pub fn new(url: &str, underlying_source: S) -> Self {
-		let urlhash = super::please_hash(&url);
+	pub fn new(underlying_source: S) -> Self {
+		let urlhash = super::please_hash(&underlying_source.url());
 		Self { underlying_source, urlhash }
 	}
 }
@@ -77,10 +80,10 @@ where
 	S: Source,
 {
 	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&self) {
-		log!("cached process incoming run");
-		self.underlying_source.process_incoming_messages().await;
-		log!("cached process incoming fin");
+	async fn process_incoming_messages(&mut self) -> WSBackend {
+		// log!("cached process incoming run");
+		self.underlying_source.process_incoming_messages().await
+		// log!("cached process incoming fin");
 	}
 
 	async fn fetch_block_hash(
