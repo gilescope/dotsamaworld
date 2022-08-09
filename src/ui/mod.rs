@@ -98,9 +98,9 @@ pub fn ui_bars_system(
 					.selected_text(format!("{}", spec.env))
 					.show_ui(ui, |ui| {
 						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
-						ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
-						ui.selectable_value(&mut spec.env, Env::Test, "test");
-						ui.selectable_value(&mut spec.env, Env::Local, "local");
+						// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
+						// ui.selectable_value(&mut spec.env, Env::Test, "test");
+						// ui.selectable_value(&mut spec.env, Env::Local, "local");
 					});
 
 				ui.add(

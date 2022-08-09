@@ -2297,7 +2297,6 @@ dependencies = [
  "color-eyre",
  "console_error_panic_hook",
  "console_log",
- "crossbeam-channel 0.5.4",
  "egui",
  "egui-datepicker",
  "egui_extras",

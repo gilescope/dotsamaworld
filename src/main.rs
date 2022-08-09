@@ -116,8 +116,6 @@ pub type ABlocks = Arc<
 	>,
 >;
 
-use crossbeam_channel::unbounded;
-
 mod networks;
 use networks::Env;
 
@@ -406,7 +404,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 					..dot_url.clone()
 				};
 				//relay.as_slice().par_iter().
-				relay.as_slice().iter().enumerate().filter_map( |(chain_index, chain_name)| {
+				relay.as_slice().iter().enumerate().filter_map( |(chain_index, (para_id, chain_name))| {
 					let url = chain_name_to_url(&chain_name);
 					#[cfg(not(target_arch="wasm32"))]
 					let mut source = datasource::CachedDataSource::new(
@@ -414,14 +412,14 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 					);
 					#[cfg(target_arch="wasm32")]
 					let mut source = datasource::RawDataSource::new(&url);
-					#[cfg(not(target_arch="wasm32"))]
-					let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
-					#[cfg(target_arch="wasm32")]
-					let para_id:  Result<Option<NonZeroU32>, polkapipe::Error> = if datasource::is_relay_chain(&url) { Ok(None) } else {Ok(Some(NonZeroU32::try_from(7777u32).unwrap()))};
-					if para_id.is_err() {
-						return None;
-					}
-					let para_id = para_id.unwrap();
+					// #[cfg(not(target_arch="wasm32"))]
+					// let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
+					// #[cfg(target_arch="wasm32")]
+					// let para_id:  Result<Option<NonZeroU32>, polkapipe::Error> = if datasource::is_relay_chain(&url) { Ok(None) } else {Ok(Some(NonZeroU32::try_from(7777u32).unwrap()))};
+					// if para_id.is_err() {
+					// 	return None;
+					// }
+					//let para_id = para_id.unwrap();
 
 					Some((
 						Chain {
@@ -435,7 +433,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 								} else {
 									(chain_index + 2) as isize
 								},
-								chain_url: DotUrl { para_id, ..relay_url.clone() },
+								chain_url: DotUrl { para_id: para_id.clone(), ..relay_url.clone() },
 								// chain_name: parachain_name,
 							},
 						},
@@ -457,10 +455,10 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 			)> = vec![];
 			let mut send_map: HashMap<
 				NonZeroU32,
-				crossbeam_channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
+				async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
 			> = Default::default();
 			for (chain, source) in relay.into_iter() {
-				let (tx, rc) = unbounded();
+				let (tx, rc) = async_std::channel::unbounded();
 				if let Some(para_id) = chain.info.chain_url.para_id {
 					send_map.insert(para_id, tx);
 				}

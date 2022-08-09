@@ -201,8 +201,8 @@ pub struct BlockWatcher {
 	pub tx: Option<ABlocks>,
 	pub chain_info: ChainInfo,
 	pub as_of: Option<DotUrl>,
-	pub receive_channel: Option<crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>>,
-	pub sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
+	pub sender: Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	// source: &mut S,
 }
 
@@ -224,8 +224,8 @@ impl BlockWatcher
 		let tx: ABlocks = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
 		let as_of: Option<DotUrl> = self.as_of.take();
-		let receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)> = self.receive_channel.take().unwrap();
-		let sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>> = self.sender.take();
+		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> = self.receive_channel.take().unwrap();
+		let sender: Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>> = self.sender.take();
 		// let mut source = &mut self.source;
 log!("listening to as of {:?}", as_of);
 
@@ -252,7 +252,7 @@ log!("listening to as of {:?}", as_of);
 				log!("polling parachain {:?}", para_id);
 				// Parachain (listening for relay blocks' para include candidate included events.)
 				while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
-					receive_channel.recv()
+					receive_channel.recv().await
 				{
 					let _ = process_extrinsics(
 						&tx,
@@ -416,7 +416,7 @@ async fn process_extrinsics<S: Source>(
 	mut blockurl: DotUrl,
 	block_hash: H256,
 	source: &mut S,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
 ) -> Result<Option<i64>, ()> {
@@ -1167,7 +1167,7 @@ pub struct PolkaBlock {
 async fn get_events_for_block(
 	source: &mut impl Source,
 	blockhash: H256,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
 	metad: &frame_metadata::RuntimeMetadataPrefixed,
 	timestamp: Option<i64>,
@@ -1312,7 +1312,7 @@ async fn get_events_for_block(
 						let mailbox = sender.get(&para_id);
 						if let Some(mailbox) = mailbox {
 							let hash = H256::from_slice(hash);
-							if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash))
+							if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash)).await
 							{
 								println!(
 									"block hash failed to send at {} error: {}",

@@ -17,12 +17,12 @@ impl DotUrl {
 		let (protocol, rest) = url.split_once(':').ok_or(())?;
 		let mut result = DotUrl::default();
 		result.env = match protocol {
-			"indies" => Env::SelfSovereign,
-			"testindies" => Env::SelfSovereignTest,
-			"test" => Env::Test,
-			"nfts" => Env::NFTs,
-			"local" => Env::Local,
-			"cgp" => Env::CGP,
+			// "indies" => Env::SelfSovereign,
+			// "testindies" => Env::SelfSovereignTest,
+			// "test" => Env::Test,
+			// "nfts" => Env::NFTs,
+			// "local" => Env::Local,
+			// "cgp" => Env::CGP,
 			"dotsama" | _ => Env::Prod,
 		};
 
@@ -89,13 +89,13 @@ impl DotUrl {
 impl std::fmt::Display for DotUrl {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let protocol = match self.env {
-			Env::SelfSovereign => "indies",
+			// Env::SelfSovereign => "indies",
 			Env::Prod => "dotsama",
-			Env::SelfSovereignTest => "testindies",
-			Env::Test => "test",
-			Env::NFTs => "nfts",
-			Env::Local => "local",
-			Env::CGP => "cgp",
+			// Env::SelfSovereignTest => "testindies",
+			// Env::Test => "test",
+			// Env::NFTs => "nfts",
+			// Env::Local => "local",
+			// Env::CGP => "cgp",
 		};
 
 		f.write_fmt(format_args!(
