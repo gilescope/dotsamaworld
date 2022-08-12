@@ -180,8 +180,26 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	let mut app = App::new();
 	// app
 	app.insert_resource(Msaa { samples: 4 });
-	app.add_plugins(DefaultPlugins);
+	
+	// The web asset plugin must be inserted before the `AssetPlugin` so
+    // that the asset plugin doesn't create another instance of an asset
+    // server. In general, the AssetPlugin should still run so that other
+    // aspects of the asset system are initialized correctly.
+    //app.add_plugin(bevy_web_asset::WebAssetPlugin);
 
+	app.add_plugins_with(DefaultPlugins, |group| {
+    // The web asset plugin must be inserted in-between the
+    // `CorePlugin' and `AssetPlugin`. It needs to be after the
+    // CorePlugin, so that the IO task pool has already been constructed.
+    // And it must be before the `AssetPlugin` so that the asset plugin
+    // doesn't create another instance of an assert server. In general,
+    // the AssetPlugin should still run so that other aspects of the
+    // asset system are initialized correctly.
+    group.add_before::<bevy::asset::AssetPlugin, _>(bevy_web_asset::WebAssetPlugin)
+});
+	// app.add_plugins(DefaultPlugins);
+
+	
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
 	app.add_event::<DataSourceStreamEvent>();
@@ -493,28 +511,28 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 
 
 				let data_source_task = thread_pool.spawn_local(
-					block_watcher.watch_blocks(source.clone()));
+					block_watcher.watch_blocks(source));
 				data_source_task.detach();
 
 				use crate::datasource::Source;
 
-				let mut cloned = source.clone();
-				#[cfg(target_arch="wasm32")]
+				//let mut cloned = source.clone();
+				//#[cfg(target_arch="wasm32")]
 				// let data_source_task2 = thread_pool.spawn_local(async move {
 				// 	log!("spawned local task run");
 				// 	let to_poll = cloned.process_incoming_messages();
 				// });
-				let poll_source = PollSource(Arc::new(Mutex::new(None)));
-				let clone = poll_source.0.clone();
-				let data_source_task3 = thread_pool.spawn_local((async move || 
-					{
-						let backend = cloned.process_incoming_messages().await;
-						// We can't really return things in wasm tasks so return via mutex.
-						*clone.lock().unwrap() = Some(backend);
-					}
-				)());
-				sources.push(poll_source);
-				data_source_task3.detach();
+				//let poll_source = PollSource(Arc::new(Mutex::new(None)));
+				//let clone = poll_source.0.clone();
+				// let data_source_task3 = thread_pool.spawn_local((async move || 
+				// 	{
+				// 		let backend = cloned.process_incoming_messages().await;
+				// 		// We can't really return things in wasm tasks so return via mutex.
+				// 		*clone.lock().unwrap() = Some(backend);
+				// 	}
+				// )());
+				// sources.push(poll_source);
+				// data_source_task3.detach();
 
 				// #[cfg(target_arch="wasm32")]
 				// data_source_task2.detach();
@@ -973,7 +991,12 @@ fn render_block(
 							// .replace(" ", "-")
 							// .replace("-Testnet", "");
 							let texture_handle = asset_server
-								.load(&format!("branding/{}.jpeg", chain_str));
+
+							
+							// .load("https://jpeg.org/images/jpegpleno-home.jpg");
+							.load(&format!("http://0.0.0.0:8080/branding/{}.jpeg", chain_str));
+							// .load(&format!("https://github.com/gilescope/dotsamaworld/blob/dyn/assets/branding/{}.jpeg?raw=true", chain_str));
+							//	.load(&format!("branding/{}.jpeg", chain_str));
 							let aspect = 1. / 3.;
 
 							// create a new quad mesh. this is what we will apply the

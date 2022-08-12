@@ -43,6 +43,7 @@ fastrand = "*"
 # bevy-inspector-egui = "0.10"
 #serde_bytes = "0.11"
 serde_json = "*"
+bevy_web_asset = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
 serde = "*"
 bevy_egui = "*"
@@ -133,7 +134,8 @@ features = [
     'Window',
     'Worker',
     'WebGlRenderingContext',
-    'WebGlShader'
+    'WebGlShader',
+    'KeyboardEvent'
 ]
 
 [profile.dev]
