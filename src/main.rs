@@ -35,6 +35,8 @@ use std::{
 use bevy::{
     tasks::{AsyncComputeTaskPool, Task},
 };
+#[cfg(feature="atmosphere")]
+use bevy_atmosphere::prelude::*;
 // use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
@@ -223,6 +225,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
+	#[cfg(target_family = "wasm")]
+	app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
+
 	#[cfg(feature = "normalmouse")]
 	app.add_plugin(NoCameraPlayerPlugin);
 	app.insert_resource(movement::MouseCapture::default());
@@ -252,7 +257,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	//     present_mode: PresentMode::Immediate,
 	//     ..default()
 	// });
-	app.add_plugin(HighlightablePickingPlugin);
+	app.add_plugins(HighlightablePickingPlugins);
 
 	app.add_plugin(PickingPlugin)
 		// .insert_resource(camera_rig)
@@ -289,11 +294,17 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.add_system(right_click_system);
 		app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
    		app.add_startup_system(ui::details::configure_visuals);
-		app.insert_resource(bevy_atmosphere::AtmosphereMat::default()); // Default Earth sky
-		app.add_plugin(bevy_atmosphere::AtmospherePlugin {
-			dynamic: false, // Set to false since we aren't changing the sky's appearance
-			sky_radius: 1000.0,
-		});
+
+		#[cfg(feature="atmosphere")]
+		app.insert_resource(Atmosphere::default()); // Default Earth sky
+		
+		#[cfg(feature="atmosphere")]
+		app.add_plugin(AtmospherePlugin::default());
+		//  {
+		// 	// dynamic: false, // Set to false since we aren't changing the sky's appearance
+		// 	sky_radius: 1000.0,
+		// }
+	
 		app.add_system(render_block);
 		app.add_system_to_stage(CoreStage::PostUpdate, print_events);
 
@@ -346,7 +357,9 @@ struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::erro
 struct PollSource(Arc<Mutex<Option<polkapipe::ws_web::Backend>>>);
 
 #[cfg(target_arch="wasm32")]
-fn source_poll(sources: ResMut<Vec<PollSource>>, thread_pool: Res<AsyncComputeTaskPool>) {
+fn source_poll(sources: ResMut<Vec<PollSource>>) {
+	let thread_pool = AsyncComputeTaskPool::get();
+
 	// log!("polling checking for incoming messages");
 	let sources = (*sources).clone();
 	let data_source_task3 = thread_pool.spawn_local((async move || 
@@ -373,10 +386,11 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	// mut dest: ResMut<Destination>,
 	mut spec: ResMut<'j, UrlBar>,
 	writer: EventWriter<DataSourceStreamEvent>,
-	thread_pool: Res<AsyncComputeTaskPool>,
+	
 	#[cfg(target_arch="wasm32")]
 	mut sources: ResMut<Vec<PollSource>>
 ) {
+	let thread_pool = AsyncComputeTaskPool::get();
 	for event in datasource_events.iter() {
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
 
@@ -1256,7 +1270,7 @@ fn add_blocks<'a>(
 							// println!("creating rainbow!");
 
 							let mut vertices = vec![
-								source_global.translation,
+								source_global.translation(),
 								Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
 							];
 							rainbow(&mut vertices, 50);
@@ -1655,7 +1669,7 @@ pub fn print_events(
 						println!("double clicked to {}", details.doturl);
 						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away
 							 // from it.
-						dest.location = Some(global_location.translation);
+						dest.location = Some(global_location.translation());
 					}
 				}
 			},
@@ -1713,23 +1727,23 @@ fn update_visibility(
 
 	let mut vis_count = 0;
 	for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
 		if vis.is_visible {
 			vis_count += 1;
 		}
 	}
-	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-	// 	vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-	// 	if y > 500. {
-	// 		vis.is_visible = false;
-	// 	}
-	// }
-	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-	// 	vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-	// 	if y > 800. {
-	// 		vis.is_visible = false;
-	// 	}
-	// }
+	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
+		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
+		if y > 500. {
+			vis.is_visible = false;
+		}
+	}
+	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
+		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
+		if y > 800. {
+			vis.is_visible = false;
+		}
+	}
 
 	if vis_count == 0 {
 		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
@@ -1814,19 +1828,19 @@ fn setup(
 	let camera_transform =
 		Transform::from_xyz(200.0, 50., 0.0).looking_at(Vec3::new(-1000., 1., 0.), Vec3::Y);
 	commands.insert_resource(ui::OriginalCameraTransform(camera_transform));
-	let mut entity_comands = commands.spawn_bundle(PerspectiveCameraBundle {
+	let mut entity_comands = commands.spawn_bundle(Camera3dBundle {
 		transform: camera_transform,
 
-		perspective_projection: PerspectiveProjection {
-			// far: 1., // 1000 will be 100 blocks that you can s
-			//far: 10.,
-			far: f32::MAX,
-			near: 0.000001,
-			..default()
-		},
-		camera: Camera { //far: 10., 
-			far:f32::MAX,
-			near: 0.000001, ..default() },
+		// perspective_projection: PerspectiveProjection {
+		// 	// far: 1., // 1000 will be 100 blocks that you can s
+		// 	//far: 10.,
+		// 	far: f32::MAX,
+		// 	near: 0.000001,
+		// 	..default()
+		// },
+		// camera: Camera { //far: 10., 
+		// 	far:f32::MAX,
+		// 	near: 0.000001, ..default() },
 		..default()
 	});
 	#[cfg(feature = "normalmouse")]

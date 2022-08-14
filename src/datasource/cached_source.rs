@@ -1,6 +1,5 @@
 use crate::datasource::{raw_source::AgnosticBlock, Source};
 use async_trait::async_trait;
-use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use primitive_types::H256;
 
@@ -93,7 +92,7 @@ where
 		memoise!(
 			"block_hash",
 			self,
-			block_number.as_bytes(),
+			block_number.to_le_bytes(),
 			self.underlying_source
 				.fetch_block_hash(block_number)
 				.map_ok(|res| res.map(|hash| hash.as_bytes().to_vec()))

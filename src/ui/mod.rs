@@ -120,7 +120,7 @@ pub fn ui_bars_system(
 							for (loc, details) in entities.iter() {
 								if details.doturl.para_id == Some(para_id) {
 									if details.doturl.block_number.is_some() {
-										destination.location = Some(loc.translation);
+										destination.location = Some(loc.translation());
 										inspector.selected = Some(details.clone());
 										found += 1;
 									}
@@ -154,7 +154,7 @@ pub fn ui_bars_system(
 				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
 					let timestamp =
-						super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation.x);
+						super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation().x);
 					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();

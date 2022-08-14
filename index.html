@@ -1,6 +1,7 @@
 <html>
   <head>
     <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
     <style>
       body {
         background: linear-gradient(
@@ -14,9 +15,13 @@
         );
         background-repeat: repeat;
         background-size: 20px 20px;
+        margin: 0px;
+        display: flex;
+        overflow: hidden;
       }
       canvas {
         background-color: white;
+        touch-action: none;
       }
     </style>
     <link data-trunk rel="copy-dir" href="assets/branding/" />

@@ -2,7 +2,7 @@
 use crate::MovementSettings;
 use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
 use bevy::{
-	core::Time,
+	time::Time,
 	ecs::system::{Query, Res},
 	input::{keyboard::KeyCode, mouse::MouseWheel, Input},
 	prelude::*,
