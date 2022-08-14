@@ -1,3 +1,5 @@
+use bevy::diagnostic::Diagnostics;
+
 pub mod details;
 pub mod doturl;
 pub mod toggle;
@@ -33,6 +35,7 @@ pub fn ui_bars_system(
 	mut inspector: ResMut<Inspector>,
 	entities: Query<(&GlobalTransform, &Details)>,
 	mut destination: ResMut<Destination>,
+	diagnostics: Res<Diagnostics>,
 ) {
 	if inspector.selected.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -89,6 +92,15 @@ pub fn ui_bars_system(
 	//     .response
 	//     .rect
 	//     .width();
+
+	let mut fps = 0.;
+	for diag in diagnostics.iter() {
+		if diag.name == "fps" {
+			fps = diag.value().unwrap_or_default();
+			break;
+		}
+	}
+
 	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
 		.resizable(false)
 		.show(egui_context.ctx_mut(), |ui| {
@@ -160,7 +172,7 @@ pub fn ui_bars_system(
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-					ui.heading(format!("{}", newdate));
+					ui.heading(format!("{:03.0} fps. {}", fps, newdate));
 				});
 			});
 		})
