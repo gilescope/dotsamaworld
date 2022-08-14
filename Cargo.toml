@@ -26,7 +26,7 @@ winit = { version = "*", features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = ["derive", "full", "bit-vec"] }
-palette = {git="https://github.com/Ogeon/palette.git", defalult-features= false}              # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
+palette = {version = "0.6.1", defalult-features= false}              # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
 fastrand = "*"
 #serde_bytes = "0.11"
 serde = "*"
@@ -114,7 +114,7 @@ polkapipe = { path= "/Users/bit/p/polkapipe", default-features=false, features =
 
 bevy_tasks = "0.8"
 bevy = { version = "0.8", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
-bevy_webgl2 = "*"
+# bevy_webgl2 = "*"
 bevy_web_fullscreen = { git="https://github.com/ostwilkens/bevy_web_fullscreen.git" }
 
 # [patch.'https://github.com/bevyengine/bevy']

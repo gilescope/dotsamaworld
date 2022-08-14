@@ -1709,7 +1709,7 @@ fn update_visibility(
 	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
 		let min = diag.history_len();
 		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-			println!("avg {}\t{}", avg, visible_width.0);
+			// println!("avg {}\t{}", avg, visible_width.0);
 			let target = 30.;
 			let avg = avg as f32;
 			if avg < target && visible_width.0 > 100. {
