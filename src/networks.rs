@@ -97,15 +97,15 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 				vec![
 					// Ordering should really be done on who won the auction first!
 					(None, "kusama-rpc.polkadot.io"),
-					(para_id!(1000), "statemine-rpc.dwellir.com"),
+					(para_id!(1000), "statemine-rpc.polkadot.io"),
 					// (para_id!(1001), "kusama.api.encointer.org"),
 					// //
 					// // Auction Batch 1
-					// (para_id!(2000), "karura-rpc.dwellir.com"),             // 1st
-					// (para_id!(2023), "wss.api.moonriver.moonbeam.network"), // 2nd.
-					// (para_id!(2007), "shiden-rpc.dwellir.com"),             // 3rd
-					// (para_id!(2004), "khala-rpc.dwellir.com"),              // 4th
-					// (para_id!(2001), "bifrost-rpc.dwellir.com"),            // 5th
+					(para_id!(2000), "karura-rpc-0.aca-api.network"),             // 1st
+					(para_id!(2023), "wss.api.moonriver.moonbeam.network"), // 2nd.
+					(para_id!(2007), "rpc.shiden.astar.network"),             // 3rd
+					(para_id!(2004), "khala-api.phala.network/ws"),              // 4th
+					(para_id!(2001), "hk.p.bifrost-rpc.liebi.com/ws"),            // 5th
 					// //
 					// // Auction Batch 2
 					// (para_id!(2086), "kilt-rpc.dwellir.com"),          // 6th
@@ -159,10 +159,10 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 					(para_id!(1000), "statemint-rpc.polkadot.io"), //1st parachain.
 					//
 					// Auction Batch 1
-					// (para_id!(2000), "acala.polkawallet.io"),     // 1st auction winner
-					// (para_id!(2004), "wss.api.moonbeam.network"), // 2nd
-					// (para_id!(2006), "astar-rpc.dwellir.com"),    // 3rd
-					// (para_id!(2012), "rpc.parallel.fi"),          // 4th
+					(para_id!(2000), "acala.polkawallet.io"),     // 1st auction winner
+					(para_id!(2004), "wss.api.moonbeam.network"), // 2nd
+					(para_id!(2006), "rpc.astar.network"),    // 3rd
+					(para_id!(2012), "rpc.parallel.fi"),          // 4th
 					// //(Some(2002), "rpc-para.clover.finance"),  // 5th - closed.
 					// //
 					// // Auction Batch 2

@@ -28,12 +28,24 @@ use scale_value::*;
 mod time_predictor;
 mod utils;
 use utils::{flattern};
+//mod cached_source_inc_web;
+
+#[cfg(target_arch="wasm32")]
+mod cached_source_indexeddb;
+
+#[cfg(not(target_arch="wasm32"))]
 mod cached_source;
 mod raw_source;
+
+#[cfg(not(target_arch="wasm32"))]
 pub use cached_source::CachedDataSource;
+//pub use cached_source_inc_web::CachedDataSource;
+
+#[cfg(target_arch="wasm32")]
+pub use cached_source_indexeddb::CachedDataSource;
 pub use raw_source::RawDataSource;
 pub use raw_source::Source;
-
+ 
 macro_rules! log {
     // Note that this is using the `log` function imported above during
     // `bare_bones`
@@ -111,35 +123,35 @@ async fn get_desub_metadata<S: Source>(
 	result.ok()
 }
 
-pub async fn get_parachain_id<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
-	if is_relay_chain(source.url()) {
-		return Ok(None);
-	}
+// pub async fn get_parachain_id<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
+// 	if is_relay_chain(source.url()) {
+// 		return Ok(None);
+// 	}
 
-	// parachainInfo / parachainId returns u32 paraId
-	let storage_key =
-		hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
-	let call = source.fetch_storage(&storage_key[..], None).await?;
+// 	// parachainInfo / parachainId returns u32 paraId
+// 	let storage_key =
+// 		hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
+// 	let call = source.fetch_storage(&storage_key[..], None).await?;
 
-	if let Some(val) = call {
-		let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
-		// println!("{} is para id {}", &url, para_id);
-		let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
-		Ok(Some(para_id))
-	} else {
-		// This is expected for relay chains...
-		warn!("could not find para id for {}", &source.url());
-		Ok(None)
-	}
-}
+// 	if let Some(val) = call {
+// 		let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
+// 		// println!("{} is para id {}", &url, para_id);
+// 		let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
+// 		Ok(Some(para_id))
+// 	} else {
+// 		// This is expected for relay chains...
+// 		warn!("could not find para id for {}", &source.url());
+// 		Ok(None)
+// 	}
+// }
 
 pub fn is_relay_chain(url: &str) -> bool {
 	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
 }
 
-pub async fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
-	get_parachain_id(source).await
-}
+// pub async fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
+// 	get_parachain_id(source).await
+// }
 
 async fn get_metadata_version(source: &mut impl Source, hash: primitive_types::H256) -> Option<String> {
 	let storage_key =
@@ -467,7 +479,7 @@ async fn process_extrinsics<S: Source>(
 					exts.push(entity);
 				}
 			} else {
-				println!("can't decode block ext {} {}", i, &blockurl);
+				log!("can't decode block ext {} {}", i, &blockurl);
 				exts.push(DataEntity::Extrinsic {
 					// id: (block_number, extrinsic_url.extrinsic.unwrap()),
 					args: vec![],
@@ -495,7 +507,11 @@ async fn process_extrinsics<S: Source>(
 
 		let mut handle = tx.lock().unwrap();
 
-		debug_assert!(timestamp.is_some());
+		//Can't decode time https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fkhala-rpc.dwellir.com#/explorer/query/900909
+		//debug_assert!(timestamp.is_some(), "events found {:?}", extrinsics.len());
+		if let None = timestamp {
+			timestamp = timestamp_parent; // aproximation
+		}
 		let current = PolkaBlock {
 			data_epoc: our_data_epoc,
 			timestamp: timestamp.clone(),
@@ -1184,7 +1200,7 @@ async fn get_events_for_block(
 	// 	.decode_key(&metad, &mut storage_key.as_slice())
 	// 	.expect("can decode storage");
 
-	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await.unwrap();
+	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await.map_err(|_| "oops num 332")?;
 
 	if let Some(events_raw) = bytes {
 		if let Ok(events) =  polkadyn::decode_events(metad, &events_raw[..])

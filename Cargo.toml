@@ -47,6 +47,7 @@ bevy_web_asset = "*"
 bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
 serde = "*"
 bevy_egui = "*"
+# bevy_pkv = "*"
 egui = "0.17"
 
 url = "*"
@@ -93,6 +94,8 @@ async-tungstenite = { version = "0.15.0",  default-features = true, features = [
 
 # Dependencies for WASM only.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# rexie is for indexeddb web caching
+rexie = "0.4"
 console_log = "*"
 console_error_panic_hook = "0.1"
 bevy_tasks = "0.7"

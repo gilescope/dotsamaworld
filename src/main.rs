@@ -135,6 +135,7 @@ pub struct HiFi;
 pub struct MedFi;
 
 
+#[cfg(target_arch="wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 extern "C" {
     // Use `js_namespace` here to bind `console.log(..)` instead of just
@@ -153,9 +154,15 @@ extern "C" {
     fn log_many(a: &str, b: &str);
 }
 
+#[cfg(not(target_arch="wasm32"))]
+fn log(s: &str) {
+	println!("{}", s);
+}
+
 fn main() -> () {
 	async_std::task::block_on(async_main());
 }
+
 macro_rules! log {
     // Note that this is using the `log` function imported above during
     // `bare_bones`
@@ -172,7 +179,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	//use log::{error, info, Level};
 
 	// App assumes the target dir exists
-	#[cfg(not(feature="wasm23"))]
+	#[cfg(not(feature="wasm32"))]
 	let _ = std::fs::create_dir_all("target");
 
 	let low_power_mode = false;
@@ -208,6 +215,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		speed: 12.0,          // default: 12.0
 		boost: 5.,
 	});
+	#[cfg(target_arch="wasm32")]
 	app.insert_resource(Vec::<PollSource>::new());
 	app.insert_resource(ui::UrlBar::new(
 		"dotsama:/1//10504599".to_string(),
@@ -262,6 +270,8 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.add_plugin(EguiPlugin);
 		app.insert_resource(ui::OccupiedScreenSpace::default());
 		app.add_system(movement::scroll);
+
+		#[cfg(target_arch="wasm32")]
 		app.add_system(source_poll);
 		app.add_startup_system(setup);
 	#[cfg(feature = "spacemouse")]
@@ -335,6 +345,7 @@ struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::erro
 #[derive(Clone)]
 struct PollSource(Arc<Mutex<Option<polkapipe::ws_web::Backend>>>);
 
+#[cfg(target_arch="wasm32")]
 fn source_poll(sources: ResMut<Vec<PollSource>>, thread_pool: Res<AsyncComputeTaskPool>) {
 	// log!("polling checking for incoming messages");
 	let sources = (*sources).clone();
@@ -363,6 +374,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	mut spec: ResMut<'j, UrlBar>,
 	writer: EventWriter<DataSourceStreamEvent>,
 	thread_pool: Res<AsyncComputeTaskPool>,
+	#[cfg(target_arch="wasm32")]
 	mut sources: ResMut<Vec<PollSource>>
 ) {
 	for event in datasource_events.iter() {
@@ -619,6 +631,7 @@ fn draw_chain_rect(
 					(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 					rfip,
 			)),
+			
 			..Default::default()
 		})
 		.insert(Details {
@@ -629,6 +642,7 @@ fn draw_chain_rect(
 		})
 		.insert(Name::new("Blockchain"))
 		.insert(ClearMeAlwaysVisible)
+		.insert(bevy::render::view::NoFrustumCulling)
 		// .insert_bundle(PickableBundle::default())
 		;
 }
@@ -1704,18 +1718,18 @@ fn update_visibility(
 			vis_count += 1;
 		}
 	}
-	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-		if y > 500. {
-			vis.is_visible = false;
-		}
-	}
-	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-		vis.is_visible = transform.translation.x > min && transform.translation.x < max;
-		if y > 800. {
-			vis.is_visible = false;
-		}
-	}
+	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
+	// 	vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+	// 	if y > 500. {
+	// 		vis.is_visible = false;
+	// 	}
+	// }
+	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
+	// 	vis.is_visible = transform.translation.x > min && transform.translation.x < max;
+	// 	if y > 800. {
+	// 		vis.is_visible = false;
+	// 	}
+	// }
 
 	if vis_count == 0 {
 		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
@@ -1774,7 +1788,7 @@ fn setup(
 				alpha_mode: AlphaMode::Blend,
 				perceptual_roughness: 0.08,
 				..default()
-			}, //    Color::rgb(0.5, 0.5, 0.5).into()
+			},
 		),
 		transform: Transform { translation: Vec3::new(0., 0., -25000.), ..default() },
 		..default()
@@ -1788,7 +1802,7 @@ fn setup(
 				perceptual_roughness: 0.08,
 				unlit: true,
 				..default()
-			}, //    Color::rgb(0.5, 0.5, 0.5).into()
+			},
 		),
 		transform: Transform { translation: Vec3::new(0., 0., 25000.), ..default() },
 		..default()
@@ -1805,11 +1819,14 @@ fn setup(
 
 		perspective_projection: PerspectiveProjection {
 			// far: 1., // 1000 will be 100 blocks that you can s
-			far: 10.,
+			//far: 10.,
+			far: f32::MAX,
 			near: 0.000001,
 			..default()
 		},
-		camera: Camera { far: 10., near: 0.000001, ..default() },
+		camera: Camera { //far: 10., 
+			far:f32::MAX,
+			near: 0.000001, ..default() },
 		..default()
 	});
 	#[cfg(feature = "normalmouse")]

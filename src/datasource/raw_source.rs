@@ -30,7 +30,7 @@ macro_rules! log {
 
 /// A way to source untransformed raw data.
 #[async_trait(?Send)]
-pub trait Source : Clone {
+pub trait Source  {
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
@@ -268,7 +268,7 @@ type WSBackend = polkapipe::ws::Backend<
 	>,
 >;
 
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct RawDataSource {
 	ws_url: String,
 	client: Option<WSBackend>,
@@ -334,10 +334,10 @@ impl Source for RawDataSource {
 		&mut self,
 		block_number: u32,
 	) -> Result<Option<primitive_types::H256>, BError> {
-			log!("get client");
+			// log!("get client");
 		if let Some(client) = self.client()
 			.await {
-				log!("got client");
+				// log!("got client");
 			client
 				.query_block_hash(&vec![block_number])
 				.await
@@ -366,7 +366,7 @@ impl Source for RawDataSource {
 				.await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
-				println!("got 2here");
+				// println!("got 2here");
 				if let Some(serde_json::value::Value::Object(map)) = map.get("block") {
 					let mut res = AgnosticBlock { block_number:0, extrinsics: vec![] };
 					if let Some(serde_json::value::Value::Object(m)) = map.get("header") {
