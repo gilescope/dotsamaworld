@@ -33,7 +33,7 @@ use std::{
 	},
 };
 use bevy::{
-    tasks::{AsyncComputeTaskPool, Task},
+    tasks::{AsyncComputeTaskPool},
 };
 #[cfg(feature="atmosphere")]
 use bevy_atmosphere::prelude::*;
@@ -87,7 +87,7 @@ impl Default for MovementSettings {
 const LAYER_GAP: f32 = 10.;
 use  lazy_static::lazy_static;
 /// The time by which all times should be placed relative to each other on the x axis.
-lazy_static! {
+lazy_static! { // This line needs rust 1.63+: and then some
 static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
 }
 /// Bump this to tell the current datasources to stop.
@@ -196,17 +196,19 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
     // aspects of the asset system are initialized correctly.
     //app.add_plugin(bevy_web_asset::WebAssetPlugin);
 
+	#[cfg(target_arch="wasm32")]
 	app.add_plugins_with(DefaultPlugins, |group| {
-    // The web asset plugin must be inserted in-between the
-    // `CorePlugin' and `AssetPlugin`. It needs to be after the
-    // CorePlugin, so that the IO task pool has already been constructed.
-    // And it must be before the `AssetPlugin` so that the asset plugin
-    // doesn't create another instance of an assert server. In general,
-    // the AssetPlugin should still run so that other aspects of the
-    // asset system are initialized correctly.
-    group.add_before::<bevy::asset::AssetPlugin, _>(bevy_web_asset::WebAssetPlugin)
-});
-	// app.add_plugins(DefaultPlugins);
+		// The web asset plugin must be inserted in-between the
+		// `CorePlugin' and `AssetPlugin`. It needs to be after the
+		// CorePlugin, so that the IO task pool has already been constructed.
+		// And it must be before the `AssetPlugin` so that the asset plugin
+		// doesn't create another instance of an assert server. In general,
+		// the AssetPlugin should still run so that other aspects of the
+		// asset system are initialized correctly.
+		group.add_before::<bevy::asset::AssetPlugin, _>(bevy_web_asset::WebAssetPlugin)
+	});
+	#[cfg(not(target_arch="wasm32"))]
+	app.add_plugins(DefaultPlugins);
 
 	
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
@@ -308,6 +310,8 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.add_system(render_block);
 		app.add_system_to_stage(CoreStage::PostUpdate, print_events);
 
+		#[cfg(target_arch = "wasm32")]
+		html_body::get().request_pointer_lock();
 	app.run();
 
 	Ok(())
@@ -961,6 +965,7 @@ fn render_block(
 					),
 					..default()
 				};
+				log!("rendering block from {}", details.doturl);
 
 				// println!("block.timestamp {:?}", block.timestamp);
 				// println!("base_time {:?}",base_time);
@@ -1009,6 +1014,7 @@ fn render_block(
 					//     Vec3::new(0., 0., 0.),
 					//     Vec3::new(1., 1., 1.),
 					// ));
+					
 					let chain_str = details.doturl.chain_str();
 
 					bun.insert(details)
@@ -1018,13 +1024,11 @@ fn render_block(
 							// .chain_name
 							// .replace(" ", "-")
 							// .replace("-Testnet", "");
-							let texture_handle = asset_server
-
+							#[cfg(target_arch="wasm32")]
+							let texture_handle = asset_server.load(&format!("http://0.0.0.0:8080/branding/{}.jpeg", chain_str));
+							#[cfg(not(target_arch="wasm32"))]
+							let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
 							
-							// .load("https://jpeg.org/images/jpegpleno-home.jpg");
-							.load(&format!("http://0.0.0.0:8080/branding/{}.jpeg", chain_str));
-							// .load(&format!("https://github.com/gilescope/dotsamaworld/blob/dyn/assets/branding/{}.jpeg?raw=true", chain_str));
-							//	.load(&format!("branding/{}.jpeg", chain_str));
 							let aspect = 1. / 3.;
 
 							// create a new quad mesh. this is what we will apply the
@@ -1929,15 +1933,43 @@ pub struct Inspector {
 #[derive(Component)]
 pub struct Viewport;
 
-// #[cfg(target_arch = "wasm32")]
-// pub mod html_body {
-//     use web_sys::HtmlElement;
+#[cfg(target_arch = "wasm32")]
+pub mod html_body {
+    use web_sys::HtmlElement;
 
-//     pub fn get() -> HtmlElement {
-//         // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-//         let window = web_sys::window().expect("no global `window` exists");
-//         let document = window.document().expect("should have a document on window");
-//         let body = document.body().expect("document should have a body");
-//         body
+    pub fn get() -> HtmlElement {
+        // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+        let window = web_sys::window().expect("no global `window` exists");
+        let document = window.document().expect("should have a document on window");
+        let body = document.body().expect("document should have a body");
+        body
+    }
+}
+
+// use crate::utils::html_body;
+// use bevy::input::mouse::MouseButtonInput;
+// use bevy::prelude::*;
+
+// pub struct UiPlugin;
+
+// impl Plugin for UiPlugin {
+//     fn build(&self, app: &mut AppBuilder) {
+//         app.init_resource::<TrackInputState>()
+//             .add_system(capture_mouse_on_click.system());
+//     }
+// }
+
+// #[derive(Default)]
+// struct TrackInputState {
+//     mousebtn: EventReader<MouseButtonInput>,
+// }
+
+// fn capture_mouse_on_click(
+//     mut state: ResMut<TrackInputState>,
+//     ev_mousebtn: Res<Events<MouseButtonInput>>,
+// ) {
+//     for _ev in state.mousebtn.iter(&ev_mousebtn) {
+//         html_body::get().request_pointer_lock();
+//         break;
 //     }
 // }

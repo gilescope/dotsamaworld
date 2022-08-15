@@ -5,9 +5,9 @@ use crate::{
 	ui::DotUrl, ABlocks, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME,
 	DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
-use async_std::{stream::StreamExt, task::block_on};
-#[cfg(not(target_arch = "wasm32"))]
-use async_tungstenite::tungstenite::util::NonBlockingResult;
+use async_std::stream::StreamExt;
+// #[cfg(not(target_arch = "wasm32"))]
+// use async_tungstenite::tungstenite::util::NonBlockingResult;
 use bevy::prelude::warn;
 use parity_scale_codec::Decode;
 use primitive_types::H256;
@@ -289,48 +289,49 @@ log!("listening to as of {:?}", as_of);
 				let mut as_of = as_of.clone();
 				let basetime = *BASETIME.lock().unwrap();
 
-				// // Is the as of the block number of a different relay chain?
-				// // (datepicker could have set basetime)
-				// if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
-				// 	// if so, we have to wait till we know what the time is of that block to proceed.
-				// 	// then we can figure out our nearest block based on that timestamp...
-				// 	while BASETIME.load(Ordering::Relaxed) == 0 {
-				// 		async_std::task::sleep(Duration::from_millis(250)).await;
-				// 	}
+				// Is the as of the block number of a different relay chain?
+				// (datepicker could have set basetime)
+				if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
+					// if so, we have to wait till we know what the time is of that block to proceed.
+					// then we can figure out our nearest block based on that timestamp...
+					while *BASETIME.lock().unwrap() == 0 {
+						async_std::task::sleep(Duration::from_millis(250)).await;
+					}
 
-				// 	// Timestamp is unlikely to change so we can use generic metadata
-				// 	let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
-				// 	let basetime = BASETIME.load(Ordering::Relaxed);
-				// 	let mut time_for_blocknum = async move |blocknum: u32| {
-				// 		let mut block_hash: Option<primitive_types::H256> =
-				// 			get_block_hash(&mut source, blocknum).await;
-				// 		for _ in 0..10 {
-				// 			if block_hash.is_some() {
-				// 				break
-				// 			}
-				// 			block_hash = get_block_hash(&mut source, blocknum).await;
-				// 		}
+					// Timestamp is unlikely to change so we can use generic metadata
+					let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
+					let basetime = *BASETIME.lock().unwrap();
+					// let mut time_for_blocknum = async move |blocknum: u32| {
+					// 	let mut block_hash: Option<primitive_types::H256> =
+					// 		get_block_hash(&mut source, blocknum).await;
+					// 	for _ in 0..10 {
+					// 		if block_hash.is_some() {
+					// 			break
+					// 		}
+					// 		block_hash = get_block_hash(&mut source, blocknum).await;
+					// 	}
 
-				// 		find_timestamp(
-				// 			// chain_info.chain_url.clone(),
-				// 			block_hash.unwrap(),
-				// 			&mut source,
-				// 			&metad_current,
-				// 		).await
-				// 	};
-				// 	as_of.block_number = time_predictor::get_block_number_near_timestamp(
-				// 		basetime,
-				// 		10_000_000,
-				// 		&mut time_for_blocknum,
-				// 		None,
-				// 	);
-				// 	debug_assert!(
-				// 		as_of.block_number.is_some(),
-				// 		"could not convert time {} to blocknum for {}",
-				// 		basetime,
-				// 		as_of
-				// 	);
-				// }
+					// 	find_timestamp(
+					// 		// chain_info.chain_url.clone(),
+					// 		block_hash.unwrap(),
+					// 		&mut source,
+					// 		&metad_current,
+					// 	).await
+					// };
+					as_of.block_number = time_predictor::get_block_number_near_timestamp(
+						basetime,
+						10_000_000,
+						&mut source,
+						None,
+						&metad_current
+					).await;
+					debug_assert!(
+						as_of.block_number.is_some(),
+						"could not convert time {} to blocknum for {}",
+						basetime,
+						as_of
+					);
+				}
 
 				let mut last_timestamp = None;
 				for block_number in as_of.block_number.unwrap().. {
