@@ -67,7 +67,7 @@ async fn get_desub_metadata<S: Source>(
 	let hash = please_hash(&url);
 
 	// let mut metadata_path = format!("target/{hash}.metadata.scale");
-	let as_of = if let Some((version, hash)) = version {
+	let as_of = if let Some((_version, hash)) = version {
 		// metadata_path = format!("{}.{}", metadata_path, version);
 		Some(hash)
 	} else {
@@ -145,9 +145,9 @@ async fn get_desub_metadata<S: Source>(
 // 	}
 // }
 
-pub fn is_relay_chain(url: &str) -> bool {
-	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
-}
+// pub fn is_relay_chain(url: &str) -> bool {
+// 	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
+// }
 
 // pub async fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, polkapipe::Error> {
 // 	get_parachain_id(source).await
@@ -1116,52 +1116,52 @@ async fn check_reserve_asset<'a, 'b>(
 	extrinsic_url: &DotUrl,
 	start_link: &'b mut Vec<(String, LinkType)>,
 ) {
-	let mut flat0 = HashMap::new();
-	flattern(&args[0].value, "", &mut flat0);
-	// println!("FLATTERN {:#?}", flat0);
-	let mut flat1 = HashMap::new();
-	flattern(&args[1].value, "", &mut flat1);
+	// let mut flat0 = HashMap::new();
+	// flattern(&args[0].value, "", &mut flat0);
+	// // println!("FLATTERN {:#?}", flat0);
+	// let mut flat1 = HashMap::new();
+	// flattern(&args[1].value, "", &mut flat1);
 
-	if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
-		let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+	// if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+	// 	let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
 
-		println!("first time!");
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		// let dest: NonZeroU32 = dest.parse().unwrap();
+	// 	println!("first time!");
+	// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+	// 	// let dest: NonZeroU32 = dest.parse().unwrap();
 
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v2 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
-		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
-	}
-	if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
-		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
+	// 	if let Some(to) = to {
+	// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+	// 		// println!("SEND MSG v2 hash {}", msg_id);
+	// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+	// 	}
+	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+	// }
+	// if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+	// 	let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		// let dest: NonZeroU32 = dest.parse().unwrap();
+	// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+	// 	// let dest: NonZeroU32 = dest.parse().unwrap();
 
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v1 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
-		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
-	}
-	if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
-		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+	// 	if let Some(to) = to {
+	// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+	// 		// println!("SEND MSG v1 hash {}", msg_id);
+	// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+	// 	}
+	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+	// }
+	// if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+	// 	let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		// let dest: NonZeroU32 = dest.parse().unwrap();
+	// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+	// 	// let dest: NonZeroU32 = dest.parse().unwrap();
 
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v0 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
-		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
-	}
+	// 	if let Some(to) = to {
+	// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+	// 		// println!("SEND MSG v0 hash {}", msg_id);
+	// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+	// 	}
+	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+	// }
 }
 
 pub enum DataUpdate {

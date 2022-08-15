@@ -137,10 +137,12 @@ getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "*"
 ws_stream_wasm = "*"
 # wasm32 branch
-# polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="de8d332bc69a2fcbd6703fbf3c9280c74c058040", features = ["ws-web"]}
-polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
-    "ws-web",
-] }
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["ws-web"]}
+# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
+#     "ws-web",
+# ] }
+
+gloo = "*"
 
 bevy_web_asset = "0.4"
 bevy_tasks = "0.8"
@@ -182,6 +184,7 @@ features = [
     'WebGlRenderingContext',
     'WebGlShader',
     'KeyboardEvent',
+    'MouseEvent',
 ]
 
 [profile.dev]

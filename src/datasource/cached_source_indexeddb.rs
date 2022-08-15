@@ -30,11 +30,11 @@ impl<S> CachedDataSource<S>
 where
 	S: Source,
 {
-	pub fn new(underlying_source: S) -> Self {
-		let urlhash = super::please_hash(&underlying_source.url());
-		Self { store:  None, 
-		underlying_source, urlhash }
-	}
+	// pub fn new(underlying_source: S) -> Self {
+	// 	let urlhash = super::please_hash(&underlying_source.url());
+	// 	Self { store:  None, 
+	// 	underlying_source, urlhash }
+	// }
 }
 
 fn conv(val: JsValue) -> Result<Vec<u8>,polkapipe::Error> {

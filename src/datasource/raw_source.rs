@@ -241,8 +241,8 @@ use async_tungstenite::{
 	WebSocketStream,
 };
 use futures::{sink::SinkErrInto, stream::SplitSink};
-#[cfg(target_arch="wasm32")]
-use ws_stream_wasm::WsStream;
+// #[cfg(target_arch="wasm32")]
+// use ws_stream_wasm::WsStream;
 // #[cfg(target_arch="wasm32")]
 // type Message = ws_stream_wasm::WsMessage;
 // #[cfg(target_arch="wasm32")]

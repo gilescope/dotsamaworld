@@ -1,4 +1,4 @@
-use scale_value::*;
+// use scale_value::*;
 use std::collections::HashMap;
 
 // pub fn print_val<T>(dbg: &scale_value::ValueDef<T>) {
@@ -61,7 +61,7 @@ use std::collections::HashMap;
 pub fn flattern<T>(
 	dbg: &scale_value::ValueDef<T>,
 	location: &str,
-	mut results: &mut HashMap<String, String>,
+	results: &mut HashMap<String, String>,
 ) {
 	// match dbg {
 	// 	scale_value::ValueDef::BitSequence(..) => {
