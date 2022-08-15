@@ -114,10 +114,10 @@ bevy = { version = "0.8", default-features = false, features = [
 ] }
 # subxt = { git = "https://github.com/paritytech/subxt.git" }
 open = "1"
-# polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="de8d332bc69a2fcbd6703fbf3c9280c74c058040", features = ["wss"]}
-polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
-    "wss",
-] }
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["wss"]}
+# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
+#     "wss",
+# ] }
 async-tungstenite = { version = "0.15.0", default-features = true, features = [
     "async-tls",
     "async-std-runtime",
