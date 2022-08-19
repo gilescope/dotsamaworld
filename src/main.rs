@@ -51,7 +51,7 @@ mod ui;
 use crate::ui::{Details, DotUrl};
 // use bevy_inspector_egui::RegisterInspectable;
 // use bevy_inspector_egui::WorldInspectorPlugin;
-use bevy::winit::WinitSettings;
+// use bevy::winit::WinitSettings;
 #[cfg(feature = "spacemouse")]
 use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
 use chrono::prelude::*;
@@ -465,7 +465,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 						datasource::RawDataSource::new(&url),
 					);
 					#[cfg(target_arch="wasm32")]
-					let mut source = datasource::RawDataSource::new(&url);
+					let source = datasource::RawDataSource::new(&url);
 					// #[cfg(not(target_arch="wasm32"))]
 					// let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
 					// #[cfg(target_arch="wasm32")]
@@ -550,7 +550,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 					block_watcher.watch_blocks(source));
 				data_source_task.detach();
 
-				use crate::datasource::Source;
+				// use crate::datasource::Source;
 
 				//let mut cloned = source.clone();
 				//#[cfg(target_arch="wasm32")]

@@ -1,5 +1,5 @@
 // use scale_value::*;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 // pub fn print_val<T>(dbg: &scale_value::ValueDef<T>) {
 // 	match dbg.value_def {
@@ -58,11 +58,11 @@ use std::collections::HashMap;
 // }
 
 // THere's better ways but crazy levels of matching...
-pub fn flattern<T>(
-	dbg: &scale_value::ValueDef<T>,
-	location: &str,
-	results: &mut HashMap<String, String>,
-) {
+// pub fn flattern<T>(
+// 	dbg: &scale_value::ValueDef<T>,
+// 	location: &str,
+// 	results: &mut HashMap<String, String>,
+// ) {
 	// match dbg {
 	// 	scale_value::ValueDef::BitSequence(..) => {
 	// 		// println!("bitseq skipped");
@@ -162,4 +162,4 @@ pub fn flattern<T>(
 	// 		},
 	// 	},
 	// }
-}
+// }

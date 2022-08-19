@@ -107,12 +107,12 @@ impl<S> Source for CachedDataSource<S>
 where
 	S: Source,
 {
-	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&mut self) -> WSBackend {
-		// log!("cached process incoming run");
-		self.underlying_source.process_incoming_messages().await
-		// log!("cached process incoming fin");
-	}
+	// #[cfg(target_arch="wasm32")]
+	// async fn process_incoming_messages(&mut self) -> WSBackend {
+	// 	// log!("cached process incoming run");
+	// 	self.underlying_source.process_incoming_messages().await
+	// 	// log!("cached process incoming fin");
+	// }
 
 	async fn fetch_block_hash(
 		&mut self,

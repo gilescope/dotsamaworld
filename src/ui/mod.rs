@@ -122,7 +122,7 @@ pub fn ui_bars_system(
 		.show(egui_context.ctx_mut(), |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
-				let combo = ComboBox::from_label("Env")
+				let _combo = ComboBox::from_label("Env")
 					.selected_text(format!("{}", spec.env))
 					.show_ui(ui, |ui| {
 						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");

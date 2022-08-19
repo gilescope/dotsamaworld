@@ -4,7 +4,7 @@ use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
 // use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
-use core::time::Duration;
+// use core::time::Duration;
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -63,8 +63,8 @@ pub trait Source  {
 
 	fn url(&self) -> &str;
 
-	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&mut self) -> WSBackend;
+	// #[cfg(target_arch="wasm32")]
+	// async fn process_incoming_messages(&mut self) -> WSBackend;
 }
 
 // pub struct RawDataSource {
@@ -314,21 +314,21 @@ impl RawDataSource {
 
 #[async_trait(?Send)]
 impl Source for RawDataSource {
-	#[cfg(target_arch="wasm32")]
-	async fn process_incoming_messages(&mut self) -> WSBackend {
-		log!("get message processor");
+	// #[cfg(target_arch="wasm32")]
+	// async fn process_incoming_messages(&mut self) -> WSBackend {
+	// 	log!("get message processor");
 
-		// while self.client.is_none() {
-		// 	async_std::task::yield_now().await;
-		// }
-		// log!("await process incoming messages");
-		let client = self.client();
-			if let Some(client) = client.await {
-				log!("got message processor");
-				self.client.as_ref().unwrap().clone()
-			} else { panic!("no client could be gottet")}
-		// log!("finish process incoming messages");
-	}
+	// 	// while self.client.is_none() {
+	// 	// 	async_std::task::yield_now().await;
+	// 	// }
+	// 	// log!("await process incoming messages");
+	// 	let client = self.client();
+	// 		if let Some(_client) = client.await {
+	// 			log!("got message processor");
+	// 			self.client.as_ref().unwrap().clone()
+	// 		} else { panic!("no client could be gottet")}
+	// 	// log!("finish process incoming messages");
+	// }
 
 	async fn fetch_block_hash(
 		&mut self,
@@ -461,9 +461,9 @@ impl Source for RawDataSource {
 					.query_metadata(Some(as_of.as_bytes()))
 					.await
 					.map(|r| Some(r))
-					.map_err(|e| ())
+					.map_err(|_e| ())
 			} else {
-				client.query_metadata(None).await.map(|r| Some(r)).map_err(|e| ())
+				client.query_metadata(None).await.map(|r| Some(r)).map_err(|_e| ())
 			}
 		}   else { Err(()) }
 	}
