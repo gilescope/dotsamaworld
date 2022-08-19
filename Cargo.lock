@@ -3952,6 +3952,7 @@ dependencies = [
 [[package]]
 name = "polkapipe"
 version = "0.5.1"
+source = "git+https://github.com/gilescope/polkapipe?rev=22faf5099180680eae9118d71b6931352ec6fc10#22faf5099180680eae9118d71b6931352ec6fc10"
 dependencies = [
  "async-mutex",
  "async-std",

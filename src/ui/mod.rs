@@ -50,8 +50,24 @@ pub fn ui_bars_system(
 
 				if inspector.selected.is_some() {
 					let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
+					
+					#[cfg(target_arch="wasm32")]
+					let maybe_bytes : Option<Vec<u8>>= None;
+					// let maybe_bytes = {
+					// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
+					// 	use wasm_bindgen::JsCast;
+					// 	use wasm_bindgen_futures::JsFuture;
+					// 	let window = web_sys::window().unwrap();
+					// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
+					// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
+					// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
+					// 	Some(js_sys::Uint8Array::new(&data).to_vec())
+					// };
 
-					if let Ok(bytes) = std::fs::read(&format!("assets/branding/{}.jpeg", name)) {
+					#[cfg(not(target_arch="wasm32"))]
+					let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
+
+					if let Some(bytes) = maybe_bytes {
 						let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
 						let _texture: &egui::TextureHandle =
 							inspector.texture.get_or_insert_with(|| {

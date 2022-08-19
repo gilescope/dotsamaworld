@@ -297,7 +297,6 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
    		app.add_startup_system(ui::details::configure_visuals);
 
-		app.add_system(capture_mouse_on_click);
 
 		#[cfg(feature="atmosphere")]
 		app.insert_resource(Atmosphere::default()); // Default Earth sky
@@ -309,8 +308,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		// 	sky_radius: 1000.0,
 		// }
 	
-		 app.add_system(get_mouse_movement )
-            .init_resource::<WasmMouseTracker>();
+		// app.add_system(capture_mouse_on_click);
+		//  app.add_system(get_mouse_movement )
+        //     .init_resource::<WasmMouseTracker>();
 
 
 		app.add_system(render_block);
@@ -971,7 +971,7 @@ fn render_block(
 					),
 					..default()
 				};
-				log!("rendering block from {}", details.doturl);
+				// log!("rendering block from {}", details.doturl);
 
 				// println!("block.timestamp {:?}", block.timestamp);
 				// println!("base_time {:?}",base_time);
@@ -1030,8 +1030,11 @@ fn render_block(
 							// .chain_name
 							// .replace(" ", "-")
 							// .replace("-Testnet", "");
+
+							// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+							// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
 							#[cfg(target_arch="wasm32")]
-							let texture_handle = asset_server.load(&format!("http://0.0.0.0:8080/branding/{}.jpeg", chain_str));
+							let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
 							#[cfg(not(target_arch="wasm32"))]
 							let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
 							
@@ -2052,3 +2055,10 @@ pub fn get_mouse_movement(wasm_mouse_tracker: Res<WasmMouseTracker>,
 		ev.send(MouseMotion{ delta: delta })
     }
 }
+
+
+
+// 1. Create a TXT record in your DNS configuration for the following hostname: _github-pages-challenge-gilescope.dotsarma.world
+// 2. Use this code for the value of the TXT record: 9be755127138f5cd33be322be46d53
+// 3. Wait until your DNS configuration changes. This could take up to 24 hours to propagate.
+  
