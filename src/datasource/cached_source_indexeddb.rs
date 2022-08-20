@@ -15,8 +15,8 @@ pub struct CachedDataSource<S: Source> {
 	urlhash: u64,
 }
 
-#[cfg(target_arch="wasm32")]
-type WSBackend = polkapipe::ws_web::Backend;
+// #[cfg(target_arch="wasm32")]
+// type WSBackend = polkapipe::ws_web::Backend;
 
 macro_rules! log {
     // Note that this is using the `log` function imported above during

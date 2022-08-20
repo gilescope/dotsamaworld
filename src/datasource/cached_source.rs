@@ -12,11 +12,11 @@ pub struct CachedDataSource<S: Source> {
 #[cfg(target_arch="wasm32")]
 type WSBackend = polkapipe::ws_web::Backend;
 
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
-}
+// macro_rules! log {
+//     // Note that this is using the `log` function imported above during
+//     // `bare_bones`
+//     ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
+// }
 
 type BError = polkapipe::Error; //  Box<dyn std::error::Error>;
 

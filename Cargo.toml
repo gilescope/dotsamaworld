@@ -60,13 +60,13 @@ scale-info = { version = "*", features = ["serde"] }
 scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32" }
 # scale-value = {path="/home/gilescope/git/scale-value" }
 scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
-    "bitvec",
-], rev = "32eaadb6599895928ac9ccec133940edf1da0d35" }
+    "bitvec", "display"
+], rev = "f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444" }
 scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features = [
     "bitvec",
-], rev = "3a5b4bab485eb87d49e5c23cecfabd0a2d7e60c8" }
+], rev = "986d53abee3ba5f021e52cc096d09a0dc2f3db23" }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
-polkadyn = { git = "https://github.com/gilescope/polkadyn" }
+polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e560e88ee80ee070b05412b3d8c" }
 # polkadyn = { path = "/home/gilescope/git/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }

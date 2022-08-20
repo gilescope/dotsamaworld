@@ -86,7 +86,8 @@ impl Default for MovementSettings {
 /// Distance vertically between layer 0 and layer 1
 const LAYER_GAP: f32 = 10.;
 use  lazy_static::lazy_static;
-/// The time by which all times should be placed relative to each other on the x axis.
+
+// The time by which all times should be placed relative to each other on the x axis.
 lazy_static! { // This line needs rust 1.63+: and then some
 static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
 }
@@ -162,7 +163,9 @@ fn log(s: &str) {
 }
 
 fn main() -> () {
-	async_std::task::block_on(async_main());
+	let res = async_std::task::block_on(async_main());
+	#[cfg(not(target_arch="wasm32"))]
+	res.unwrap();
 }
 
 macro_rules! log {
@@ -461,7 +464,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 				relay.as_slice().iter().enumerate().filter_map( |(chain_index, (para_id, chain_name))| {
 					let url = chain_name_to_url(&chain_name);
 					#[cfg(not(target_arch="wasm32"))]
-					let mut source = datasource::CachedDataSource::new(
+					let source = datasource::CachedDataSource::new(
 						datasource::RawDataSource::new(&url),
 					);
 					#[cfg(target_arch="wasm32")]
@@ -522,7 +525,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 			let mut send_map = Some(send_map);
 			let mut sov_relay = vec![];
 			for ((chain, source), rc) in relay2 {
-				log!("listening to {}", chain.info.chain_ws);
+				// log!("listening to {}", chain.info.chain_ws);
 
 				// let url_clone = chain.info.chain_ws.clone();
 				let maybe_sender =
@@ -886,7 +889,7 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	
-	reader: EventReader<DataSourceStreamEvent>,
+	// reader: EventReader<DataSourceStreamEvent>,
 ) {
 	// let is_self_sovereign = false; //TODO
 	for relay in &relays.relays {
@@ -1979,6 +1982,7 @@ use bevy::prelude::*;
 
 
 
+#[cfg(target_arch="wasm32")]
 fn capture_mouse_on_click(
     mut mousebtn: EventReader<MouseButtonInput>,
 ) {
@@ -1999,21 +2003,30 @@ fn capture_mouse_on_click(
 
 // use crate::utils::html_body;
 use bevy::prelude::*;
+
+#[cfg(target_arch="wasm32")]
 use wasm_bindgen::JsCast;
 // use bevy_webgl2::renderer::JsCast;
+
+#[cfg(target_arch="wasm32")]
 use gloo::events::EventListener;
 use std::sync::{
     atomic::{Ordering::SeqCst},
     
 };
+
+#[cfg(target_arch="wasm32")]
 use web_sys::MouseEvent;
 
 
+#[cfg(target_arch="wasm32")]
 pub struct WasmMouseTracker {
     delta_x: Arc<AtomicI32>,
     delta_y: Arc<AtomicI32>,
 }
 
+
+#[cfg(target_arch="wasm32")]
 impl WasmMouseTracker {
     pub fn get_delta_and_reset(&self) -> Vec2 {
         let delta = Vec2::new(
@@ -2026,6 +2039,8 @@ impl WasmMouseTracker {
     }
 }
 
+
+#[cfg(target_arch="wasm32")]
 impl Default for WasmMouseTracker {
 	fn default() -> Self {
         let delta_x = Arc::new(AtomicI32::new(0));
@@ -2045,7 +2060,11 @@ impl Default for WasmMouseTracker {
     }
 }
 
+
+#[cfg(target_arch="wasm32")]
 use bevy::input::mouse::MouseMotion;
+
+#[cfg(target_arch="wasm32")]
 pub fn get_mouse_movement(wasm_mouse_tracker: Res<WasmMouseTracker>,
 	mut ev: EventWriter<MouseMotion>
 ) {

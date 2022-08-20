@@ -237,7 +237,7 @@ pub trait Source  {
 
 #[cfg(not(target_arch="wasm32"))]
 use async_tungstenite::{
-	tungstenite::{Error as WsError, Message},
+	tungstenite::{Message},
 	WebSocketStream,
 };
 use futures::{sink::SinkErrInto, stream::SplitSink};
@@ -383,8 +383,8 @@ impl Source for RawDataSource {
 							/* while bytes.len() < 4 {
 								bytes.insert(0, 0);
 							} */
-							println!("bytes or {}", num_original);
-							println!("bytes is {}", hex::encode(&bytes));
+							// println!("bytes or {}", num_original);
+							// println!("bytes is {}", hex::encode(&bytes));
 							use parity_scale_codec::Decode; 
 							
 							
@@ -398,7 +398,7 @@ impl Source for RawDataSource {
 							/* use parity_scale_codec::Compact;
 					/* 		 */let number = Compact::<u32>::decode(&mut &bytes[..]).unwrap(); */
 						/* 	/*  */let re : u32 = number.into(); */
-					println!("bytes {} -> {}",&num_original, number);   
+					// println!("bytes {} -> {}",&num_original, number);   
 							res.block_number = number;
 						}
 					} 

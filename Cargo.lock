@@ -3901,7 +3901,7 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/polkadyn#c458c0139e083d17b60ad11e7bd23d1c9e1bdfde"
+source = "git+https://github.com/gilescope/polkadyn?rev=1da872d87bfe3e560e88ee80ee070b05412b3d8c#1da872d87bfe3e560e88ee80ee070b05412b3d8c"
 dependencies = [
  "frame-metadata",
  "getrandom 0.2.7",
@@ -4322,9 +4322,10 @@ dependencies = [
 [[package]]
 name = "scale-borrow"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/scale-borrow?rev=32eaadb6599895928ac9ccec133940edf1da0d35#32eaadb6599895928ac9ccec133940edf1da0d35"
+source = "git+https://github.com/gilescope/scale-borrow?rev=f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444#f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444"
 dependencies = [
  "bitvec",
+ "hex",
  "parity-scale-codec",
  "scale-info",
 ]
@@ -4373,7 +4374,7 @@ dependencies = [
 [[package]]
 name = "scale-value-to-borrowed"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=3a5b4bab485eb87d49e5c23cecfabd0a2d7e60c8#3a5b4bab485eb87d49e5c23cecfabd0a2d7e60c8"
+source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=986d53abee3ba5f021e52cc096d09a0dc2f3db23#986d53abee3ba5f021e52cc096d09a0dc2f3db23"
 dependencies = [
  "scale-borrow",
  "scale-value",
