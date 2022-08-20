@@ -222,8 +222,6 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		speed: 12.0,          // default: 12.0
 		boost: 5.,
 	});
-	#[cfg(target_arch="wasm32")]
-	app.insert_resource(Vec::<PollSource>::new());
 	app.insert_resource(ui::UrlBar::new(
 		"dotsama:/1//10504599".to_string(),
 		Utc::now().naive_utc(),
@@ -281,8 +279,6 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		app.insert_resource(ui::OccupiedScreenSpace::default());
 		app.add_system(movement::scroll);
 
-		#[cfg(target_arch="wasm32")]
-		app.add_system(source_poll);
 		app.add_startup_system(setup);
 	#[cfg(feature = "spacemouse")]
 	app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
@@ -365,31 +361,6 @@ fn chain_name_to_url(chain_name: &str) -> String {
 #[derive(Component)]
 struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
 
-#[cfg(target_arch="wasm32")]
-#[derive(Clone)]
-struct PollSource(Arc<Mutex<Option<polkapipe::ws_web::Backend>>>);
-
-#[cfg(target_arch="wasm32")]
-fn source_poll(sources: ResMut<Vec<PollSource>>) {
-	let thread_pool = AsyncComputeTaskPool::get();
-
-	// log!("polling checking for incoming messages");
-	let sources = (*sources).clone();
-	let data_source_task3 = thread_pool.spawn_local((async move || 
-	{
-		for source in sources.iter() {
-			if let Ok(source) = source.0.try_lock() {
-				if let Some(source) = &*source {
-					// log!("pulling in incoming messages");
-					source.process_incoming_messages().await;
-				}
-			} 
-		}
-	}
-	)());
-	data_source_task3.detach();
-}
-
 fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
 	mut commands: Commands<'c,'d>,
@@ -399,9 +370,6 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 	// mut dest: ResMut<Destination>,
 	mut spec: ResMut<'j, UrlBar>,
 	writer: EventWriter<DataSourceStreamEvent>,
-	
-	#[cfg(target_arch="wasm32")]
-	sources: ResMut<Vec<PollSource>>
 ) {
 	let thread_pool = AsyncComputeTaskPool::get();
 	for event in datasource_events.iter() {
