@@ -162,7 +162,7 @@ fn log(s: &str) {
 	println!("{}", s);
 }
 
-fn main() -> () {
+pub fn main() -> () {
 	let res = async_std::task::block_on(async_main());
 	#[cfg(not(target_arch="wasm32"))]
 	res.unwrap();
@@ -2076,8 +2076,32 @@ pub fn get_mouse_movement(wasm_mouse_tracker: Res<WasmMouseTracker>,
 }
 
 
+#[cfg(target_arch="wasm32")]
+use gloo_worker::{HandlerId, Public, Worker, WorkerLink};
 
-// 1. Create a TXT record in your DNS configuration for the following hostname: _github-pages-challenge-gilescope.dotsarma.world
-// 2. Use this code for the value of the TXT record: 9be755127138f5cd33be322be46d53
-// 3. Wait until your DNS configuration changes. This could take up to 24 hours to propagate.
-  
+#[cfg(target_arch="wasm32")]
+pub struct Multiplier {
+    link: WorkerLink<Self>,
+}
+
+#[cfg(target_arch="wasm32")]
+impl Worker for Multiplier {
+    type Input = (u64, u64);
+    type Message = ();
+    type Output = ((u64, u64), u64);
+    type Reach = Public<Self>;
+
+    fn create(link: WorkerLink<Self>) -> Self {
+        Self { link }
+    }
+
+    fn update(&mut self, _msg: Self::Message) {}
+
+    fn handle_input(&mut self, msg: Self::Input, id: HandlerId) {
+        self.link.respond(id, (msg, msg.0 * msg.1));
+    }
+
+    fn name_of_resource() -> &'static str {
+        "worker.js"
+    }
+}

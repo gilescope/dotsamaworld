@@ -55,21 +55,18 @@ There's probably some prerequites but if you have nix or run nixos then you can 
 
 ## Build and serve WASM version
 
-You can't at the moment.
-
-I was using `trunk serve` to run up a wasm version but at the moment I'm using subxt which is not no_std
-(could use smaldot or substrate-api-client instead?). Also the wasm multithreading story seems a tad early.
+trunk serve
 
 ## Build and run native version
 ```
-cargo run --no-default-features
+cargo run --bin app
 ```
 
 You will need to change Cargo.toml to wayland if your using that - at the moment it's set to X11.
 
 ## Features
 
-Note: spacemouse is on by default at the moment.
+Note: spacemouse support is not on by default.
 
 | Feature      | Description                                        |
 | ------------ | -------------------------------------------------- |
