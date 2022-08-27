@@ -189,7 +189,11 @@ pub fn scroll(
 		LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i32, Ordering::Relaxed);
 		for mut viewport in query.iter_mut() {
 			let forward = viewport.forward();
-			viewport.translation += forward * event.y;
+			#[cfg(target_arch="wasm32")]
+			const DIRECTION: f32 = -0.2; // TODO: boost shift should affect this
+			#[cfg(not(target_arch="wasm32"))]
+			const DIRECTION: f32 = 1.;
+			viewport.translation += forward * event.y * DIRECTION;
 		}
 	}
 }
