@@ -15,7 +15,7 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
-primitive-types = "0.11"
+primitive-types = {version="0.11", features=["serde"]} 
 log = "0.4.14"
 async-std = { version = "1.12.0", features = [
     "attributes",
@@ -144,8 +144,8 @@ polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf50991806
 
 gloo = "*"
 # wee_alloc = "0.4.5"
-gloo-worker = "0.1.0"
-
+gloo-worker = "0.2.1"
+wasm-bindgen-futures = "*"
 bevy_web_asset = "0.4"
 bevy_tasks = "0.8"
 bevy = { version = "0.8", default-features = false, features = [

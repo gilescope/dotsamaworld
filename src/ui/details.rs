@@ -3,12 +3,13 @@ use super::DotUrl;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiSettings;
+use serde::{Serialize,Deserialize};
 // use bevy_inspector_egui::{
 // 	options::{NumberAttributes, StringAttributes},
 // 	Context, Inspectable,
 // };
 
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Success {
 	#[default]
 	Happy,
@@ -16,7 +17,7 @@ pub enum Success {
 	Sad,
 }
 
-#[derive(Component, Default, Clone, Debug)]
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Details {
 	pub pallet: String,
 	pub doturl: DotUrl,

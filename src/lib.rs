@@ -5,6 +5,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 use crate::ui::UrlBar;
+use serde::{Serialize, Deserialize};
 use bevy::{ecs as bevy_ecs, prelude::*};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
@@ -17,6 +18,7 @@ use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use crate::movement::Destination;
 #[cfg(feature = "adaptive-fps")]
@@ -32,6 +34,8 @@ use std::{
 		Arc,
 	},
 };
+
+#[cfg(not(target_arch="wasm32"))]
 use bevy::{
     tasks::{AsyncComputeTaskPool},
 };
@@ -91,6 +95,11 @@ use  lazy_static::lazy_static;
 lazy_static! { // This line needs rust 1.63+: and then some
 static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
 }
+
+lazy_static! { // This line needs rust 1.63+: and then some
+	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<Vec<datasource::DataUpdate>>> = Arc::new(std::sync::Mutex::new(vec![]));
+}
+
 /// Bump this to tell the current datasources to stop.
 static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
 
@@ -100,7 +109,7 @@ static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 static LIVE: &str = "dotsama:live";
 
 /// Immutable once set up.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]//TODO use scale
 pub struct ChainInfo {
 	// pub chain_name: String,
 	pub chain_ws: String,
@@ -112,12 +121,14 @@ pub struct ChainInfo {
 	// pub chain_name: String,
 }
 
-pub type ABlocks = Arc<
-	Mutex<
-		// Queue of new data to be processed.
-		Vec<datasource::DataUpdate>,
-	>,
->;
+// pub type ABlocks = Arc<
+// 	Mutex<
+// 		// Queue of new data to be processed.
+// 		Vec<datasource::DataUpdate>,
+// 	>,
+// >;
+
+// pub type ABlocks = Fn(Vec<datasource::DataUpdate>) -> () + Send + Sync + 'static;
 
 mod networks;
 use networks::Env;
@@ -188,6 +199,10 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	let _ = std::fs::create_dir_all("target");
 
 	let low_power_mode = false;
+
+ 	#[cfg(target_feature = "atomics")]
+	log!("Yay atomics!");
+
 
 	let mut app = App::new();
 	// app
@@ -317,6 +332,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 
 		// #[cfg(target_arch = "wasm32")]
 		// html_body::get().request_pointer_lock();
+
+ 	
+
 	app.run();
 
 	Ok(())
@@ -361,17 +379,22 @@ fn chain_name_to_url(chain_name: &str) -> String {
 #[derive(Component)]
 struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
 
-fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
+
+fn send_it_to_main(blocks: Vec<datasource::DataUpdate>) -> () //+ Send + Sync + 'static
+{
+	web_sys::console::log_1(&format!("got a block!!!").into());
+}
+
+fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
 	mut commands: Commands<'c,'d>,
 	mut sovereigns: ResMut<'e, Sovereigns>,
 	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
-	// mut dest: ResMut<Destination>,
-	mut spec: ResMut<'j, UrlBar>,
+	mut spec: ResMut<UrlBar>,
+	#[cfg(not(target_arch="wasm32"))]
 	writer: EventWriter<DataSourceStreamEvent>,
 ) {
-	let thread_pool = AsyncComputeTaskPool::get();
 	for event in datasource_events.iter() {
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
 
@@ -387,6 +410,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 		let is_live = if let Some(timestamp) = event.timestamp {
 			// if time is now or in future then we are live mode.
 			let is_live = timestamp >= (Utc::now().timestamp() * 1000);
+			// log!("basetime set by source_data={}", timestamp);
 			if is_live {
 				*BASETIME.lock().unwrap() = Utc::now().timestamp() * 1000;
 				spec.timestamp = Utc::now().naive_utc();
@@ -426,17 +450,13 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 			.map(|(relay_index, relay)| {				
 				let relay_url = DotUrl {
 					sovereign: Some(if relay_index == 0 { -1 } else { 1 }),
+					block_number: None,
 					..dot_url.clone()
 				};
 				//relay.as_slice().par_iter().
 				relay.as_slice().iter().enumerate().filter_map( |(chain_index, (para_id, chain_name))| {
 					let url = chain_name_to_url(&chain_name);
-					#[cfg(not(target_arch="wasm32"))]
-					let source = datasource::CachedDataSource::new(
-						datasource::RawDataSource::new(&url),
-					);
-					#[cfg(target_arch="wasm32")]
-					let source = datasource::RawDataSource::new(&url);
+					
 					// #[cfg(not(target_arch="wasm32"))]
 					// let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
 					// #[cfg(target_arch="wasm32")]
@@ -446,9 +466,9 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 					// }
 					//let para_id = para_id.unwrap();
 
-					Some((
+					Some(
 						Chain {
-							shared: ABlocks::default(),
+							shared: send_it_to_main,
 							// name: chain_name.to_string(),
 							info: ChainInfo {
 								chain_ws: url,
@@ -461,127 +481,172 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i,'j>(
 								chain_url: DotUrl { para_id: para_id.clone(), ..relay_url.clone() },
 								// chain_name: parachain_name,
 							},
-						},
-						source,
-					))
-				}).collect::<Vec<(Chain, _  )>>(
+						}
+					)
+				}).collect::<Vec<Chain<_>>>(
 					)
 			})
 			.collect::<Vec<Vec<_>>>();
 
-		for relay in relays.into_iter() {
-			// let relay_url = DotUrl {
-			//     sovereign: Some(relay_id as u32),
-			//     ..dot_url.clone()
-			// };
-			let mut relay2: Vec<(
-				(Chain, _),
-				_,
-			)> = vec![];
-			let mut send_map: HashMap<
-				NonZeroU32,
-				async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
-			> = Default::default();
-			for (chain, source) in relay.into_iter() {
-				let (tx, rc) = async_std::channel::unbounded();
-				if let Some(para_id) = chain.info.chain_url.para_id {
-					send_map.insert(para_id, tx);
-				}
-				relay2.push(((chain, source), rc));
-			}
-
-			let mut send_map = Some(send_map);
-			let mut sov_relay = vec![];
-			for ((chain, source), rc) in relay2 {
-				// log!("listening to {}", chain.info.chain_ws);
-
-				// let url_clone = chain.info.chain_ws.clone();
-				let maybe_sender =
-					if chain.info.chain_url.is_relay() { send_map.take() } else { None };
-
-				let lock_clone = chain.shared.clone();
-				let as_of = as_of.clone();
-				log!("as of for chain {:?}", &as_of);
-				let chain_info = chain.info.clone();
-
-				let block_watcher = datasource::BlockWatcher{
-					tx: Some(lock_clone.clone()),
-					chain_info,
-					as_of,
-					receive_channel: Some(rc),
-					sender: maybe_sender,
-					// source
-				};
-
-
-
-
-
-				let data_source_task = thread_pool.spawn_local(
-					block_watcher.watch_blocks(source));
-				data_source_task.detach();
-
-				// use crate::datasource::Source;
-
-				//let mut cloned = source.clone();
-				//#[cfg(target_arch="wasm32")]
-				// let data_source_task2 = thread_pool.spawn_local(async move {
-				// 	log!("spawned local task run");
-				// 	let to_poll = cloned.process_incoming_messages();
-				// });
-				//let poll_source = PollSource(Arc::new(Mutex::new(None)));
-				//let clone = poll_source.0.clone();
-				// let data_source_task3 = thread_pool.spawn_local((async move || 
-				// 	{
-				// 		let backend = cloned.process_incoming_messages().await;
-				// 		// We can't really return things in wasm tasks so return via mutex.
-				// 		*clone.lock().unwrap() = Some(backend);
-				// 	}
-				// )());
-				// sources.push(poll_source);
-				// data_source_task3.detach();
-
-				// #[cfg(target_arch="wasm32")]
-				// data_source_task2.detach();
-
-				// 	sync move || {
-				// 	// let mut reconnects = 0;
-
-				// 	// while reconnects < 20 {
-				// 	println!("Connecting to {} as of {:?}", &url_clone, as_of);
-				// 	let _res = datasource::watch_blocks(
-				// 		lock_clone.clone(),
-				// 		chain_info,
-				// 		as_of,
-				// 		rc,
-				// 		maybe_sender,
-				// 		source,
-				// 	).await;
-
-				// 	// if res.is_ok() { break; }
-				// 	// println!(
-				// 	//     "Problem with {} blocks (retries left {})",
-				// 	//     &url_clone, reconnects
-				// 	// );
-				// 	// std::thread::sleep(std::time::Duration::from_secs(20));
-				// 	// reconnects += 1;
-				// 	// }
-				// 	// println!("finished listening to {} {:?}", url_clone, my_writer);
-				// }
-
-				// We do this to signal that they are long running tasks.
-				// (essential for wasm32 as a FakeTask is returned)
-				
-
-				// #[cfg(not(target_arch="wasm32"))]
-				// commands.spawn().insert(SourceDataTask(data_source_task));
-				// commands.spawn().insert(SourceDataTask(data_source_task));
-				
-				sov_relay.push(chain);
+		sovereigns.relays.truncate(0);
+		for relay in relays.iter() {
+			let mut sov_relay = vec![];			
+			for chain in relay.iter() {
+				web_sys::console::log_1(&format!("set soverign index to {} {}", chain.info.chain_index, chain.info.chain_url).into());
+				sov_relay.push(chain.info.clone());
 			}
 			sovereigns.relays.push(sov_relay);
 		}
-		//TODO: sovereigns.relays = relays;
+
+		//do_datasources(relays, as_of);
+
+		let t = async move || {
+			web_sys::console::log_1(&format!("send to bridge").into());
+
+			 use gloo_worker::WorkerBridge;
+			#[cfg(target_arch="wasm32")]
+			let bridge : WorkerBridge<IOWorker>
+			= IOWorker::spawner().callback(|result| {
+				UPDATE_QUEUE.lock().unwrap().extend(result);
+				// let args : Vec<_> = std::env::args().collect();
+				// web_sys::console::log_1(&format!("from process {}", args[0]).into());
+				// web_sys::console::log_1(&format!("got results on main thread?????").into());
+			}).spawn("./worker.js");
+		
+			#[cfg(target_arch="wasm32")]
+			let bridge = Box::leak(Box::new(bridge));
+			bridge.send(BridgeMessage::SetDatasource(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of, DATASOURCE_EPOC.load(Ordering::Relaxed)));
+
+			loop {
+				bridge.send(BridgeMessage::GetNewBlocks);
+				async_std::task::sleep(Duration::from_secs(1)).await;
+			}
+		};
+
+		wasm_bindgen_futures::spawn_local(t());
+
+
+		web_sys::console::log_1(&format!("sent to bridge").into());
+	}
+}
+use core::future::Future;
+async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
+	as_of: Option<DotUrl>,
+	callback: &'static F
+)
+	where 
+		F: (Fn(Vec<datasource::DataUpdate>) -> R) + Send + Sync + 'static,
+		R: Future<Output=()> + 'static
+{
+	// #[cfg(not(feature="wasm32"))]
+	// AsyncComputeTaskPool::init();
+	// #[cfg(not(feature="wasm32"))]
+	// let thread_pool = AsyncComputeTaskPool::get();
+	// let callback = callback;
+
+	for relay in relays.into_iter() {
+		let mut relay2: Vec<(ChainInfo, _)> = vec![];
+		let mut send_map: HashMap<
+			NonZeroU32,
+			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
+		> = Default::default();
+		for chain in relay.into_iter() {
+			let (tx, rc) = async_std::channel::unbounded();
+			if let Some(para_id) = chain.chain_url.para_id {
+				send_map.insert(para_id, tx);
+			}
+			relay2.push((chain, rc));
+		}
+
+		let mut send_map = Some(send_map);
+		//let mut sov_relay = vec![];
+		for (chain, rc) in relay2 {
+			// log!("listening to {}", chain.info.chain_ws);
+
+			let maybe_sender =
+				if chain.chain_url.is_relay() { send_map.take() } else { None };
+
+			// let lock_clone = chain.shared;
+			let as_of = as_of.clone();
+			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
+			let chain_info = chain.clone();
+
+			let block_watcher = datasource::BlockWatcher{
+				tx: Some(callback),
+				chain_info,
+				as_of,
+				receive_channel: Some(rc),
+				sender: maybe_sender,
+				// source
+			};
+
+			//let block_watcher = Box::leak(Box::new(block_watcher));
+
+			wasm_bindgen_futures::spawn_local(block_watcher.watch_blocks());
+			//block_watcher.watch_blocks()
+			// let data_source_task = thread_pool.spawn_local(
+			// 	block_watcher.watch_blocks());
+			// data_source_task.detach();
+
+			// use crate::datasource::Source;
+
+			//let mut cloned = source.clone();
+			//#[cfg(target_arch="wasm32")]
+			// let data_source_task2 = thread_pool.spawn_local(async move {
+			// 	log!("spawned local task run");
+			// 	let to_poll = cloned.process_incoming_messages();
+			// });
+			//let poll_source = PollSource(Arc::new(Mutex::new(None)));
+			//let clone = poll_source.0.clone();
+			// let data_source_task3 = thread_pool.spawn_local((async move || 
+			// 	{
+			// 		let backend = cloned.process_incoming_messages().await;
+			// 		// We can't really return things in wasm tasks so return via mutex.
+			// 		*clone.lock().unwrap() = Some(backend);
+			// 	}
+			// )());
+			// sources.push(poll_source);
+			// data_source_task3.detach();
+
+			// #[cfg(target_arch="wasm32")]
+			// data_source_task2.detach();
+
+			// 	sync move || {
+			// 	// let mut reconnects = 0;
+
+			// 	// while reconnects < 20 {
+			// 	println!("Connecting to {} as of {:?}", &url_clone, as_of);
+			// 	let _res = datasource::watch_blocks(
+			// 		lock_clone.clone(),
+			// 		chain_info,
+			// 		as_of,
+			// 		rc,
+			// 		maybe_sender,
+			// 		source,
+			// 	).await;
+
+			// 	// if res.is_ok() { break; }
+			// 	// println!(
+			// 	//     "Problem with {} blocks (retries left {})",
+			// 	//     &url_clone, reconnects
+			// 	// );
+			// 	// std::thread::sleep(std::time::Duration::from_secs(20));
+			// 	// reconnects += 1;
+			// 	// }
+			// 	// println!("finished listening to {} {:?}", url_clone, my_writer);
+			// }
+
+			// We do this to signal that they are long running tasks.
+			// (essential for wasm32 as a FakeTask is returned)
+			
+
+			// #[cfg(not(target_arch="wasm32"))]
+			// commands.spawn().insert(SourceDataTask(data_source_task));
+			// commands.spawn().insert(SourceDataTask(data_source_task));
+			
+			//sov_relay.push(chain);
+		}
+		//sovereigns.relays.push(sov_relay);
 	}
 }
 
@@ -649,7 +714,7 @@ fn clear_world(
 ) {
 	// Stop previous data sources...
 	DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
-	println!("incremet epoc to {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
+	log!("incremet epoc to {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
 
 	for detail in details.iter() {
 		commands.entity(detail).despawn();
@@ -695,7 +760,7 @@ enum BuildDirection {
 // 	res
 // }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize,Deserialize)]
 pub enum DataEntity {
 	Event(DataEvent),
 	Extrinsic {
@@ -715,7 +780,7 @@ pub enum DataEntity {
 	},
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DataEvent {
 	details: Details,
 	start_link: Vec<(String, LinkType)>,
@@ -730,7 +795,7 @@ pub struct MessageSource {
 	pub link_type: LinkType,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum LinkType {
 	Teleport,
 	ReserveTransfer,
@@ -801,15 +866,16 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
-#[derive(Clone)]
-pub struct Chain {
-	shared: ABlocks,
+pub struct Chain<F> 
+where F : 
+{
+	shared: F,
 	info: ChainInfo,
 }
 
 pub struct Sovereigns {
 	//                            name    para_id             url
-	pub relays: Vec<Vec<Chain>>,
+	pub relays: Vec<Vec<ChainInfo>>,
 	pub default_track_speed: f32,
 }
 
@@ -859,307 +925,339 @@ fn render_block(
 	
 	// reader: EventReader<DataSourceStreamEvent>,
 ) {
+	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
+					// web_sys::console::log_1(&format!("check results").into());
+	
 	// let is_self_sovereign = false; //TODO
-	for relay in &relays.relays {
-		for chain in relay.iter() {
+	//todo this can be 1 queue
+	//for msg in relays.relays.iter().flattern() {
+//	 for rrelay in &relays.relays {
+//	 	for cchain in rrelay.iter() {
 	// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
 		// for chain in relay.iter() {
-			 if let Ok(ref mut block_events) = chain.shared.try_lock() {
-				let chain_info = &chain.info;
-				if let Some(data_update) = (*block_events).pop() {
-		match data_update {
-			DataUpdate::NewBlock(block) => {
-				BLOCKS.fetch_add(1, Ordering::Relaxed);
-
-				// println!(
-				// 	"chains {} blocks {} txs {} events {}",
-				// 	CHAINS.load(Ordering::Relaxed),
-				// 	BLOCKS.load(Ordering::Relaxed),
-				// 	EXTRINSICS.load(Ordering::Relaxed),
-				// 	EVENTS.load(Ordering::Relaxed)
-				// );
-
-				// Skip data we no longer care about because the datasource has changed
-				let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
-				if block.data_epoc != now_epoc {
-					println!(
-						"discarding out of date block made at {} but we are at {}",
-						block.data_epoc, now_epoc
-					);
-					continue
-				}
-
-				let mut base_time = *BASETIME.lock().unwrap();
-				if base_time == 0 {
-					base_time = block.timestamp.unwrap_or(0);
-					*BASETIME.lock().unwrap() = base_time;
-				}
-
-				// let block_num = if is_self_sovereign {
-				//     block.blockurl.block_number.unwrap() as u32
-				// } else {
-
-				//     if base_time == 0
-				//     if rcount == 0 {
-				//         if chain == 0 &&  {
-				//             //relay
-				//             RELAY_BLOCKS.store(
-				//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-				//                 Ordering::Relaxed,
-				//             );
-				//         }
-				//         RELAY_BLOCKS.load(Ordering::Relaxed)
-				//     } else {
-				//         if chain == 0 {
-				//             //relay
-				//             RELAY_BLOCKS2.store(
-				//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-				//                 Ordering::Relaxed,
-				//             );
-				//         }
-				//         RELAY_BLOCKS2.load(Ordering::Relaxed)
-				//     }
-				// };
-
-				let rflip = chain_info.chain_url.rflip();
-				let encoded: String =
-					url::form_urlencoded::Serializer::new(String::new())
-						.append_pair("rpc", &chain_info.chain_ws)
-						.finish();
-
-				let is_relay = chain_info.chain_url.is_relay();
-				let details = Details {
-					doturl: DotUrl {
-						extrinsic: None,
-						event: None,
-						..block.blockurl.clone()
-					},
-
-					url: format!(
-						"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
-						&encoded,
-						hex::encode(block.blockhash)
-					),
-					..default()
-				};
-				// log!("rendering block from {}", details.doturl);
-
-				// println!("block.timestamp {:?}", block.timestamp);
-				// println!("base_time {:?}",base_time);
-				let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
-
-				// Add the new block as a large square on the ground:
-				{
-					let timestamp_color = if chain_info.chain_url.is_relay() {
-						block.timestamp.unwrap()
-					} else {
-						block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
-					} / 400;
-
-					let transform = Transform::from_translation(Vec3::new(
-						0. + (block_num as f32),
-						if is_relay { 0. } else { LAYER_GAP },
-						(RELAY_CHAIN_CHASM_WIDTH +
-							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-							rflip,
-					));
-					// println!("block created at {:?} blocknum {}", transform,
-					// block_num);
-
-					let mut bun = commands.spawn_bundle(PbrBundle {
-						mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
-						material: materials.add(StandardMaterial {
-							base_color: style::color_block_number(
-								timestamp_color,
-								chain_info.chain_url.is_darkside(),
-							), // Color::rgba(0., 0., 0., 0.7),
-							alpha_mode: AlphaMode::Blend,
-							perceptual_roughness: 0.08,
-							unlit: if block.blockurl.is_darkside() {
-								true
-							} else {
-								false
-							},
-							..default()
-						}),
-						transform,
-						..Default::default()
-					});
-
-					bun.insert(ClearMe);
-					// bun.insert(Aabb::from_min_max(
-					//     Vec3::new(0., 0., 0.),
-					//     Vec3::new(1., 1., 1.),
-					// ));
-					
-					let chain_str = details.doturl.chain_str();
-
-					bun.insert(details)
-						.insert(Name::new("Block"))
-						.with_children(|parent| {
-							// let name = chain_info
-							// .chain_name
-							// .replace(" ", "-")
-							// .replace("-Testnet", "");
-
-							// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
-							// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
-							#[cfg(target_arch="wasm32")]
-							let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
-							#[cfg(not(target_arch="wasm32"))]
-							let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
-							
-							let aspect = 1. / 3.;
-
-							// create a new quad mesh. this is what we will apply the
-							// texture to
-							let quad_width = BLOCK;
-							let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-								Vec2::new(quad_width, quad_width * aspect),
-							)));
-
-							// this material renders the texture normally
-							let material_handle = materials.add(StandardMaterial {
-								base_color_texture: Some(texture_handle.clone()),
-								alpha_mode: AlphaMode::Blend,
-								unlit: true, // !block_events.2.inserted_pic,
-								..default()
-							});
-
-							use std::f32::consts::PI;
-							// textured quad - normal
-							let rot =
-								Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
-												// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-												// / 2.0);
-							let transform = Transform {
-								translation: Vec3::new(
-									-7., // + (BLOCK_AND_SPACER * block_num as f32),
-									0.1, //1.5
-									0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
-								),
-								rotation: rot,
-								..default()
-							};
-
-							parent
-								.spawn_bundle(PbrBundle {
-									mesh: quad_handle.clone(),
-									material: material_handle.clone(),
-
-									transform,
-									..default()
-								})
-								.insert(Name::new("BillboardDown"))
-								.insert(ClearMe);
-							// by adding Details to the banners they are cleared down
-							// when we remove every entity with Details.
-
-							// create a new quad mesh. this is what we will apply the
-							// texture to
-							let quad_width = BLOCK;
-							let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-								Vec2::new(quad_width, quad_width * aspect),
-							)));
-
-							// this material renders the texture normally
-							let material_handle = materials.add(StandardMaterial {
-								base_color_texture: Some(texture_handle.clone()),
-								alpha_mode: AlphaMode::Blend,
-								unlit: true,
-								..default()
-							});
-
-							// textured quad - normal
-							let rot =
-								Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-												// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-												// / 2.0);
-							let transform = Transform {
-								translation: Vec3::new(
-									-7., // + (BLOCK_AND_SPACER * block_num as f32),
-									0.1, //1.5
-									0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
-								),
-								rotation: rot,
-								..default()
-							};
-
-							parent
-								.spawn_bundle(PbrBundle {
-									mesh: quad_handle.clone(),
-									material: material_handle.clone(),
-									transform,
-									..default()
-								})
-								.insert(Name::new("BillboardUp"))
-								.insert(ClearMe);
-							// .insert(Aabb::from_min_max(
-							//     Vec3::new(0., 0., 0.),
-							//     Vec3::new(1., 1., 1.),
-							// )); // TODO: should be able to add same component onto 3
-							// different entities maybe?
-
-							//block_events.2.inserted_pic = true;
-						})
-						.insert_bundle(PickableBundle::default());
-				}
-
-				let ext_with_events =
-					datasource::associate_events(block.extrinsics.clone(), block.events.clone());
-
-				// Leave infrastructure events underground and show user activity above
-				// ground.
-				let (boring, fun): (Vec<_>, Vec<_>) =
-					ext_with_events.into_iter().partition(|(e, _)| {
-						if let Some(ext) = e {
-							content::is_utility_extrinsic(ext)
-						} else {
-							true
+		//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
+		//		let chain_info = &cchain.info;
+		if let Some(data_update) = (*block_events).pop() {
+					// web_sys::console::log_1(&format!("got results").into());
+			match data_update {
+				DataUpdate::NewBlock(block) => {
+						// web_sys::console::log_1(&format!("got results on main rendere").into());
+	
+					//TODO optimise!
+					let mut chain_info = None;
+					'outer:
+					for r in &relays.relays {
+						for rchain_info in r {
+							if rchain_info.chain_url.contains(&block.blockurl) {
+								// web_sys::console::log_1(&format!("{} contains {}", rchain_info.chain_url, block.blockurl).into());
+								chain_info = Some(rchain_info);
+								if !rchain_info.chain_url.is_relay() {
+									break 'outer;
+								}
+							}
 						}
-					});
+					}
 
-				add_blocks(
-					&chain_info,
-					block_num,
-					fun,
-					&mut commands,
-					&mut meshes,
-					&mut materials,
-					BuildDirection::Up,
-					&block.blockhash,
-					&links,
-					&mut polyline_materials,
-					&mut polylines,
-					&encoded,
-				);
+					let chain_info = chain_info.unwrap();
+											web_sys::console::log_1(&format!("got results on main rendere with chain info").into());
 
-				add_blocks(
-					&chain_info,
-					block_num,
-					boring,
-					&mut commands,
-					&mut meshes,
-					&mut materials,
-					BuildDirection::Down,
-					&block.blockhash,
-					&links,
-					&mut polyline_materials,
-					&mut polylines,
-					&encoded,
-				);
-				event.send(RequestRedraw);
-			},
-			DataUpdate::NewChain(chain_info) => {
-				CHAINS.fetch_add(1, Ordering::Relaxed);
-				draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
-			},
+					BLOCKS.fetch_add(1, Ordering::Relaxed);
 
+					// println!(
+					// 	"chains {} blocks {} txs {} events {}",
+					// 	CHAINS.load(Ordering::Relaxed),
+					// 	BLOCKS.load(Ordering::Relaxed),
+					// 	EXTRINSICS.load(Ordering::Relaxed),
+					// 	EVENTS.load(Ordering::Relaxed)
+					// );
+log!(
+							"block rend chain index {}",
+							chain_info.chain_index
+						);
+
+					// Skip data we no longer care about because the datasource has changed
+					let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+					if block.data_epoc != now_epoc {
+						log!(
+							"discarding out of date block made at {} but we are at {}",
+							block.data_epoc, now_epoc
+						);
+						return;
+					}
+
+					let mut base_time = *BASETIME.lock().unwrap();
+					if base_time == 0 {
+						base_time = block.timestamp.unwrap_or(0);
+						web_sys::console::log_1(&format!("BASETIME set to {}", base_time).into());
+						*BASETIME.lock().unwrap() = base_time;
+					}
+
+					// let block_num = if is_self_sovereign {
+					//     block.blockurl.block_number.unwrap() as u32
+					// } else {
+
+					//     if base_time == 0
+					//     if rcount == 0 {
+					//         if chain == 0 &&  {
+					//             //relay
+					//             RELAY_BLOCKS.store(
+					//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+					//                 Ordering::Relaxed,
+					//             );
+					//         }
+					//         RELAY_BLOCKS.load(Ordering::Relaxed)
+					//     } else {
+					//         if chain == 0 {
+					//             //relay
+					//             RELAY_BLOCKS2.store(
+					//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+					//                 Ordering::Relaxed,
+					//             );
+					//         }
+					//         RELAY_BLOCKS2.load(Ordering::Relaxed)
+					//     }
+					// };
+
+					let rflip = chain_info.chain_url.rflip();
+					let encoded: String =
+						url::form_urlencoded::Serializer::new(String::new())
+							.append_pair("rpc", &chain_info.chain_ws)
+							.finish();
+
+					let is_relay = chain_info.chain_url.is_relay();
+					let details = Details {
+						doturl: DotUrl {
+							extrinsic: None,
+							event: None,
+							..block.blockurl.clone()
+						},
+
+						url: format!(
+							"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+							&encoded,
+							hex::encode(block.blockhash)
+						),
+						..default()
+					};
+					// log!("rendering block from {}", details.doturl);
+
+					// println!("block.timestamp {:?}", block.timestamp);
+					// println!("base_time {:?}",base_time);
+					let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+
+					// Add the new block as a large square on the ground:
+					{
+						let timestamp_color = if chain_info.chain_url.is_relay() {
+							block.timestamp.unwrap()
+						} else {
+							block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
+						} / 400;
+
+						let transform = Transform::from_translation(Vec3::new(
+							0. + (block_num as f32),
+							if is_relay { 0. } else { LAYER_GAP },
+							(RELAY_CHAIN_CHASM_WIDTH +
+								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+								rflip,
+						));
+						// println!("block created at {:?} blocknum {}", transform,
+						// block_num);
+
+						let mut bun = commands.spawn_bundle(PbrBundle {
+							mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
+							material: materials.add(StandardMaterial {
+								base_color: style::color_block_number(
+									timestamp_color,
+									chain_info.chain_url.is_darkside(),
+								), // Color::rgba(0., 0., 0., 0.7),
+								alpha_mode: AlphaMode::Blend,
+								perceptual_roughness: 0.08,
+								unlit: if block.blockurl.is_darkside() {
+									true
+								} else {
+									false
+								},
+								..default()
+							}),
+							transform,
+							..Default::default()
+						});
+
+						bun.insert(ClearMe);
+						// bun.insert(Aabb::from_min_max(
+						//     Vec3::new(0., 0., 0.),
+						//     Vec3::new(1., 1., 1.),
+						// ));
+						
+						let chain_str = details.doturl.chain_str();
+
+						bun.insert(details)
+							.insert(Name::new("Block"))
+							.with_children(|parent| {
+								// let name = chain_info
+								// .chain_name
+								// .replace(" ", "-")
+								// .replace("-Testnet", "");
+
+								// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+								// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
+								#[cfg(target_arch="wasm32")]
+								let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
+								#[cfg(not(target_arch="wasm32"))]
+								let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
+								
+								let aspect = 1. / 3.;
+
+								// create a new quad mesh. this is what we will apply the
+								// texture to
+								let quad_width = BLOCK;
+								let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+									Vec2::new(quad_width, quad_width * aspect),
+								)));
+
+								// this material renders the texture normally
+								let material_handle = materials.add(StandardMaterial {
+									base_color_texture: Some(texture_handle.clone()),
+									alpha_mode: AlphaMode::Blend,
+									unlit: true, // !block_events.2.inserted_pic,
+									..default()
+								});
+
+								use std::f32::consts::PI;
+								// textured quad - normal
+								let rot =
+									Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+													// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
+													// / 2.0);
+								let transform = Transform {
+									translation: Vec3::new(
+										-7., // + (BLOCK_AND_SPACER * block_num as f32),
+										0.1, //1.5
+										0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
+									),
+									rotation: rot,
+									..default()
+								};
+
+								parent
+									.spawn_bundle(PbrBundle {
+										mesh: quad_handle.clone(),
+										material: material_handle.clone(),
+
+										transform,
+										..default()
+									})
+									.insert(Name::new("BillboardDown"))
+									.insert(ClearMe);
+								// by adding Details to the banners they are cleared down
+								// when we remove every entity with Details.
+
+								// create a new quad mesh. this is what we will apply the
+								// texture to
+								let quad_width = BLOCK;
+								let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
+									Vec2::new(quad_width, quad_width * aspect),
+								)));
+
+								// this material renders the texture normally
+								let material_handle = materials.add(StandardMaterial {
+									base_color_texture: Some(texture_handle.clone()),
+									alpha_mode: AlphaMode::Blend,
+									unlit: true,
+									..default()
+								});
+
+								// textured quad - normal
+								let rot =
+									Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+													// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
+													// / 2.0);
+								let transform = Transform {
+									translation: Vec3::new(
+										-7., // + (BLOCK_AND_SPACER * block_num as f32),
+										0.1, //1.5
+										0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
+									),
+									rotation: rot,
+									..default()
+								};
+
+								parent
+									.spawn_bundle(PbrBundle {
+										mesh: quad_handle.clone(),
+										material: material_handle.clone(),
+										transform,
+										..default()
+									})
+									.insert(Name::new("BillboardUp"))
+									.insert(ClearMe);
+								// .insert(Aabb::from_min_max(
+								//     Vec3::new(0., 0., 0.),
+								//     Vec3::new(1., 1., 1.),
+								// )); // TODO: should be able to add same component onto 3
+								// different entities maybe?
+
+								//block_events.2.inserted_pic = true;
+							})
+							.insert_bundle(PickableBundle::default());
+					}
+
+					let ext_with_events =
+						datasource::associate_events(block.extrinsics.clone(), block.events.clone());
+
+					// Leave infrastructure events underground and show user activity above
+					// ground.
+					let (boring, fun): (Vec<_>, Vec<_>) =
+						ext_with_events.into_iter().partition(|(e, _)| {
+							if let Some(ext) = e {
+								content::is_utility_extrinsic(ext)
+							} else {
+								true
+							}
+						});
+
+					add_blocks(
+						&chain_info,
+						block_num,
+						fun,
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						BuildDirection::Up,
+						&block.blockhash,
+						&links,
+						&mut polyline_materials,
+						&mut polylines,
+						&encoded,
+					);
+
+					add_blocks(
+						&chain_info,
+						block_num,
+						boring,
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						BuildDirection::Down,
+						&block.blockhash,
+						&links,
+						&mut polyline_materials,
+						&mut polylines,
+						&encoded,
+					);
+					event.send(RequestRedraw);
+				},
+				DataUpdate::NewChain(chain_info) => {
+					CHAINS.fetch_add(1, Ordering::Relaxed);
+					draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
+				},
+
+			}
 		}
 	}
-}
-		}
-	}
+// }
+// 		}
+// 	}
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
@@ -1917,7 +2015,7 @@ pub struct Viewport;
 #[cfg(target_arch = "wasm32")]
 pub mod html_body {
     use web_sys::HtmlElement;
-	use web_sys::Document;
+	// use web_sys::Document;
 
     pub fn get() -> HtmlElement {
         // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
@@ -1936,7 +2034,7 @@ pub mod html_body {
 }
 
 use bevy::input::mouse::MouseButtonInput;
-use bevy::prelude::*;
+// use bevy::prelude::*;
 
 
 // pub struct UiPlugin;
@@ -1970,7 +2068,7 @@ fn capture_mouse_on_click(
 
 
 // use crate::utils::html_body;
-use bevy::prelude::*;
+// use bevy::prelude::*;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::JsCast;
@@ -2045,31 +2143,109 @@ pub fn get_mouse_movement(wasm_mouse_tracker: Res<WasmMouseTracker>,
 
 
 #[cfg(target_arch="wasm32")]
-use gloo_worker::{HandlerId, Public, Worker, WorkerLink};
+use gloo_worker::{HandlerId, Worker};
 
 #[cfg(target_arch="wasm32")]
-pub struct Multiplier {
-    link: WorkerLink<Self>,
+pub struct IOWorker {}
+
+#[cfg(target_arch="wasm32")]
+impl IOWorker {
+	pub async fn async_update(_msg: <Self as Worker>::Message) {
+		log!("Got update");
+		async_std::task::sleep(Duration::from_secs(5)).await;
+		async_std::task::sleep(Duration::from_secs(5)).await;
+		log!("Finished waiting");
+	}
+
+	async fn send_it_too(blocks: Vec<datasource::DataUpdate>) {
+		// web_sys::console::log_1(&format!("got block. add to worker queue{}", blocks.len()).into());
+		
+		// Could move this earlier to when a block is produced by relay chain?
+		let mut base_time = *BASETIME.lock().unwrap();
+		if base_time == 0 {
+			if let datasource::DataUpdate::NewBlock(block) = &blocks[0] {
+				base_time = block.timestamp.unwrap_or(0);
+				web_sys::console::log_1(&format!("BASETIME set to {}", base_time).into());
+				*BASETIME.lock().unwrap() = base_time;
+			}
+		}			
+		
+		UPDATE_QUEUE.lock().unwrap().extend(blocks);
+		// web_sys::console::log_1(&format!("added to worker queue").into());
+	}
 }
 
+#[derive(Deserialize, Serialize)]
+pub enum BridgeMessage {
+	SetDatasource(Vec<Vec<ChainInfo>>, Option<DotUrl>, u32),//data epoc
+	GetNewBlocks,
+}
+
+use gloo_worker::WorkerScope;
+
 #[cfg(target_arch="wasm32")]
-impl Worker for Multiplier {
-    type Input = (u64, u64);
-    type Message = ();
-    type Output = ((u64, u64), u64);
-    type Reach = Public<Self>;
+impl Worker for IOWorker {
+    type Input = BridgeMessage;
+    type Message = Vec<()>;
+    type Output = Vec<datasource::DataUpdate>;
 
-    fn create(link: WorkerLink<Self>) -> Self {
-        Self { link }
+    fn create(_scope: &WorkerScope<Self>) -> Self {
+        Self {  }
     }
 
-    fn update(&mut self, _msg: Self::Message) {}
+    fn update(&mut self, _scope: &WorkerScope<Self>, msg: Self::Message) {
+		async_std::task::block_on(Self::async_update(msg));
+	}
 
-    fn handle_input(&mut self, msg: Self::Input, id: HandlerId) {
-        self.link.respond(id, (msg, msg.0 * msg.1));
+    fn received(&mut self, scope: &WorkerScope<Self>, msg: Self::Input, id: HandlerId) {
+		match msg {
+			BridgeMessage::SetDatasource(s, as_of, data_epoc) => {
+				DATASOURCE_EPOC.store(data_epoc, Ordering::Relaxed);
+				// web_sys::console::log_1(&format!("got input from bridge basetime {}", basetime).into());
+				//let link_clone : Arc<async_std::sync::Mutex<WorkerLink<Self>>> = scope.clone();
+				async_std::task::block_on(do_datasources(s, as_of, & Self::send_it_too));
+// 			async |_|{
+// 			web_sys::console::log_1(&format!("got block. send to bridge").into());
+// 			self.t();
+// //			scope.send_message(vec![]);
+// 		}
+				
+			},
+			BridgeMessage::GetNewBlocks => {
+				// let t = async move || {
+					let vec = &mut *UPDATE_QUEUE.lock().unwrap();
+					let mut results = vec![];
+					core::mem::swap(vec, &mut results);
+					scope.respond(id, results);
+				// };
+				// async_std::task::block_on(t());
+			}
+		}
+	
+	
+	// 	let chain_info = ChainInfo{
+	// 		chain_ws: String::from("kusama-rpc.polkadot.io"),
+	// // pub chain_id: Option<NonZeroU32>,
+	// // pub chain_drawn: bool,
+	// // Negative is other direction from center.
+	// 		chain_index: 1,
+	// 		chain_url: DotUrl{ sovereign:Some(1), env:Env::Prod, ..DotUrl::default() },
+	// 	};
+	// 	// let url = chain_name_to_url(&chain_info.chain_ws);
+	// 	// let source = datasource::RawDataSource::new(&url);
+	// 	let block_watcher = datasource::BlockWatcher{
+	// 				tx: None,
+	// 				chain_info ,
+	// 				as_of: None,
+	// 				receive_channel: None,
+	// 				sender: None,
+	// 			};
+
+	// 	async_std::task::block_on(block_watcher.watch_blocks());
+        // self.link.respond(id, (msg, 42));
     }
 
-    fn name_of_resource() -> &'static str {
-        "worker.js"
-    }
+    // fn name_of_resource() -> &'static str {
+    //     "worker.js"
+    // }
 }

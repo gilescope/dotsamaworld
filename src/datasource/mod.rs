@@ -1,10 +1,11 @@
 use self::raw_source::AgnosticBlock;
-
+use core::future::Future;
 // use super::polkadot;
 use crate::{
-	ui::DotUrl, ABlocks, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME,
+	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME,
 	DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
+use serde::{Deserialize, Serialize};
 use async_std::stream::StreamExt;
 // #[cfg(not(target_arch = "wasm32"))]
 // use async_tungstenite::tungstenite::util::NonBlockingResult;
@@ -59,7 +60,7 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
 	hasher.finish()
 }
 
-async fn get_desub_metadata<S: Source>(
+async fn get_metadata<S: Source>(
 	source: &mut S,
 	version: Option<(String, H256)>,
 ) -> Option<frame_metadata::RuntimeMetadataPrefixed> {
@@ -210,8 +211,11 @@ async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<
 
 pub type RelayBlockNumber = u32;
 
-pub struct BlockWatcher {
-	pub tx: Option<ABlocks>,
+pub struct BlockWatcher<F,R> 
+where F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+R: Future<Output=()>
+{
+	pub tx: Option<F>,
 	pub chain_info: ChainInfo,
 	pub as_of: Option<DotUrl>,
 	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
@@ -219,9 +223,11 @@ pub struct BlockWatcher {
 	// source: &mut S,
 }
 
-impl BlockWatcher 
+impl <F,R> BlockWatcher<F,R>
+where F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+R: Future<Output=()> + 'static
 {
-	pub async fn watch_blocks<S>(
+	pub async fn watch_blocks(
 			mut self,
 		// tx: ABlocks,
 		// chain_info: ChainInfo,
@@ -230,11 +236,13 @@ impl BlockWatcher
 		// sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 		
 	
-		mut source: S,
-	) -> Result<(), Box<dyn std::error::Error + Sync + Send>> 
-	where S: Source {
-
-		let tx: ABlocks = self.tx.take().unwrap();
+		// mut source: S,
+	) -> ()
+	//Result<(), Box<dyn std::error::Error + Sync + Send>> 
+	//where S: Source
+	 {
+		// log!("watching blocks {}", self.chain_info.chain_index);
+		let mut tx: F = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
 		let as_of: Option<DotUrl> = self.as_of.take();
 		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> = self.receive_channel.take().unwrap();
@@ -243,6 +251,13 @@ impl BlockWatcher
 		// log!("listening to as of {:?}", as_of);
 
 		let url = &chain_info.chain_ws;
+		#[cfg(not(target_arch="wasm32"))]
+		let mut source = CachedDataSource::new(
+			RawDataSource::new(url),
+		);
+		#[cfg(target_arch="wasm32")]
+		let mut source = RawDataSource::new(url);
+
 		let para_id = chain_info.chain_url.para_id.clone();
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
@@ -251,8 +266,8 @@ impl BlockWatcher
 		// Tell renderer to draw a new chain...
 		{
 			// log!("aquiring lock");
-			let mut handle = tx.lock().unwrap();
-			handle.push(DataUpdate::NewChain(chain_info.clone()));
+			//let mut handle = tx.lock().unwrap();
+			tx(vec![DataUpdate::NewChain(chain_info.clone())]).await;
 			// log!("got lock");
 		}
 
@@ -261,13 +276,13 @@ impl BlockWatcher
 			// if we are a parachain then we need the relay chain to tell us which numbers it is
 			// interested in
 			if para_id.is_some() {
-				log!("polling parachain {:?}", para_id);
+				// log!("polling parachain {:?}", para_id);
 				// Parachain (listening for relay blocks' para include candidate included events.)
 				while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
 					receive_channel.recv().await
 				{
 					let _ = process_extrinsics(
-						&tx,
+						&mut tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
@@ -277,7 +292,7 @@ impl BlockWatcher
 					)
 					.await;
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						return Ok(())
+						return ();//Ok(())
 					}
 					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
 						async_std::task::sleep(Duration::from_secs(2)).await;
@@ -294,12 +309,14 @@ impl BlockWatcher
 				if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
 					// if so, we have to wait till we know what the time is of that block to proceed.
 					// then we can figure out our nearest block based on that timestamp...
+					// log!("other waiting for set BASETIME");
 					while *BASETIME.lock().unwrap() == 0 {
 						async_std::task::sleep(Duration::from_millis(250)).await;
 					}
 
+					// log!("other chain set BASETIME");
 					// Timestamp is unlikely to change so we can use generic metadata
-					let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
+					let metad_current = get_metadata(&mut source, None).await.unwrap();
 					let basetime = *BASETIME.lock().unwrap();
 					// let mut time_for_blocknum = async move |blocknum: u32| {
 					// 	let mut block_hash: Option<primitive_types::H256> =
@@ -346,7 +363,7 @@ impl BlockWatcher
 							block_number, url
 						);
 						// TODO: timestamp probably incorrect
-						tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
+						tx(vec![DataUpdate::NewBlock(PolkaBlock {
 							data_epoc: our_data_epoc,
 							// Place it in the approximately right location...
 							timestamp: last_timestamp.map(|t| t + 12_000_000),
@@ -355,16 +372,16 @@ impl BlockWatcher
 								block_number: Some(block_number),
 								..chain_info.chain_url.clone()
 							},
-							blockhash: primitive_types::H256::default(),
+							blockhash: H256::default(),
 							extrinsics: vec![],
 							events: vec![],
-						}));
+						})]);
 
 						continue
 					}
 					let block_hash = block_hash.unwrap();
 					if let Ok(timestamp) = process_extrinsics(
-						&tx,
+						&mut tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
@@ -378,7 +395,7 @@ impl BlockWatcher
 					};
 					// check for stop signal
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						return Ok(())
+						return ();//Ok(())
 					}
 
 					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -395,7 +412,7 @@ impl BlockWatcher
 					// println!("subscribed!");
 					while let Some(Ok(block_hash)) = block_headers.next().await {
 						let _ = process_extrinsics(
-							&tx,
+							&mut tx,
 							chain_info.chain_url.clone(),
 							block_hash,
 							&mut source,
@@ -407,7 +424,7 @@ impl BlockWatcher
 						// check for stop signal
 						if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 							log!("epoc has changed, ending for {:?}.", as_of);
-							return Ok(())
+							return ();//Ok(())
 						}
 
 						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -419,20 +436,23 @@ impl BlockWatcher
 				reconnects += 1;
 			}
 		}
-		Ok(())
+		//Ok(())
 	}
 }
 
 // Returns the timestamp of the block decoded.
-async fn process_extrinsics<S: Source>(
-	tx: &ABlocks,
+async fn process_extrinsics<S: Source, F, R>(
+	tx: &F,
 	mut blockurl: DotUrl,
 	block_hash: H256,
 	source: &mut S,
 	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
-) -> Result<Option<i64>, ()> {
+) -> Result<Option<i64>, ()>
+where F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+R: Future<Output=()> + 'static
+{
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		let got_block_num = block.block_number;
@@ -443,10 +463,10 @@ async fn process_extrinsics<S: Source>(
 		let version = get_metadata_version(source, block_hash).await;
 
 		let metad = if let Some(version) = version {
-			get_desub_metadata(source, Some((version, block_hash))).await
+			get_metadata(source, Some((version, block_hash))).await
 		} else {
 			//TODO: This is unlikely to work. we should try the oldest metadata we have instead...
-			get_desub_metadata(source, None).await
+			get_metadata(source, None).await
 		};
 		if metad.is_none() {
 			//println!("skip")
@@ -507,7 +527,7 @@ async fn process_extrinsics<S: Source>(
 				.await
 				.or(Err(()))?;
 
-		let mut handle = tx.lock().unwrap();
+		//let mut handle = tx.lock().unwrap();
 
 		//Can't decode time https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fkhala-rpc.dwellir.com#/explorer/query/900909
 		//debug_assert!(timestamp.is_some(), "events found {:?}", extrinsics.len());
@@ -525,7 +545,7 @@ async fn process_extrinsics<S: Source>(
 		};
 
 		//FYI: blocks sometimes have no events in them.
-		handle.push(DataUpdate::NewBlock(current));
+		tx(vec![DataUpdate::NewBlock(current)]).await;
 	}
 	Ok(timestamp)
 }
@@ -961,8 +981,8 @@ async fn process_extrisic<'a, 'scale>(
 	};
 
 	// log!("found {pallet} / {variant}");
-	let mut start_link: Vec<(String, LinkType)> = vec![];
-	let mut end_link: Vec<(String, LinkType)> = vec![];
+	let start_link: Vec<(String, LinkType)> = vec![];
+	let end_link: Vec<(String, LinkType)> = vec![];
 
 	// let mut args: Vec<_> = ext
 	// 	.call_data
@@ -1207,12 +1227,15 @@ async fn check_reserve_asset<'a, 'b>(
 	// }
 }
 
+#[derive(Deserialize, Serialize)]
 pub enum DataUpdate {
 	NewBlock(PolkaBlock),
 	// Chain info and chain name.
 	NewChain(ChainInfo),
 }
 
+
+#[derive(Deserialize, Serialize)]
 pub struct PolkaBlock {
 	pub data_epoc: u32,
 	pub timestamp: Option<i64>,
@@ -1244,7 +1267,7 @@ async fn get_events_for_block(
 	// 	.decode_key(&metad, &mut storage_key.as_slice())
 	// 	.expect("can decode storage");
 
-	let bytes = source.fetch_storage(&storage_key[..], Some(blockhash)).await.map_err(|_| "oops num 332")?;
+	let bytes = source.fetch_storage(&storage_key[..], Some(H256::from(blockhash))).await.map_err(|_| "oops num 332")?;
 
 	if let Some(events_raw) = bytes {
 		if let Ok(events) =  polkadyn::decode_events(metad, &events_raw[..])
@@ -1492,7 +1515,7 @@ mod tests {
 	#[test]
 	fn decode_events() {
 		let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-		let metad = async_std::task::block_on(get_desub_metadata(
+		let metad = async_std::task::block_on(get_metadata(
 			"wss://statemint-rpc.polkadot.io:443",
 			&mut source,
 			None,
@@ -1527,7 +1550,7 @@ mod tests {
 	// #[test]
 	// fn decode_events_polkadot_10_000_001() {
 	//     let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-	//     let metad = async_std::task::block_on(get_desub_metadata(
+	//     let metad = async_std::task::block_on(get_metadata(
 	//         "wss://rpc.polkadot.io:443",
 	//         &mut source,
 	//         None,
@@ -1564,7 +1587,7 @@ mod tests {
 	#[test]
 	fn decode_events_kusama_10_000_000() {
 		let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-		let metad = async_std::task::block_on(get_desub_metadata(
+		let metad = async_std::task::block_on(get_metadata(
 			"wss://kusama-rpc.polkadot.io:443",
 			&mut source,
 			None,
@@ -1625,7 +1648,7 @@ mod tests {
 
 		let block = block_on(get_extrinsics(&mut source, blockhash)).unwrap().unwrap();
 
-		let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
+		let metad = block_on(get_metadata(&url, &mut source, None)).unwrap();
 		if let Ok(extrinsic) =
 			decoder::decode_unwrapped_extrinsic(&metad, &mut block.extrinsics[0].as_slice())
 		{

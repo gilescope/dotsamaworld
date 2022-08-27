@@ -1,8 +1,9 @@
 use std::fmt::write;
 use core::num::NonZeroU32;
+use serde::{Serialize, Deserialize};
 
 #[allow(dead_code)]
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Env {
 	// Local,
 	// Test,

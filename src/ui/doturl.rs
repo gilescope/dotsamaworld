@@ -1,7 +1,8 @@
 use crate::Env;
 use std::num::NonZeroU32;
+use serde::{Serialize, Deserialize};
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] //TODO use scale
 pub struct DotUrl {
 	pub env: Env,
 	// 0 is the no mans land in the middle
@@ -13,6 +14,29 @@ pub struct DotUrl {
 }
 
 impl DotUrl {
+	// Is a block in this parachain etc.
+	pub fn contains(&self, other: &Self) -> bool {
+		if let (Some(sov), Some(other_sov)) = (self.sovereign, other.sovereign) {
+			if sov == other_sov {
+				if self.para_id.is_none() { return true; }
+				if let (Some(para_id), Some(other_para_id)) = (self.para_id, other.para_id) {
+					if para_id == other_para_id {
+						if self.block_number.is_none() { return true; }
+						if let (Some(block_number), Some(other_block_number)) = (self.block_number, other.block_number) {
+							if block_number == other_block_number {
+								if self.extrinsic.is_none() { return true; }
+								if let (Some(extrinsic), Some(other_extrinsic)) = (self.extrinsic, other.extrinsic) {
+									return extrinsic == other_extrinsic;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		false
+	}
+
 	pub fn parse(url: &str) -> Result<Self, ()> {
 		let (protocol, rest) = url.split_once(':').ok_or(())?;
 		let mut result = DotUrl::default();
@@ -99,7 +123,7 @@ impl std::fmt::Display for DotUrl {
 		};
 
 		f.write_fmt(format_args!(
-			"{}:",
+			"{}:/",
 			protocol,
 			// self.sovereign.map(|s| s.to_string()).unwrap_or("".to_string()),
 			// self.para_id.map(|s| s.to_string()).unwrap_or("".to_string()),

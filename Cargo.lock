@@ -1892,7 +1892,7 @@ dependencies = [
  "futures",
  "getrandom 0.2.7",
  "gloo",
- "gloo-worker 0.1.2",
+ "gloo-worker",
  "hex",
  "image 0.24.2",
  "lazy_static",
@@ -1914,6 +1914,7 @@ dependencies = [
  "tikv-jemallocator",
  "url",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
  "winit",
  "ws_stream_wasm",
@@ -2472,7 +2473,7 @@ dependencies = [
  "gloo-storage",
  "gloo-timers",
  "gloo-utils",
- "gloo-worker 0.2.0",
+ "gloo-worker",
 ]
 
 [[package]]
@@ -2605,26 +2606,9 @@ dependencies = [
 
 [[package]]
 name = "gloo-worker"
-version = "0.1.2"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09110b5555bcafe508cee0fb94308af9aac7a85f980d3c88b270d117c6c6911d"
-dependencies = [
- "anymap2",
- "bincode",
- "gloo-console",
- "gloo-utils",
- "js-sys",
- "serde",
- "slab",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
-name = "gloo-worker"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9caac1b89bbe1e1454bb23e4d046a3fc92438ae2e95fb429c41685789e1fcbaa"
+checksum = "13471584da78061a28306d1359dd0178d8d6fc1c7c80e5e35d27260346e0516a"
 dependencies = [
  "anymap2",
  "bincode",
@@ -3030,6 +3014,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
 dependencies = [
  "parity-scale-codec",
+]
+
+[[package]]
+name = "impl-serde"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4551f042f3438e64dbd6226b20527fc84a6e1fe65688b58746a2f53623f25f5c"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -4007,6 +4000,7 @@ checksum = "e28720988bff275df1f51b171e1b2a18c30d194c4d2b61defdacecd625a5d94a"
 dependencies = [
  "fixed-hash",
  "impl-codec",
+ "impl-serde",
  "uint",
 ]
 
