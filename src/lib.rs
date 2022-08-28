@@ -379,8 +379,9 @@ fn chain_name_to_url(chain_name: &str) -> String {
 // struct SourceDataTask(bevy_tasks::FakeTask);
 
 #[cfg(not(target_arch="wasm32"))]
-async fn send_it_too_desktop(_blocks: Vec<datasource::DataUpdate>) {
-	log!("Got some results....! yay they're already in the right place.");
+async fn send_it_too_desktop(blocks: Vec<datasource::DataUpdate>) {
+	// log!("Got some results....! yay they're already in the right place. {}", blocks.len());
+	UPDATE_QUEUE.lock().unwrap().extend(blocks);
 }
 
 #[cfg(not(target_arch="wasm32"))]
@@ -512,23 +513,10 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 			sovereigns.relays.push(sov_relay);
 		}
 
-		// #[cfg(not(target_arch="wasm32"))]
-		// // let t = async move |_| {
-		// // 	log!("Got some results....! yay they're already in the right place.");
-		// // 	// UPDATE_QUEUE.lock().unwrap().extend(result);
-		// // };
-		// async fn send_it_too_desktop(blocks: Vec<datasource::DataUpdate>) {
-		// 	log!("Got some results....! yay they're already in the right place.");
-		// }
+
 
 		#[cfg(not(target_arch="wasm32"))]
-		let thread_pool = AsyncComputeTaskPool::get();
-
-		#[cfg(not(target_arch="wasm32"))]
-		let data_source_task = thread_pool.spawn_local(
-			do_datasources(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of, &send_it_too_desktop));
-		#[cfg(not(target_arch="wasm32"))]
-		data_source_task.detach();
+		do_datasources(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of);
 
 		#[cfg(target_arch="wasm32")]
 		let t = async move || {
@@ -540,9 +528,6 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 			let bridge : WorkerBridge<IOWorker>
 			= IOWorker::spawner().callback(|result| {
 				UPDATE_QUEUE.lock().unwrap().extend(result);
-				// let args : Vec<_> = std::env::args().collect();
-				// web_sys::console::log_1(&format!("from process {}", args[0]).into());
-				// web_sys::console::log_1(&format!("got results on main thread?????").into());
 			}).spawn("./worker.js");
 		
 			#[cfg(target_arch="wasm32")]
@@ -562,6 +547,54 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 	}
 }
 use core::future::Future;
+
+#[cfg(not(target_arch="wasm32"))]
+fn do_datasources(relays: Vec<Vec<ChainInfo>>,
+	as_of: Option<DotUrl>,
+)
+{
+	for relay in relays.into_iter() {
+		let mut relay2: Vec<(ChainInfo, _)> = vec![];
+		let mut send_map: HashMap<
+			NonZeroU32,
+			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
+		> = Default::default();
+		for chain in relay.into_iter() {
+			let (tx, rc) = async_std::channel::unbounded();
+			if let Some(para_id) = chain.chain_url.para_id {
+				send_map.insert(para_id, tx);
+			}
+			relay2.push((chain, rc));
+		}
+
+		let mut send_map = Some(send_map);
+		for (chain, rc) in relay2 {
+			// log!("listening to {}", chain.info.chain_ws);
+
+			let maybe_sender =
+				if chain.chain_url.is_relay() { send_map.take() } else { None };
+
+			let as_of = as_of.clone();
+			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
+			let chain_info = chain.clone();
+
+			let block_watcher = datasource::BlockWatcher{
+				tx: Some(send_it_too_desktop),
+				chain_info,
+				as_of,
+				receive_channel: Some(rc),
+				sender: maybe_sender,
+			};
+
+			std::thread::spawn( //thread_pool.spawn_local
+			move || { 
+				async_std::task::block_on(block_watcher.watch_blocks());
+			});
+		}
+	}
+}
+
+#[cfg(target_arch="wasm32")]
 async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 	as_of: Option<DotUrl>,
 	callback: &'static F
@@ -570,10 +603,6 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 		F: (Fn(Vec<datasource::DataUpdate>) -> R) + Send + Sync + 'static,
 		R: Future<Output=()> + 'static
 {
-	// #[cfg(not(feature="wasm32"))]
-	// AsyncComputeTaskPool::init();
-	// let callback = callback;
-
 	for relay in relays.into_iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
@@ -617,67 +646,7 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 
 			#[cfg(not(target_arch="wasm32"))]
 			block_watcher.watch_blocks().await;
-			
-
-			// use crate::datasource::Source;
-
-			//let mut cloned = source.clone();
-			//#[cfg(target_arch="wasm32")]
-			// let data_source_task2 = thread_pool.spawn_local(async move {
-			// 	log!("spawned local task run");
-			// 	let to_poll = cloned.process_incoming_messages();
-			// });
-			//let poll_source = PollSource(Arc::new(Mutex::new(None)));
-			//let clone = poll_source.0.clone();
-			// let data_source_task3 = thread_pool.spawn_local((async move || 
-			// 	{
-			// 		let backend = cloned.process_incoming_messages().await;
-			// 		// We can't really return things in wasm tasks so return via mutex.
-			// 		*clone.lock().unwrap() = Some(backend);
-			// 	}
-			// )());
-			// sources.push(poll_source);
-			// data_source_task3.detach();
-
-			// #[cfg(target_arch="wasm32")]
-			// data_source_task2.detach();
-
-			// 	sync move || {
-			// 	// let mut reconnects = 0;
-
-			// 	// while reconnects < 20 {
-			// 	println!("Connecting to {} as of {:?}", &url_clone, as_of);
-			// 	let _res = datasource::watch_blocks(
-			// 		lock_clone.clone(),
-			// 		chain_info,
-			// 		as_of,
-			// 		rc,
-			// 		maybe_sender,
-			// 		source,
-			// 	).await;
-
-			// 	// if res.is_ok() { break; }
-			// 	// println!(
-			// 	//     "Problem with {} blocks (retries left {})",
-			// 	//     &url_clone, reconnects
-			// 	// );
-			// 	// std::thread::sleep(std::time::Duration::from_secs(20));
-			// 	// reconnects += 1;
-			// 	// }
-			// 	// println!("finished listening to {} {:?}", url_clone, my_writer);
-			// }
-
-			// We do this to signal that they are long running tasks.
-			// (essential for wasm32 as a FakeTask is returned)
-			
-
-			// #[cfg(not(target_arch="wasm32"))]
-			// commands.spawn().insert(SourceDataTask(data_source_task));
-			// commands.spawn().insert(SourceDataTask(data_source_task));
-			
-			//sov_relay.push(chain);
 		}
-		//sovereigns.relays.push(sov_relay);
 	}
 }
 
