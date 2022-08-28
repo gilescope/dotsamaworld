@@ -1,6 +1,6 @@
-use std::fmt::write;
 use core::num::NonZeroU32;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::fmt::write;
 
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -34,19 +34,18 @@ impl std::fmt::Display for Env {
 impl Env {
 	pub fn is_self_sovereign(&self) -> bool {
 		false
-//		matches!(self, Env::SelfSovereign | Env::SelfSovereignTest)
+		//		matches!(self, Env::SelfSovereign | Env::SelfSovereignTest)
 	}
 }
 
 macro_rules! para_id {
 	($lit:literal) => {
 		Some(NonZeroU32::try_from($lit).unwrap())
-	}
+	};
 }
 
 /// Return the network(s) to visulise
 pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static str)>> {
-
 	match selected_env {
 		// Env::Test => {
 		// 	vec![
@@ -60,34 +59,35 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 		// 			"westend.kilt.io:9977",
 		// 		],
 		// 		vec![
-        //             "rococo-rpc.polkadot.io",
-        //             "rococo-statemint-rpc.polkadot.io",
-        //             "rococo-canvas-rpc.polkadot.io",
-        //             "rococo.api.encointer.org",
-        //             "rpc-rococo.bajun.network",
-        //             "rococobitgreen.abhath-labs.com",
-        //             "rpc-01.basilisk-rococo.hydradx.io",
-        //             "fullnode.catalyst.cntrfg.com",
-        //             "anjie.rococo.dolphin.engineering",
-        //             "rpc.composablefinance.ninja",
-        //             "rpc.rococo.efinity.io",
-        //             "rococo.api.integritee.network",
-        //             "rpc.rococo-parachain-sg.litentry.io",
-        //             "moonsama-testnet-rpc.moonsama.com",
-        //             "wss://parachain-testnet.equilab.io:443/rococo/collator/node1/wss",
-        //             "node-6913072722034561024.lh.onfinality.io:443/ws?apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
-        //             "pangolin-parachain-rpc.darwinia.network",
-        //             "rococo.kilt.io",
-        //             "dev.net.t3rn.io",
-        //             "rococo.rpc.robonomics.network",
-        //             "rco-para.subsocial.network",
-        //             "wss://invarch-tinkernet.api.onfinality.io:443/public-ws",
-        //             "spreehafen.datahighway.com",
-        //             "testnet.creditcoin.network"
-        //             // "ws://127.0.0.1:9944",
-        //             // "ws://127.0.0.1:9966",
-        //             // "ws://127.0.0.1:9920",       
-        //         ],
+		//             "rococo-rpc.polkadot.io",
+		//             "rococo-statemint-rpc.polkadot.io",
+		//             "rococo-canvas-rpc.polkadot.io",
+		//             "rococo.api.encointer.org",
+		//             "rpc-rococo.bajun.network",
+		//             "rococobitgreen.abhath-labs.com",
+		//             "rpc-01.basilisk-rococo.hydradx.io",
+		//             "fullnode.catalyst.cntrfg.com",
+		//             "anjie.rococo.dolphin.engineering",
+		//             "rpc.composablefinance.ninja",
+		//             "rpc.rococo.efinity.io",
+		//             "rococo.api.integritee.network",
+		//             "rpc.rococo-parachain-sg.litentry.io",
+		//             "moonsama-testnet-rpc.moonsama.com",
+		//             "wss://parachain-testnet.equilab.io:443/rococo/collator/node1/wss",
+		//
+		// "node-6913072722034561024.lh.onfinality.io:443/ws?
+		// apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
+		// "pangolin-parachain-rpc.darwinia.network",             "rococo.kilt.io",
+		//             "dev.net.t3rn.io",
+		//             "rococo.rpc.robonomics.network",
+		//             "rco-para.subsocial.network",
+		//             "wss://invarch-tinkernet.api.onfinality.io:443/public-ws",
+		//             "spreehafen.datahighway.com",
+		//             "testnet.creditcoin.network"
+		//             // "ws://127.0.0.1:9944",
+		//             // "ws://127.0.0.1:9966",
+		//             // "ws://127.0.0.1:9920",
+		//         ],
 		// 	]
 		// },
 		Env::Prod => {
@@ -102,11 +102,11 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 					// (para_id!(1001), "kusama.api.encointer.org"),
 					// //
 					// // Auction Batch 1
-					(para_id!(2000), "karura-rpc-0.aca-api.network"),             // 1st
+					(para_id!(2000), "karura-rpc-0.aca-api.network"), // 1st
 					(para_id!(2023), "wss.api.moonriver.moonbeam.network"), // 2nd.
-					(para_id!(2007), "rpc.shiden.astar.network"),             // 3rd
-					(para_id!(2004), "khala-api.phala.network/ws"),              // 4th
-					(para_id!(2001), "hk.p.bifrost-rpc.liebi.com/ws"),            // 5th
+					(para_id!(2007), "rpc.shiden.astar.network"),     // 3rd
+					(para_id!(2004), "khala-api.phala.network/ws"),   // 4th
+					(para_id!(2001), "hk.p.bifrost-rpc.liebi.com/ws"), // 5th
 					// //
 					// // Auction Batch 2
 					(para_id!(2086), "kilt-rpc.dwellir.com"),          // 6th
@@ -126,13 +126,13 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 					(para_id!(2100), "para.subsocial.network"),    // 16th
 					(para_id!(2101), "zeitgeist-rpc.dwellir.com"), // 17th
 					//Sakura 18th
-					(para_id!(2012), "rpc-shadow.crust.network"),      // 19th
+					(para_id!(2012), "rpc-shadow.crust.network"), // 19th
 					(para_id!(2048), "kusama.rpc.robonomics.network"), // 20th
 					// //
 					// // Auction Batch 5
-					(para_id!(2015), "kusama.api.integritee.network"),       // 21st
+					(para_id!(2015), "kusama.api.integritee.network"), // 21st
 					(para_id!(2105), "crab-parachain-rpc.darwinia.network"), // 22nd
-					(para_id!(2106), "rpc.litmus-parachain.litentry.io"),    // 23rd
+					(para_id!(2106), "rpc.litmus-parachain.litentry.io"), // 23rd
 					//"ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
 					(para_id!(2107), "rpc.api.kico.dico.io"), // 25th
 					// //
@@ -142,15 +142,15 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 					// // 28th renewal     double click faster, yaw and pitch
 					// // 29th renewal
 					(para_id!(2114), "rpc.turing.oak.tech"), /* 30th
-											// * Auction Batch 7
-											// * "kusama.kylin-node.co.uk", 31st not online yet
-											// * 32nd renewal
-											// * Dora Factory (not yet online) 33rd
-											// * 34nd renewal
-											// * 35nd renewal */
+															  // * Auction Batch 7
+															  // * "kusama.kylin-node.co.uk", 31st not online yet
+															  // * 32nd renewal
+															  // * Dora Factory (not yet online) 33rd
+															  // * 34nd renewal
+															  // * 35nd renewal */
 
-										   /* Auction Batch 8
-											* Listen (not online yet) 36th */
+															 /* Auction Batch 8
+															  * Listen (not online yet) 36th */
 				],
 				vec![
 					// TODO: how can we dynamically discover

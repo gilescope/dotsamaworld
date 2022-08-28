@@ -6,8 +6,8 @@
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
 use crate::ui::UrlBar;
-use serde::{Serialize, Deserialize};
 use bevy::{ecs as bevy_ecs, prelude::*};
+use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiPlugin;
@@ -20,7 +20,7 @@ use bevy_mod_picking::*;
 //use bevy::window::PresentMode;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use crate::movement::Destination;
@@ -38,11 +38,9 @@ use std::{
 	},
 };
 
-#[cfg(not(target_arch="wasm32"))]
-use bevy::{
-    tasks::{AsyncComputeTaskPool},
-};
-#[cfg(feature="atmosphere")]
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::tasks::AsyncComputeTaskPool;
+#[cfg(feature = "atmosphere")]
 use bevy_atmosphere::prelude::*;
 // use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
@@ -70,10 +68,10 @@ use std::convert::AsRef;
 pub mod recorder;
 
 /// Pick a faster allocator.
-#[cfg(all(not(target_env = "msvc"), not(target_arch="wasm32")))]
+#[cfg(all(not(target_env = "msvc"), not(target_arch = "wasm32")))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(all(not(target_env = "msvc"), not(target_arch="wasm32")))]
+#[cfg(all(not(target_env = "msvc"), not(target_arch = "wasm32")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
@@ -92,7 +90,7 @@ impl Default for MovementSettings {
 
 /// Distance vertically between layer 0 and layer 1
 const LAYER_GAP: f32 = 10.;
-use  lazy_static::lazy_static;
+use lazy_static::lazy_static;
 
 // The time by which all times should be placed relative to each other on the x axis.
 lazy_static! { // This line needs rust 1.63+: and then some
@@ -112,7 +110,7 @@ static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 static LIVE: &str = "dotsama:live";
 
 /// Immutable once set up.
-#[derive(Clone, Serialize, Deserialize)]//TODO use scale
+#[derive(Clone, Serialize, Deserialize)] //TODO use scale
 pub struct ChainInfo {
 	// pub chain_name: String,
 	pub chain_ws: String,
@@ -151,34 +149,33 @@ pub struct HiFi;
 #[derive(Component)]
 pub struct MedFi;
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 extern "C" {
-    // Use `js_namespace` here to bind `console.log(..)` instead of just
-    // `log(..)`
-    #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
+	// Use `js_namespace` here to bind `console.log(..)` instead of just
+	// `log(..)`
+	#[wasm_bindgen::prelude::wasm_bindgen(js_namespace = console)]
+	fn log(s: &str);
 
-    // The `console.log` is quite polymorphic, so we can bind it with multiple
-    // signatures. Note that we need to use `js_name` to ensure we always call
-    // `log` in JS.
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_u32(a: u32);
+	// The `console.log` is quite polymorphic, so we can bind it with multiple
+	// signatures. Note that we need to use `js_name` to ensure we always call
+	// `log` in JS.
+	#[wasm_bindgen(js_namespace = console, js_name = log)]
+	fn log_u32(a: u32);
 
-    // Multiple arguments too!
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_many(a: &str, b: &str);
+	// Multiple arguments too!
+	#[wasm_bindgen(js_namespace = console, js_name = log)]
+	fn log_many(a: &str, b: &str);
 }
 
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 fn log(s: &str) {
 	println!("{}", s);
 }
 
 pub fn main() -> () {
 	let res = async_std::task::block_on(async_main());
-	#[cfg(not(target_arch="wasm32"))]
+	#[cfg(not(target_arch = "wasm32"))]
 	res.unwrap();
 }
 
@@ -190,34 +187,33 @@ macro_rules! log {
 
 async fn async_main() -> color_eyre::eyre::Result<()> {
 	// color_eyre::install()?;
-//   console_log!("Hello {}!", "world");
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
+	//   console_log!("Hello {}!", "world");
+	#[cfg(target_arch = "wasm32")]
+	console_error_panic_hook::set_once();
 	// let error = console_log::init_with_level(Level::Warn);
 	//.expect("Failed to enable logging");
 	//use log::{error, info, Level};
 
 	// App assumes the target dir exists
-	#[cfg(not(feature="wasm32"))]
+	#[cfg(not(feature = "wasm32"))]
 	let _ = std::fs::create_dir_all("target");
 
 	let low_power_mode = false;
 
- 	#[cfg(target_feature = "atomics")]
+	#[cfg(target_feature = "atomics")]
 	log!("Yay atomics!");
-
 
 	let mut app = App::new();
 	// app
 	app.insert_resource(Msaa { samples: 4 });
-	
-	// The web asset plugin must be inserted before the `AssetPlugin` so
-    // that the asset plugin doesn't create another instance of an asset
-    // server. In general, the AssetPlugin should still run so that other
-    // aspects of the asset system are initialized correctly.
-    //app.add_plugin(bevy_web_asset::WebAssetPlugin);
 
-	#[cfg(target_arch="wasm32")]
+	// The web asset plugin must be inserted before the `AssetPlugin` so
+	// that the asset plugin doesn't create another instance of an asset
+	// server. In general, the AssetPlugin should still run so that other
+	// aspects of the asset system are initialized correctly.
+	//app.add_plugin(bevy_web_asset::WebAssetPlugin);
+
+	#[cfg(target_arch = "wasm32")]
 	app.add_plugins_with(DefaultPlugins, |group| {
 		// The web asset plugin must be inserted in-between the
 		// `CorePlugin' and `AssetPlugin`. It needs to be after the
@@ -228,10 +224,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		// asset system are initialized correctly.
 		group.add_before::<bevy::asset::AssetPlugin, _>(bevy_web_asset::WebAssetPlugin)
 	});
-	#[cfg(not(target_arch="wasm32"))]
+	#[cfg(not(target_arch = "wasm32"))]
 	app.add_plugins(DefaultPlugins);
 
-	
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
 	app.add_event::<DataSourceStreamEvent>();
@@ -283,21 +278,21 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(PickingPlugin)
 		// .insert_resource(camera_rig)
 		.insert_resource(movement::Destination::default());
-		app.add_system(ui::ui_bars_system);
-		// .add_plugin(recorder::RecorderPlugin)
-		// .add_system(movement::rig_system)
-		app.add_plugin(InteractablePickingPlugin);
-		// .add_plugin(HighlightablePickingPlugin);
-		// .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
-		// .add_plugin(InspectorPlugin::<Inspector>::new())
-		// .register_inspectable::<Details>()
-		// .add_plugin(DebugEventsPickingPlugin)
-		app.add_plugin(PolylinePlugin);
-		app.add_plugin(EguiPlugin);
-		app.insert_resource(ui::OccupiedScreenSpace::default());
-		app.add_system(movement::scroll);
+	app.add_system(ui::ui_bars_system);
+	// .add_plugin(recorder::RecorderPlugin)
+	// .add_system(movement::rig_system)
+	app.add_plugin(InteractablePickingPlugin);
+	// .add_plugin(HighlightablePickingPlugin);
+	// .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
+	// .add_plugin(InspectorPlugin::<Inspector>::new())
+	// .register_inspectable::<Details>()
+	// .add_plugin(DebugEventsPickingPlugin)
+	app.add_plugin(PolylinePlugin);
+	app.add_plugin(EguiPlugin);
+	app.insert_resource(ui::OccupiedScreenSpace::default());
+	app.add_system(movement::scroll);
 
-		app.add_startup_system(setup);
+	app.add_startup_system(setup);
 	#[cfg(feature = "spacemouse")]
 	app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
 		scale.rotate_scale = 0.00010;
@@ -306,37 +301,33 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_system(movement::player_move_arrows)
 		.add_system(rain)
 		.add_system(source_data);
-		// // .add_system(pad_system)
-		// // .add_plugin(LogDiagnosticsPlugin::default())
-		app.add_plugin(FrameTimeDiagnosticsPlugin::default());
-		// // .add_system(ui::update_camera_transform_system)
-		app.add_system(right_click_system);
-		app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
-   		app.add_startup_system(ui::details::configure_visuals);
+	// // .add_system(pad_system)
+	// // .add_plugin(LogDiagnosticsPlugin::default())
+	app.add_plugin(FrameTimeDiagnosticsPlugin::default());
+	// // .add_system(ui::update_camera_transform_system)
+	app.add_system(right_click_system);
+	app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
+	app.add_startup_system(ui::details::configure_visuals);
 
+	#[cfg(feature = "atmosphere")]
+	app.insert_resource(Atmosphere::default()); // Default Earth sky
 
-		#[cfg(feature="atmosphere")]
-		app.insert_resource(Atmosphere::default()); // Default Earth sky
-		
-		#[cfg(feature="atmosphere")]
-		app.add_plugin(AtmospherePlugin::default());
-		//  {
-		// 	// dynamic: false, // Set to false since we aren't changing the sky's appearance
-		// 	sky_radius: 1000.0,
-		// }
-	
-		// app.add_system(capture_mouse_on_click);
-		//  app.add_system(get_mouse_movement )
-        //     .init_resource::<WasmMouseTracker>();
+	#[cfg(feature = "atmosphere")]
+	app.add_plugin(AtmospherePlugin::default());
+	//  {
+	// 	// dynamic: false, // Set to false since we aren't changing the sky's appearance
+	// 	sky_radius: 1000.0,
+	// }
 
+	// app.add_system(capture_mouse_on_click);
+	//  app.add_system(get_mouse_movement )
+	//     .init_resource::<WasmMouseTracker>();
 
-		app.add_system(render_block);
-		app.add_system_to_stage(CoreStage::PostUpdate, print_events);
+	app.add_system(render_block);
+	app.add_system_to_stage(CoreStage::PostUpdate, print_events);
 
-		// #[cfg(target_arch = "wasm32")]
-		// html_body::get().request_pointer_lock();
-
- 	
+	// #[cfg(target_arch = "wasm32")]
+	// html_body::get().request_pointer_lock();
 
 	app.run();
 
@@ -378,25 +369,26 @@ fn chain_name_to_url(chain_name: &str) -> String {
 // #[derive(Component)]
 // struct SourceDataTask(bevy_tasks::FakeTask);
 
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 async fn send_it_too_desktop(blocks: Vec<datasource::DataUpdate>) {
 	// log!("Got some results....! yay they're already in the right place. {}", blocks.len());
 	UPDATE_QUEUE.lock().unwrap().extend(blocks);
 }
 
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Component)]
-struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
-
+struct SourceDataTask(
+	bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>,
+);
 
 fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) -> () //+ Send + Sync + 'static
 {
 	log!("got a block!!!");
 }
 
-fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
+fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
-	mut commands: Commands<'c,'d>,
+	mut commands: Commands<'c, 'd>,
 	mut sovereigns: ResMut<'e, Sovereigns>,
 	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
@@ -436,13 +428,13 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 		// }
 
 		log!("event source {}", event.source);
-		#[cfg(target_arch="wasm32")]
+		#[cfg(target_arch = "wasm32")]
 		const HIST_SPEED: f32 = 0.05;
-		#[cfg(not(target_arch="wasm32"))]
+		#[cfg(not(target_arch = "wasm32"))]
 		const HIST_SPEED: f32 = 0.7;
 		log!("is live {}", is_live);
 		sovereigns.default_track_speed = if is_live { 0.1 } else { HIST_SPEED };
-		
+
 		log!("tracking speed set to {}", sovereigns.default_track_speed);
 		let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 			(DotUrl::default(), None)
@@ -455,34 +447,38 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 		//let as_of = Some(dot_url.clone());
 		log!("Block number selected for relay chains: {:?}", &as_of);
 
-
 		let networks = networks::get_network(&selected_env);
 
 		// let is_self_sovereign = selected_env.is_self_sovereign();
 		let relays = networks
 			.into_iter()
 			.enumerate()
-			.map(|(relay_index, relay)| {				
+			.map(|(relay_index, relay)| {
 				let relay_url = DotUrl {
 					sovereign: Some(if relay_index == 0 { -1 } else { 1 }),
 					block_number: None,
 					..dot_url.clone()
 				};
 				//relay.as_slice().par_iter().
-				relay.as_slice().iter().enumerate().filter_map( |(chain_index, (para_id, chain_name))| {
-					let url = chain_name_to_url(&chain_name);
-					
-					// #[cfg(not(target_arch="wasm32"))]
-					// let para_id = async_std::task::block_on(datasource::get_parachain_id_from_url(&mut source));
-					// #[cfg(target_arch="wasm32")]
-					// let para_id:  Result<Option<NonZeroU32>, polkapipe::Error> = if datasource::is_relay_chain(&url) { Ok(None) } else {Ok(Some(NonZeroU32::try_from(7777u32).unwrap()))};
-					// if para_id.is_err() {
-					// 	return None;
-					// }
-					//let para_id = para_id.unwrap();
+				relay
+					.as_slice()
+					.iter()
+					.enumerate()
+					.filter_map(|(chain_index, (para_id, chain_name))| {
+						let url = chain_name_to_url(&chain_name);
 
-					Some(
-						Chain {
+						// #[cfg(not(target_arch="wasm32"))]
+						// let para_id =
+						// async_std::task::block_on(datasource::get_parachain_id_from_url(&mut
+						// source)); #[cfg(target_arch="wasm32")]
+						// let para_id:  Result<Option<NonZeroU32>, polkapipe::Error> = if
+						// datasource::is_relay_chain(&url) { Ok(None) } else
+						// {Ok(Some(NonZeroU32::try_from(7777u32).unwrap()))}; if para_id.is_err() {
+						// 	return None;
+						// }
+						//let para_id = para_id.unwrap();
+
+						Some(Chain {
 							shared: send_it_to_main,
 							// name: chain_name.to_string(),
 							info: ChainInfo {
@@ -496,16 +492,15 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 								chain_url: DotUrl { para_id: para_id.clone(), ..relay_url.clone() },
 								// chain_name: parachain_name,
 							},
-						}
-					)
-				}).collect::<Vec<Chain<_>>>(
-					)
+						})
+					})
+					.collect::<Vec<Chain<_>>>()
 			})
 			.collect::<Vec<Vec<_>>>();
 
 		sovereigns.relays.truncate(0);
 		for relay in relays.iter() {
-			let mut sov_relay = vec![];			
+			let mut sov_relay = vec![];
 			for chain in relay.iter() {
 				log!("set soverign index to {} {}", chain.info.chain_index, chain.info.chain_url);
 				sov_relay.push(chain.info.clone());
@@ -513,26 +508,32 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 			sovereigns.relays.push(sov_relay);
 		}
 
+		#[cfg(not(target_arch = "wasm32"))]
+		do_datasources(
+			relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect()).collect(),
+			as_of,
+		);
 
-
-		#[cfg(not(target_arch="wasm32"))]
-		do_datasources(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of);
-
-		#[cfg(target_arch="wasm32")]
+		#[cfg(target_arch = "wasm32")]
 		let t = async move || {
 			log("send to bridge");
 
-			#[cfg(target_arch="wasm32")]
-			 use gloo_worker::WorkerBridge;
-			#[cfg(target_arch="wasm32")]
-			let bridge : WorkerBridge<IOWorker>
-			= IOWorker::spawner().callback(|result| {
-				UPDATE_QUEUE.lock().unwrap().extend(result);
-			}).spawn("./worker.js");
-		
-			#[cfg(target_arch="wasm32")]
+			#[cfg(target_arch = "wasm32")]
+			use gloo_worker::WorkerBridge;
+			#[cfg(target_arch = "wasm32")]
+			let bridge: WorkerBridge<IOWorker> = IOWorker::spawner()
+				.callback(|result| {
+					UPDATE_QUEUE.lock().unwrap().extend(result);
+				})
+				.spawn("./worker.js");
+
+			#[cfg(target_arch = "wasm32")]
 			let bridge = Box::leak(Box::new(bridge));
-			bridge.send(BridgeMessage::SetDatasource(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of, DATASOURCE_EPOC.load(Ordering::Relaxed)));
+			bridge.send(BridgeMessage::SetDatasource(
+				relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect()).collect(),
+				as_of,
+				DATASOURCE_EPOC.load(Ordering::Relaxed),
+			));
 
 			loop {
 				bridge.send(BridgeMessage::GetNewBlocks);
@@ -540,19 +541,16 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 			}
 		};
 
-		#[cfg(target_arch="wasm32")]
+		#[cfg(target_arch = "wasm32")]
 		wasm_bindgen_futures::spawn_local(t());
-		#[cfg(target_arch="wasm32")]
+		#[cfg(target_arch = "wasm32")]
 		log!("sent to bridge");
 	}
 }
 use core::future::Future;
 
-#[cfg(not(target_arch="wasm32"))]
-fn do_datasources(relays: Vec<Vec<ChainInfo>>,
-	as_of: Option<DotUrl>,
-)
-{
+#[cfg(not(target_arch = "wasm32"))]
+fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
 	for relay in relays.into_iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
@@ -571,14 +569,13 @@ fn do_datasources(relays: Vec<Vec<ChainInfo>>,
 		for (chain, rc) in relay2 {
 			// log!("listening to {}", chain.info.chain_ws);
 
-			let maybe_sender =
-				if chain.chain_url.is_relay() { send_map.take() } else { None };
+			let maybe_sender = if chain.chain_url.is_relay() { send_map.take() } else { None };
 
 			let as_of = as_of.clone();
 			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 			let chain_info = chain.clone();
 
-			let block_watcher = datasource::BlockWatcher{
+			let block_watcher = datasource::BlockWatcher {
 				tx: Some(send_it_too_desktop),
 				chain_info,
 				as_of,
@@ -586,22 +583,24 @@ fn do_datasources(relays: Vec<Vec<ChainInfo>>,
 				sender: maybe_sender,
 			};
 
-			std::thread::spawn( //thread_pool.spawn_local
-			move || { 
-				async_std::task::block_on(block_watcher.watch_blocks());
-			});
+			std::thread::spawn(
+				//thread_pool.spawn_local
+				move || {
+					async_std::task::block_on(block_watcher.watch_blocks());
+				},
+			);
 		}
 	}
 }
 
-#[cfg(target_arch="wasm32")]
-async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
+#[cfg(target_arch = "wasm32")]
+async fn do_datasources<F, R>(
+	relays: Vec<Vec<ChainInfo>>,
 	as_of: Option<DotUrl>,
-	callback: &'static F
-)
-	where 
-		F: (Fn(Vec<datasource::DataUpdate>) -> R) + Send + Sync + 'static,
-		R: Future<Output=()> + 'static
+	callback: &'static F,
+) where
+	F: (Fn(Vec<datasource::DataUpdate>) -> R) + Send + Sync + 'static,
+	R: Future<Output = ()> + 'static,
 {
 	for relay in relays.into_iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
@@ -622,15 +621,14 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 		for (chain, rc) in relay2 {
 			// log!("listening to {}", chain.info.chain_ws);
 
-			let maybe_sender =
-				if chain.chain_url.is_relay() { send_map.take() } else { None };
+			let maybe_sender = if chain.chain_url.is_relay() { send_map.take() } else { None };
 
 			// let lock_clone = chain.shared;
 			let as_of = as_of.clone();
 			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 			let chain_info = chain.clone();
 
-			let block_watcher = datasource::BlockWatcher{
+			let block_watcher = datasource::BlockWatcher {
 				tx: Some(callback),
 				chain_info,
 				as_of,
@@ -641,10 +639,10 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 
 			//let block_watcher = Box::leak(Box::new(block_watcher));
 
-			#[cfg(target_arch="wasm32")]
+			#[cfg(target_arch = "wasm32")]
 			wasm_bindgen_futures::spawn_local(block_watcher.watch_blocks());
 
-			#[cfg(not(target_arch="wasm32"))]
+			#[cfg(not(target_arch = "wasm32"))]
 			block_watcher.watch_blocks().await;
 		}
 	}
@@ -691,7 +689,7 @@ fn draw_chain_rect(
 					(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 					rfip,
 			)),
-			
+
 			..Default::default()
 		})
 		.insert(Details {
@@ -760,7 +758,7 @@ enum BuildDirection {
 // 	res
 // }
 
-#[derive(Clone, Serialize,Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum DataEntity {
 	Event(DataEvent),
 	Extrinsic {
@@ -866,8 +864,9 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
-pub struct Chain<F> 
-where F : 
+pub struct Chain<F>
+where
+	F:,
 {
 	shared: F,
 	info: ChainInfo,
@@ -922,37 +921,36 @@ fn render_block(
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
-	
 	// reader: EventReader<DataSourceStreamEvent>,
 ) {
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-					// web_sys::console::log_1(&format!("check results").into());
-	
-	// let is_self_sovereign = false; //TODO
-	//todo this can be 1 queue
-	//for msg in relays.relays.iter().flattern() {
-//	 for rrelay in &relays.relays {
-//	 	for cchain in rrelay.iter() {
-	// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
+		// web_sys::console::log_1(&format!("check results").into());
+
+		// let is_self_sovereign = false; //TODO
+		//todo this can be 1 queue
+		//for msg in relays.relays.iter().flattern() {
+		//	 for rrelay in &relays.relays {
+		//	 	for cchain in rrelay.iter() {
+		// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
 		// for chain in relay.iter() {
 		//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
 		//		let chain_info = &cchain.info;
 		if let Some(data_update) = (*block_events).pop() {
-					// web_sys::console::log_1(&format!("got results").into());
+			// web_sys::console::log_1(&format!("got results").into());
 			match data_update {
 				DataUpdate::NewBlock(block) => {
-						// web_sys::console::log_1(&format!("got results on main rendere").into());
-	
+					// web_sys::console::log_1(&format!("got results on main rendere").into());
+
 					//TODO optimise!
 					let mut chain_info = None;
-					'outer:
-					for r in &relays.relays {
+					'outer: for r in &relays.relays {
 						for rchain_info in r {
 							if rchain_info.chain_url.contains(&block.blockurl) {
-								// web_sys::console::log_1(&format!("{} contains {}", rchain_info.chain_url, block.blockurl).into());
+								// web_sys::console::log_1(&format!("{} contains {}",
+								// rchain_info.chain_url, block.blockurl).into());
 								chain_info = Some(rchain_info);
 								if !rchain_info.chain_url.is_relay() {
-									break 'outer;
+									break 'outer
 								}
 							}
 						}
@@ -970,19 +968,17 @@ fn render_block(
 					// 	EXTRINSICS.load(Ordering::Relaxed),
 					// 	EVENTS.load(Ordering::Relaxed)
 					// );
-log!(
-							"block rend chain index {}",
-							chain_info.chain_index
-						);
+					log!("block rend chain index {}", chain_info.chain_index);
 
 					// Skip data we no longer care about because the datasource has changed
 					let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
 					if block.data_epoc != now_epoc {
 						log!(
 							"discarding out of date block made at {} but we are at {}",
-							block.data_epoc, now_epoc
+							block.data_epoc,
+							now_epoc
 						);
-						return;
+						return
 					}
 
 					let mut base_time = *BASETIME.lock().unwrap();
@@ -1019,18 +1015,13 @@ log!(
 					// };
 
 					let rflip = chain_info.chain_url.rflip();
-					let encoded: String =
-						url::form_urlencoded::Serializer::new(String::new())
-							.append_pair("rpc", &chain_info.chain_ws)
-							.finish();
+					let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+						.append_pair("rpc", &chain_info.chain_ws)
+						.finish();
 
 					let is_relay = chain_info.chain_url.is_relay();
 					let details = Details {
-						doturl: DotUrl {
-							extrinsic: None,
-							event: None,
-							..block.blockurl.clone()
-						},
+						doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
 
 						url: format!(
 							"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
@@ -1072,11 +1063,7 @@ log!(
 								), // Color::rgba(0., 0., 0., 0.7),
 								alpha_mode: AlphaMode::Blend,
 								perceptual_roughness: 0.08,
-								unlit: if block.blockurl.is_darkside() {
-									true
-								} else {
-									false
-								},
+								unlit: if block.blockurl.is_darkside() { true } else { false },
 								..default()
 							}),
 							transform,
@@ -1088,7 +1075,7 @@ log!(
 						//     Vec3::new(0., 0., 0.),
 						//     Vec3::new(1., 1., 1.),
 						// ));
-						
+
 						let chain_str = details.doturl.chain_str();
 
 						bun.insert(details)
@@ -1105,7 +1092,7 @@ log!(
 								let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
 								#[cfg(not(target_arch="wasm32"))]
 								let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
-								
+
 								let aspect = 1. / 3.;
 
 								// create a new quad mesh. this is what we will apply the
@@ -1202,8 +1189,10 @@ log!(
 							.insert_bundle(PickableBundle::default());
 					}
 
-					let ext_with_events =
-						datasource::associate_events(block.extrinsics.clone(), block.events.clone());
+					let ext_with_events = datasource::associate_events(
+						block.extrinsics.clone(),
+						block.events.clone(),
+					);
 
 					// Leave infrastructure events underground and show user activity above
 					// ground.
@@ -1251,13 +1240,12 @@ log!(
 					CHAINS.fetch_add(1, Ordering::Relaxed);
 					draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
 				},
-
 			}
 		}
 	}
-// }
-// 		}
-// 	}
+	// }
+	// 		}
+	// 	}
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
@@ -1879,28 +1867,24 @@ fn setup(
 
 	commands.spawn_bundle(PbrBundle {
 		mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
-		material: materials.add(
-			StandardMaterial {
-				base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
-				alpha_mode: AlphaMode::Blend,
-				perceptual_roughness: 0.08,
-				..default()
-			},
-		),
+		material: materials.add(StandardMaterial {
+			base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
+			alpha_mode: AlphaMode::Blend,
+			perceptual_roughness: 0.08,
+			..default()
+		}),
 		transform: Transform { translation: Vec3::new(0., 0., -25000.), ..default() },
 		..default()
 	});
 	commands.spawn_bundle(PbrBundle {
 		mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
-		material: materials.add(
-			StandardMaterial {
-				base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
-				alpha_mode: AlphaMode::Blend,
-				perceptual_roughness: 0.08,
-				unlit: true,
-				..default()
-			},
-		),
+		material: materials.add(StandardMaterial {
+			base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
+			alpha_mode: AlphaMode::Blend,
+			perceptual_roughness: 0.08,
+			unlit: true,
+			..default()
+		}),
 		transform: Transform { translation: Vec3::new(0., 0., 25000.), ..default() },
 		..default()
 	});
@@ -1921,7 +1905,7 @@ fn setup(
 		// 	near: 0.000001,
 		// 	..default()
 		// },
-		// camera: Camera { //far: 10., 
+		// camera: Camera { //far: 10.,
 		// 	far:f32::MAX,
 		// 	near: 0.000001, ..default() },
 		..default()
@@ -2014,30 +1998,28 @@ pub struct Viewport;
 
 #[cfg(target_arch = "wasm32")]
 pub mod html_body {
-    use web_sys::HtmlElement;
+	use web_sys::HtmlElement;
 	// use web_sys::Document;
 
-    pub fn get() -> HtmlElement {
-        // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-        let window = web_sys::window().expect("no global `window` exists");
-        let document = window.document().expect("should have a document on window");
-        let body = document.body().expect("document should have a body");
-        body
-    }
+	pub fn get() -> HtmlElement {
+		// From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+		let window = web_sys::window().expect("no global `window` exists");
+		let document = window.document().expect("should have a document on window");
+		let body = document.body().expect("document should have a body");
+		body
+	}
 
 	// Browser provides esc as an escape anyhow.
 	// pub fn document() -> Document {
-    //     // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-    //     let window = web_sys::window().expect("no global `window` exists");
-    //     window.document().expect("should have a document on window")
-    // }
+	//     // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+	//     let window = web_sys::window().expect("no global `window` exists");
+	//     window.document().expect("should have a document on window")
+	// }
 }
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use bevy::input::mouse::MouseButtonInput;
 // use bevy::prelude::*;
-
 
 // pub struct UiPlugin;
 
@@ -2048,110 +2030,96 @@ use bevy::input::mouse::MouseButtonInput;
 //     }
 // }
 
-
-
-#[cfg(target_arch="wasm32")]
-fn capture_mouse_on_click(
-    mut mousebtn: EventReader<MouseButtonInput>,
-) {
-	for ev in  (mousebtn).iter() {
-		if let bevy::input::ButtonState::Pressed = &ev.state { 
+#[cfg(target_arch = "wasm32")]
+fn capture_mouse_on_click(mut mousebtn: EventReader<MouseButtonInput>) {
+	for ev in (mousebtn).iter() {
+		if let bevy::input::ButtonState::Pressed = &ev.state {
 			log!("did the lock thing.");
 			html_body::get().request_pointer_lock();
-			break;
+			break
 		}
 
-		// if let bevy::input::ButtonState::Released = &ev.state { 
+		// if let bevy::input::ButtonState::Released = &ev.state {
 		// 	html_body::document().exit_pointer_lock();
 		// 	break;
 		// }
 	}
 }
 
-
 // use crate::utils::html_body;
 // use bevy::prelude::*;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 // use bevy_webgl2::renderer::JsCast;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use gloo::events::EventListener;
 
-#[cfg(target_arch="wasm32")]
-use std::sync::{
-    atomic::{Ordering::SeqCst},
-};
+#[cfg(target_arch = "wasm32")]
+use std::sync::atomic::Ordering::SeqCst;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use web_sys::MouseEvent;
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 pub struct WasmMouseTracker {
-    delta_x: Arc<AtomicI32>,
-    delta_y: Arc<AtomicI32>,
+	delta_x: Arc<AtomicI32>,
+	delta_y: Arc<AtomicI32>,
 }
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 impl WasmMouseTracker {
-    pub fn get_delta_and_reset(&self) -> Vec2 {
-        let delta = Vec2::new(
-            self.delta_x.load(SeqCst) as f32,
-            self.delta_y.load(SeqCst) as f32,
-        );
-        self.delta_x.store(0, SeqCst);
-        self.delta_y.store(0, SeqCst);
-        delta
-    }
+	pub fn get_delta_and_reset(&self) -> Vec2 {
+		let delta = Vec2::new(self.delta_x.load(SeqCst) as f32, self.delta_y.load(SeqCst) as f32);
+		self.delta_x.store(0, SeqCst);
+		self.delta_y.store(0, SeqCst);
+		delta
+	}
 }
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 impl Default for WasmMouseTracker {
 	fn default() -> Self {
-        let delta_x = Arc::new(AtomicI32::new(0));
-        let delta_y = Arc::new(AtomicI32::new(0));
+		let delta_x = Arc::new(AtomicI32::new(0));
+		let delta_y = Arc::new(AtomicI32::new(0));
 
-        let dx = Arc::clone(&delta_x);
-        let dy = Arc::clone(&delta_y);
+		let dx = Arc::clone(&delta_x);
+		let dy = Arc::clone(&delta_y);
 
-        // From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-        let on_move = EventListener::new(&html_body::get(), "mousemove", move |e| {
-            let mouse_event = e.clone().dyn_into::<MouseEvent>().unwrap();
-            dx.store(mouse_event.movement_x(), SeqCst);
-            dy.store(mouse_event.movement_y(), SeqCst);
-        });
-        on_move.forget();
-        Self { delta_x, delta_y }
-    }
+		// From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
+		let on_move = EventListener::new(&html_body::get(), "mousemove", move |e| {
+			let mouse_event = e.clone().dyn_into::<MouseEvent>().unwrap();
+			dx.store(mouse_event.movement_x(), SeqCst);
+			dy.store(mouse_event.movement_y(), SeqCst);
+		});
+		on_move.forget();
+		Self { delta_x, delta_y }
+	}
 }
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use bevy::input::mouse::MouseMotion;
 
-#[cfg(target_arch="wasm32")]
-pub fn get_mouse_movement(wasm_mouse_tracker: Res<WasmMouseTracker>,
-	mut ev: EventWriter<MouseMotion>
+#[cfg(target_arch = "wasm32")]
+pub fn get_mouse_movement(
+	wasm_mouse_tracker: Res<WasmMouseTracker>,
+	mut ev: EventWriter<MouseMotion>,
 ) {
-    let delta = wasm_mouse_tracker.get_delta_and_reset();
-    if delta != Vec2::ZERO {
-        info!("Mouse movement: ({:?})", delta);
-		ev.send(MouseMotion{ delta: delta })
-    }
+	let delta = wasm_mouse_tracker.get_delta_and_reset();
+	if delta != Vec2::ZERO {
+		info!("Mouse movement: ({:?})", delta);
+		ev.send(MouseMotion { delta })
+	}
 }
 
-
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use gloo_worker::{HandlerId, Worker};
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 pub struct IOWorker {}
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 impl IOWorker {
 	pub async fn async_update(_msg: <Self as Worker>::Message) {
 		log!("Got update");
@@ -2161,8 +2129,9 @@ impl IOWorker {
 	}
 
 	async fn send_it_too(blocks: Vec<datasource::DataUpdate>) {
-		// web_sys::console::log_1(&format!("got block. add to worker queue{}", blocks.len()).into());
-		
+		// web_sys::console::log_1(&format!("got block. add to worker queue{}",
+		// blocks.len()).into());
+
 		// Could move this earlier to when a block is produced by relay chain?
 		let mut base_time = *BASETIME.lock().unwrap();
 		if base_time == 0 {
@@ -2171,8 +2140,8 @@ impl IOWorker {
 				web_sys::console::log_1(&format!("BASETIME set to {}", base_time).into());
 				*BASETIME.lock().unwrap() = base_time;
 			}
-		}			
-		
+		}
+
 		UPDATE_QUEUE.lock().unwrap().extend(blocks);
 		// web_sys::console::log_1(&format!("added to worker queue").into());
 	}
@@ -2180,76 +2149,75 @@ impl IOWorker {
 
 #[derive(Deserialize, Serialize)]
 pub enum BridgeMessage {
-	SetDatasource(Vec<Vec<ChainInfo>>, Option<DotUrl>, u32),//data epoc
+	SetDatasource(Vec<Vec<ChainInfo>>, Option<DotUrl>, u32), //data epoc
 	GetNewBlocks,
 }
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use gloo_worker::WorkerScope;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 impl Worker for IOWorker {
-    type Input = BridgeMessage;
-    type Message = Vec<()>;
-    type Output = Vec<datasource::DataUpdate>;
+	type Input = BridgeMessage;
+	type Message = Vec<()>;
+	type Output = Vec<datasource::DataUpdate>;
 
-    fn create(_scope: &WorkerScope<Self>) -> Self {
-        Self {  }
-    }
+	fn create(_scope: &WorkerScope<Self>) -> Self {
+		Self {}
+	}
 
-    fn update(&mut self, _scope: &WorkerScope<Self>, msg: Self::Message) {
+	fn update(&mut self, _scope: &WorkerScope<Self>, msg: Self::Message) {
 		async_std::task::block_on(Self::async_update(msg));
 	}
 
-    fn received(&mut self, scope: &WorkerScope<Self>, msg: Self::Input, id: HandlerId) {
+	fn received(&mut self, scope: &WorkerScope<Self>, msg: Self::Input, id: HandlerId) {
 		match msg {
 			BridgeMessage::SetDatasource(s, as_of, data_epoc) => {
 				DATASOURCE_EPOC.store(data_epoc, Ordering::Relaxed);
-				// web_sys::console::log_1(&format!("got input from bridge basetime {}", basetime).into());
-				//let link_clone : Arc<async_std::sync::Mutex<WorkerLink<Self>>> = scope.clone();
-				async_std::task::block_on(do_datasources(s, as_of, & Self::send_it_too));
-// 			async |_|{
-// 			web_sys::console::log_1(&format!("got block. send to bridge").into());
-// 			self.t();
-// //			scope.send_message(vec![]);
-// 		}
-				
+				// web_sys::console::log_1(&format!("got input from bridge basetime {}",
+				// basetime).into()); let link_clone : Arc<async_std::sync::Mutex<WorkerLink<Self>>>
+				// = scope.clone();
+				async_std::task::block_on(do_datasources(s, as_of, &Self::send_it_too));
+				// 			async |_|{
+				// 			web_sys::console::log_1(&format!("got block. send to bridge").into());
+				// 			self.t();
+				// //			scope.send_message(vec![]);
+				// 		}
 			},
 			BridgeMessage::GetNewBlocks => {
 				// let t = async move || {
-					let vec = &mut *UPDATE_QUEUE.lock().unwrap();
-					let mut results = vec![];
-					core::mem::swap(vec, &mut results);
-					scope.respond(id, results);
+				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
+				let mut results = vec![];
+				core::mem::swap(vec, &mut results);
+				scope.respond(id, results);
 				// };
 				// async_std::task::block_on(t());
-			}
+			},
 		}
-	
-	
-	// 	let chain_info = ChainInfo{
-	// 		chain_ws: String::from("kusama-rpc.polkadot.io"),
-	// // pub chain_id: Option<NonZeroU32>,
-	// // pub chain_drawn: bool,
-	// // Negative is other direction from center.
-	// 		chain_index: 1,
-	// 		chain_url: DotUrl{ sovereign:Some(1), env:Env::Prod, ..DotUrl::default() },
-	// 	};
-	// 	// let url = chain_name_to_url(&chain_info.chain_ws);
-	// 	// let source = datasource::RawDataSource::new(&url);
-	// 	let block_watcher = datasource::BlockWatcher{
-	// 				tx: None,
-	// 				chain_info ,
-	// 				as_of: None,
-	// 				receive_channel: None,
-	// 				sender: None,
-	// 			};
 
-	// 	async_std::task::block_on(block_watcher.watch_blocks());
-        // self.link.respond(id, (msg, 42));
-    }
+		// 	let chain_info = ChainInfo{
+		// 		chain_ws: String::from("kusama-rpc.polkadot.io"),
+		// // pub chain_id: Option<NonZeroU32>,
+		// // pub chain_drawn: bool,
+		// // Negative is other direction from center.
+		// 		chain_index: 1,
+		// 		chain_url: DotUrl{ sovereign:Some(1), env:Env::Prod, ..DotUrl::default() },
+		// 	};
+		// 	// let url = chain_name_to_url(&chain_info.chain_ws);
+		// 	// let source = datasource::RawDataSource::new(&url);
+		// 	let block_watcher = datasource::BlockWatcher{
+		// 				tx: None,
+		// 				chain_info ,
+		// 				as_of: None,
+		// 				receive_channel: None,
+		// 				sender: None,
+		// 			};
 
-    // fn name_of_resource() -> &'static str {
-    //     "worker.js"
-    // }
+		// 	async_std::task::block_on(block_watcher.watch_blocks());
+		// self.link.respond(id, (msg, 42));
+	}
+
+	// fn name_of_resource() -> &'static str {
+	//     "worker.js"
+	// }
 }

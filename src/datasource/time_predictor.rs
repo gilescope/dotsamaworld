@@ -1,8 +1,6 @@
-use std::convert::TryInto;
-use crate::datasource::Source;
- use crate::datasource::get_block_hash;
- use crate::datasource::find_timestamp;
+use crate::datasource::{find_timestamp, get_block_hash, Source};
 use async_recursion::async_recursion;
+use std::convert::TryInto;
 
 type TIME = i64;
 
@@ -13,7 +11,7 @@ pub async fn get_block_number_near_timestamp(
 	source: &mut impl Source,
 	//&mut impl FnMut(u32) -> Option<TIME>,
 	average_blocktime_in_ms: Option<u64>,
-	metad_current: &frame_metadata::RuntimeMetadataPrefixed
+	metad_current: &frame_metadata::RuntimeMetadataPrefixed,
 ) -> Option<u32> {
 	debug_assert!(search_timestamp > 9_654_602_493, "you were meant to multiply that by 1000");
 	get_block_number_near_timestamp_helper(
@@ -21,8 +19,9 @@ pub async fn get_block_number_near_timestamp(
 		start_block as i64,
 		source,
 		average_blocktime_in_ms.map(|a| a as i64),
-		metad_current
-	).await
+		metad_current,
+	)
+	.await
 	.map(|a| a as u32)
 }
 
@@ -32,7 +31,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 	start_block: i64,
 	source: &mut S,
 	average_blocktime_in_ms: Option<i64>,
-	metad_current: &frame_metadata::RuntimeMetadataPrefixed
+	metad_current: &frame_metadata::RuntimeMetadataPrefixed,
 ) -> Option<i64> {
 	let average_blocktime_in_ms = average_blocktime_in_ms.unwrap_or(12_000);
 
@@ -52,8 +51,10 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			block_hash.unwrap(),
 			source,
 			&metad_current,
-		).await
-	}.unwrap() as i64;
+		)
+		.await
+	}
+	.unwrap() as i64;
 
 	let time_distance = start_time - search_timestamp;
 	let block_distance = time_distance / average_blocktime_in_ms;
@@ -76,8 +77,10 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			block_hash.unwrap(),
 			source,
 			&metad_current,
-		).await
-	}.unwrap() as i64;
+		)
+		.await
+	}
+	.unwrap() as i64;
 
 	let actual_blocktime = (start_time - guess_time) / (start_block - guess);
 	if actual_blocktime == 0 {
@@ -103,8 +106,10 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			block_hash.unwrap(),
 			source,
 			&metad_current,
-		).await
-	}.unwrap() as i64;
+		)
+		.await
+	}
+	.unwrap() as i64;
 
 	if (calibrated_guess_time.abs_diff(search_timestamp) as i64) < actual_blocktime * 2 {
 		return Some(calibrated_guess as i64)
@@ -114,8 +119,9 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 		calibrated_guess as i64,
 		source,
 		Some(actual_blocktime),
-		metad_current
-	).await
+		metad_current,
+	)
+	.await
 }
 
 #[cfg(test)]

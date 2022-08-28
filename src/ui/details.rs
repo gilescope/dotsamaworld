@@ -3,7 +3,7 @@ use super::DotUrl;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiSettings;
-use serde::{Serialize,Deserialize};
+use serde::{Deserialize, Serialize};
 // use bevy_inspector_egui::{
 // 	options::{NumberAttributes, StringAttributes},
 // 	Context, Inspectable,

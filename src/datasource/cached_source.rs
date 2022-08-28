@@ -9,7 +9,7 @@ pub struct CachedDataSource<S: Source> {
 	urlhash: u64,
 }
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 type WSBackend = polkapipe::ws_web::Backend;
 
 // macro_rules! log {
@@ -78,7 +78,7 @@ impl<S> Source for CachedDataSource<S>
 where
 	S: Source,
 {
-	#[cfg(target_arch="wasm32")]
+	#[cfg(target_arch = "wasm32")]
 	async fn process_incoming_messages(&mut self) -> WSBackend {
 		// log!("cached process incoming run");
 		self.underlying_source.process_incoming_messages().await

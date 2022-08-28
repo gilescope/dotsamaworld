@@ -3,10 +3,10 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use primitive_types::H256;
 
-#[cfg(target_arch="wasm32")]
+use rexie::ObjectStore;
+#[cfg(target_arch = "wasm32")]
 use rexie::{Rexie, TransactionMode};
 use wasm_bindgen::JsValue;
-use rexie::ObjectStore;
 
 //#[derive(Clone)]
 pub struct CachedDataSource<S: Source> {
@@ -32,14 +32,14 @@ where
 {
 	// pub fn new(underlying_source: S) -> Self {
 	// 	let urlhash = super::please_hash(&underlying_source.url());
-	// 	Self { store:  None, 
+	// 	Self { store:  None,
 	// 	underlying_source, urlhash }
 	// }
 }
 
-fn conv(val: JsValue) -> Result<Vec<u8>,polkapipe::Error> {
+fn conv(val: JsValue) -> Result<Vec<u8>, polkapipe::Error> {
 	Ok(hex::decode(&val.as_string().unwrap()).unwrap())
-	//TODO: To avoid the copying and re-encoding, 
+	//TODO: To avoid the copying and re-encoding,
 	// consider the JsString::try_from() function from js-sys instead.
 }
 
@@ -50,18 +50,28 @@ macro_rules! memoise {
 
 		let table_name = format!("{}.{}", path, $datatype);
 		if $self.store.is_none() {
-			$self.store = Some(Rexie::builder("DotsarmaWorld")
-			 .version(1)
-			 .add_object_store(ObjectStore::new("kv").key_path("id"))
-			 .build().await.unwrap());
+			$self.store = Some(
+				Rexie::builder("DotsarmaWorld")
+					.version(1)
+					.add_object_store(ObjectStore::new("kv").key_path("id"))
+					.build()
+					.await
+					.unwrap(),
+			);
 		}
 
 		let key_encoded = format!("{}{}", table_name, hex::encode($keybytes));
 		// let filename = format!("{}/{}.{}", path, key_encoded, $datatype);
 
-		let tx = $self.store.as_ref().unwrap().transaction(&["kv"], TransactionMode::ReadOnly).unwrap();
+		let tx = $self
+			.store
+			.as_ref()
+			.unwrap()
+			.transaction(&["kv"], TransactionMode::ReadOnly)
+			.unwrap();
 		let store = tx.store("kv").unwrap();
-		let res : Result<Vec<u8>,_>= conv(store.get(&JsValue::from_str(&key_encoded)).await.unwrap());
+		let res: Result<Vec<u8>, _> =
+			conv(store.get(&JsValue::from_str(&key_encoded)).await.unwrap());
 		if let Ok(contents) = res {
 			// println!("cache hit events!");
 			if contents.is_empty() {
@@ -73,11 +83,20 @@ macro_rules! memoise {
 			// println!("cache miss {} {}", filename, &$self.ws_url);
 			let result = $fetch.await;
 			if let Ok(result) = result {
-				let tx = $self.store.as_ref().unwrap().transaction(&["kv"], TransactionMode::ReadWrite).unwrap();
+				let tx = $self
+					.store
+					.as_ref()
+					.unwrap()
+					.transaction(&["kv"], TransactionMode::ReadWrite)
+					.unwrap();
 				if let Some(bytes) = result {
-					tx.store("kv").unwrap().add(&JsValue::from_str(&hex::encode(bytes)), None).await.unwrap();
-					// $self.store.set(&filename, &bytes)
-					// 	.expect(&format!("Couldn't write event output to {}", filename));
+					tx.store("kv")
+						.unwrap()
+						.add(&JsValue::from_str(&hex::encode(bytes)), None)
+						.await
+						.unwrap();
+				// $self.store.set(&filename, &bytes)
+				// 	.expect(&format!("Couldn't write event output to {}", filename));
 				// println!("cache storage wrote to {}", filename);
 				} else {
 					tx.store("kv").unwrap().add(&JsValue::from_str(""), None).await.unwrap();
@@ -87,7 +106,8 @@ macro_rules! memoise {
 				}
 
 				// Only let data read from cache so you know it's working.
-				let res : Result<Vec<u8>,_>= conv(store.get(&JsValue::from_str(&key_encoded)).await.unwrap());
+				let res: Result<Vec<u8>, _> =
+					conv(store.get(&JsValue::from_str(&key_encoded)).await.unwrap());
 				let contents = res.unwrap();
 				if contents.is_empty() {
 					Ok(None)

@@ -1,6 +1,6 @@
 use crate::Env;
+use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
-use serde::{Serialize, Deserialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] //TODO use scale
 pub struct DotUrl {
@@ -18,15 +18,25 @@ impl DotUrl {
 	pub fn contains(&self, other: &Self) -> bool {
 		if let (Some(sov), Some(other_sov)) = (self.sovereign, other.sovereign) {
 			if sov == other_sov {
-				if self.para_id.is_none() { return true; }
+				if self.para_id.is_none() {
+					return true
+				}
 				if let (Some(para_id), Some(other_para_id)) = (self.para_id, other.para_id) {
 					if para_id == other_para_id {
-						if self.block_number.is_none() { return true; }
-						if let (Some(block_number), Some(other_block_number)) = (self.block_number, other.block_number) {
+						if self.block_number.is_none() {
+							return true
+						}
+						if let (Some(block_number), Some(other_block_number)) =
+							(self.block_number, other.block_number)
+						{
 							if block_number == other_block_number {
-								if self.extrinsic.is_none() { return true; }
-								if let (Some(extrinsic), Some(other_extrinsic)) = (self.extrinsic, other.extrinsic) {
-									return extrinsic == other_extrinsic;
+								if self.extrinsic.is_none() {
+									return true
+								}
+								if let (Some(extrinsic), Some(other_extrinsic)) =
+									(self.extrinsic, other.extrinsic)
+								{
+									return extrinsic == other_extrinsic
 								}
 							}
 						}

@@ -5,13 +5,10 @@ use polkapipe::Backend;
 use primitive_types::H256;
 // use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
 // use core::time::Duration;
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
+use async_tungstenite::{tungstenite::Message, WebSocketStream};
+#[cfg(not(target_arch = "wasm32"))]
 use futures::{sink::SinkErrInto, stream::SplitSink};
-#[cfg(not(target_arch="wasm32"))]
-use async_tungstenite::{
-	tungstenite::{Message},
-	WebSocketStream,
-};
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -37,11 +34,8 @@ macro_rules! log {
 
 /// A way to source untransformed raw data.
 #[async_trait(?Send)]
-pub trait Source  {
-	async fn fetch_block_hash(
-		&mut self,
-		block_number: u32,
-	) -> Result<Option<H256>, BError>;
+pub trait Source {
+	async fn fetch_block_hash(&mut self, block_number: u32) -> Result<Option<H256>, BError>;
 
 	async fn fetch_block(
 		&mut self,
@@ -249,10 +243,10 @@ pub trait Source  {
 // #[cfg(target_arch="wasm32")]
 // type WS2 = SplitSink<WsStream, ws_stream_wasm::WsMessage>;
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 type WSBackend = polkapipe::ws_web::Backend;
 
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 type WSBackend = polkapipe::ws::Backend<
 	SinkErrInto<
 		SplitSink<
@@ -284,7 +278,7 @@ impl RawDataSource {
 		RawDataSource { ws_url: url.to_string(), client: None }
 	}
 
-	#[cfg(target_arch="wasm32")]
+	#[cfg(target_arch = "wasm32")]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
 			if let Ok(client) = polkapipe::ws_web::Backend::new_ws2(&self.ws_url).await {
@@ -294,9 +288,7 @@ impl RawDataSource {
 		self.client.as_mut()
 	}
 
-
-
-	#[cfg(not(target_arch="wasm32"))]
+	#[cfg(not(target_arch = "wasm32"))]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
 			if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url).await {
@@ -306,7 +298,6 @@ impl RawDataSource {
 		self.client.as_mut()
 	}
 }
-
 
 // #[async_trait(?Send)]
 // trait ProcessIncoming {
@@ -335,17 +326,17 @@ impl Source for RawDataSource {
 		&mut self,
 		block_number: u32,
 	) -> Result<Option<primitive_types::H256>, BError> {
-			// log!("get client");
-		if let Some(client) = self.client()
-			.await {
-				// log!("got client");
+		// log!("get client");
+		if let Some(client) = self.client().await {
+			// log!("got client");
 			client
 				.query_block_hash(&vec![block_number])
 				.await
 				.map(|res| Some(H256::from_slice(&res[..])))
-		} else { 
+		} else {
 			log!("could not get client");
-			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url))) }
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
 	}
 
 	/// Return then in bin form rather than link to subxt:
@@ -362,14 +353,12 @@ impl Source for RawDataSource {
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError> {
 		if let Some(client) = self.client().await {
-			let result = client
-				.query_block(&hex::encode(block_hash.unwrap().as_bytes()))
-				.await;
+			let result = client.query_block(&hex::encode(block_hash.unwrap().as_bytes())).await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
 				// println!("got 2here");
 				if let Some(serde_json::value::Value::Object(map)) = map.get("block") {
-					let mut res = AgnosticBlock { block_number:0, extrinsics: vec![] };
+					let mut res = AgnosticBlock { block_number: 0, extrinsics: vec![] };
 					if let Some(serde_json::value::Value::Object(m)) = map.get("header") {
 						if let Some(serde_json::value::Value::String(num_original)) = m.get("number") {
 							 let mut num = num_original.trim_start_matches("0x").to_string();
@@ -377,7 +366,7 @@ impl Source for RawDataSource {
 								println!("odd found {}", num_original);
 								num = format!("0{}", num);
 							}
-							
+
 							let bytes = hex::decode(&num).unwrap();
 
 						//	bytes.reverse(); //TODO: why is this needed? it gets the right number but...
@@ -387,8 +376,7 @@ impl Source for RawDataSource {
 							// println!("bytes or {}", num_original);
 							// println!("bytes is {}", hex::encode(&bytes));
 							// use parity_scale_codec::Decode; 
-							
-							
+
 						   let number: u32 = u32::from_str_radix(num_original.trim_start_matches("0x"), 16).unwrap();
 //							let number = u32::decode(&mut &bytes[..]).unwrap();
 
@@ -402,12 +390,14 @@ impl Source for RawDataSource {
 					// println!("bytes {} -> {}",&num_original, number);   
 							res.block_number = number;
 						}
-					} 
-					if let Some(serde_json::value::Value::Array(extrinsics)) = map.get("extrinsics") {
+					}
+					if let Some(serde_json::value::Value::Array(extrinsics)) = map.get("extrinsics")
+					{
 						for ex in extrinsics {
 							if let serde_json::value::Value::String(val) = ex {
-							/* 	println!("about to decode '{}'", &val); */
-								res.extrinsics.push(hex::decode(val.trim_start_matches("0x")).unwrap());
+								/* println!("about to decode '{}'", &val); */
+								res.extrinsics
+									.push(hex::decode(val.trim_start_matches("0x")).unwrap());
 							} else {
 								panic!()
 							}
@@ -418,7 +408,9 @@ impl Source for RawDataSource {
 				}
 			}
 			result.map(|_| None)
-		} else { Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url))) }
+		} else {
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
 		// //TODO: we're decoding and encoding here. cut it out.
 		// Ok(Some(AgnosticBlock {
 		// 	block_number: block_body.block.header.number,
@@ -445,14 +437,13 @@ impl Source for RawDataSource {
 	) -> Result<Option<Vec<u8>>, BError> {
 		if let Some(client) = self.client().await {
 			if let Some(as_of) = as_of {
-				client
-					.query_storage(key, Some(as_of.as_bytes()))
-					.await
-					.map(|r| Some(r))
+				client.query_storage(key, Some(as_of.as_bytes())).await.map(|r| Some(r))
 			} else {
 				client.query_storage(key, None).await.map(|r| Some(r))
 			}
-		}  else { Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url))) }
+		} else {
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
 	}
 
 	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()> {
@@ -466,7 +457,9 @@ impl Source for RawDataSource {
 			} else {
 				client.query_metadata(None).await.map(|r| Some(r)).map_err(|_e| ())
 			}
-		}   else { Err(()) }
+		} else {
+			Err(())
+		}
 	}
 
 	/// We subscribe to relay chains and self sovereign chains
@@ -504,29 +497,26 @@ impl Source for RawDataSource {
 	}
 }
 
-
 #[cfg(test)]
 mod tests {
-    use parity_scale_codec::Encode;
-
+	use parity_scale_codec::Encode;
 
 	#[test]
 	fn testit() {
-	/* 	let  hex::decode("03ee6c")/*  */.unwrap(); */
+		/* let  hex::decode("03ee6c")/*  */.unwrap(); */
 		let r: u32 = 10504599;
 		let should = r.encode();
-		println!("bytes should be {:?}", &should);//bytes [160, 73, 151]
+		println!("bytes should be {:?}", &should); //bytes [160, 73, 151]
 
 		let bytes = hex::decode("00a04997").unwrap();
-			println!("bytes {:?}", &bytes);//bytes [160, 73, 151]
-		/* /*  */use parity_scale_codec::Decode; */
+		println!("bytes {:?}", &bytes); //bytes [160, 73, 151]
+								/* /*  */use parity_scale_codec::Decode; */
 		use parity_scale_codec::Decode;
 		let mut bytes_rev = bytes.clone();
-bytes_rev.reverse();
+		bytes_rev.reverse();
 		let xg = u32::decode(&mut bytes_rev.as_slice());
 		println!("res={:?}.", xg);
-		/* /* let x = <u32 as parity_scale_codec::/* Decode */>::decode(&mut &bytes[..]).unwrap(); */ */
-
-
+		/* /* let x = <u32 as parity_scale_codec::/* Decode */>::decode(&mut
+		 * &bytes[..]).unwrap(); */ */
 	}
 }

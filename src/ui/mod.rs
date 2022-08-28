@@ -50,9 +50,9 @@ pub fn ui_bars_system(
 
 				if inspector.selected.is_some() {
 					let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
-					
-					#[cfg(target_arch="wasm32")]
-					let maybe_bytes : Option<Vec<u8>>= None;
+
+					#[cfg(target_arch = "wasm32")]
+					let maybe_bytes: Option<Vec<u8>> = None;
 					// let maybe_bytes = {
 					// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
 					// 	use wasm_bindgen::JsCast;
@@ -64,7 +64,7 @@ pub fn ui_bars_system(
 					// 	Some(js_sys::Uint8Array::new(&data).to_vec())
 					// };
 
-					#[cfg(not(target_arch="wasm32"))]
+					#[cfg(not(target_arch = "wasm32"))]
 					let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
 
 					if let Some(bytes) = maybe_bytes {
@@ -113,7 +113,7 @@ pub fn ui_bars_system(
 	for diag in diagnostics.iter() {
 		if diag.name == "fps" {
 			fps = diag.value().unwrap_or_default();
-			break;
+			break
 		}
 	}
 
@@ -181,8 +181,9 @@ pub fn ui_bars_system(
 					ui.heading(selected);
 				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
-					let timestamp =
-						super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation().x);
+					let timestamp = super::x_to_timestamp(
+						viewpoint_query.get_single().unwrap().translation().x,
+					);
 					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();

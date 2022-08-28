@@ -63,103 +63,103 @@
 // 	location: &str,
 // 	results: &mut HashMap<String, String>,
 // ) {
-	// match dbg {
-	// 	scale_value::ValueDef::BitSequence(..) => {
-	// 		// println!("bitseq skipped");
-	// 	},
-	// 	scale_value::ValueDef::Composite(inner) => match inner {
-	// 		Composite::Named(fields) =>
-	// 			for (n, f) in fields {
-	// 				flattern(&f.value, &format!("{}.{}", location, n), &mut results);
-	// 			},
-	// 		Composite::Unnamed(fields) => {
-	// 			if fields.iter().all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
-	// 				fields.len() > 1
-	// 			{
-	// 				results.insert(
-	// 					format!("{}", location),
-	// 					hex::encode(
-	// 						fields
-	// 							.iter()
-	// 							.map(|f| {
-	// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-	// 									byte
-	// 								} else {
-	// 									panic!();
-	// 								}
-	// 							})
-	// 							.collect::<Vec<_>>(),
-	// 					),
-	// 				);
-	// 			} else {
-	// 				for (n, f) in fields.iter().enumerate() {
-	// 					flattern(&f.value, &format!("{}.{}", location, n), &mut results);
-	// 				}
-	// 			}
-	// 		},
-	// 	},
-	// 	scale_value::ValueDef::Primitive(Primitive::U8(val)) => {
-	// 		results.insert(location.to_string(), val.to_string());
-	// 	},
-	// 	scale_value::ValueDef::Primitive(Primitive::U32(val)) => {
-	// 		results.insert(location.to_string(), val.to_string());
-	// 	},
-	// 	scale_value::ValueDef::Primitive(..) => {
-	// 		// println!("primitiv skipped");
-	// 	},
-	// 	scale_value::ValueDef::Variant(Variant { name, values }) => match values {
-	// 		Composite::Named(fields) => {
-	// 			if fields
-	// 				.iter()
-	// 				.all(|(_name, f)| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
-	// 				fields.len() > 1
-	// 			{
-	// 				results.insert(
-	// 					format!("{},{}", name, location),
-	// 					hex::encode(
-	// 						fields
-	// 							.iter()
-	// 							.map(|(_, f)| {
-	// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-	// 									byte
-	// 								} else {
-	// 									panic!();
-	// 								}
-	// 							})
-	// 							.collect::<Vec<_>>(),
-	// 					),
-	// 				);
-	// 			} else {
-	// 				for (n, f) in fields {
-	// 					flattern(&f.value, &format!("{}.{}.{}", location, name, n), &mut results);
-	// 				}
-	// 			}
-	// 		},
-	// 		Composite::Unnamed(fields) => {
-	// 			if fields.iter().all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
-	// 				fields.len() > 1
-	// 			{
-	// 				results.insert(
-	// 					location.to_string(),
-	// 					hex::encode(
-	// 						fields
-	// 							.iter()
-	// 							.map(|f| {
-	// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
-	// 									byte
-	// 								} else {
-	// 									panic!();
-	// 								}
-	// 							})
-	// 							.collect::<Vec<_>>(),
-	// 					),
-	// 				);
-	// 			} else {
-	// 				for (n, f) in fields.iter().enumerate() {
-	// 					flattern(&f.value, &format!("{}.{}.{}", location, name, n), &mut results);
-	// 				}
-	// 			}
-	// 		},
-	// 	},
-	// }
+// match dbg {
+// 	scale_value::ValueDef::BitSequence(..) => {
+// 		// println!("bitseq skipped");
+// 	},
+// 	scale_value::ValueDef::Composite(inner) => match inner {
+// 		Composite::Named(fields) =>
+// 			for (n, f) in fields {
+// 				flattern(&f.value, &format!("{}.{}", location, n), &mut results);
+// 			},
+// 		Composite::Unnamed(fields) => {
+// 			if fields.iter().all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
+// 				fields.len() > 1
+// 			{
+// 				results.insert(
+// 					format!("{}", location),
+// 					hex::encode(
+// 						fields
+// 							.iter()
+// 							.map(|f| {
+// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
+// 									byte
+// 								} else {
+// 									panic!();
+// 								}
+// 							})
+// 							.collect::<Vec<_>>(),
+// 					),
+// 				);
+// 			} else {
+// 				for (n, f) in fields.iter().enumerate() {
+// 					flattern(&f.value, &format!("{}.{}", location, n), &mut results);
+// 				}
+// 			}
+// 		},
+// 	},
+// 	scale_value::ValueDef::Primitive(Primitive::U8(val)) => {
+// 		results.insert(location.to_string(), val.to_string());
+// 	},
+// 	scale_value::ValueDef::Primitive(Primitive::U32(val)) => {
+// 		results.insert(location.to_string(), val.to_string());
+// 	},
+// 	scale_value::ValueDef::Primitive(..) => {
+// 		// println!("primitiv skipped");
+// 	},
+// 	scale_value::ValueDef::Variant(Variant { name, values }) => match values {
+// 		Composite::Named(fields) => {
+// 			if fields
+// 				.iter()
+// 				.all(|(_name, f)| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
+// 				fields.len() > 1
+// 			{
+// 				results.insert(
+// 					format!("{},{}", name, location),
+// 					hex::encode(
+// 						fields
+// 							.iter()
+// 							.map(|(_, f)| {
+// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
+// 									byte
+// 								} else {
+// 									panic!();
+// 								}
+// 							})
+// 							.collect::<Vec<_>>(),
+// 					),
+// 				);
+// 			} else {
+// 				for (n, f) in fields {
+// 					flattern(&f.value, &format!("{}.{}.{}", location, name, n), &mut results);
+// 				}
+// 			}
+// 		},
+// 		Composite::Unnamed(fields) => {
+// 			if fields.iter().all(|f| matches!(f.value, ValueDef::Primitive(Primitive::U8(_)))) &&
+// 				fields.len() > 1
+// 			{
+// 				results.insert(
+// 					location.to_string(),
+// 					hex::encode(
+// 						fields
+// 							.iter()
+// 							.map(|f| {
+// 								if let ValueDef::Primitive(Primitive::U8(byte)) = f.value {
+// 									byte
+// 								} else {
+// 									panic!();
+// 								}
+// 							})
+// 							.collect::<Vec<_>>(),
+// 					),
+// 				);
+// 			} else {
+// 				for (n, f) in fields.iter().enumerate() {
+// 					flattern(&f.value, &format!("{}.{}.{}", location, name, n), &mut results);
+// 				}
+// 			}
+// 		},
+// 	},
+// }
 // }
