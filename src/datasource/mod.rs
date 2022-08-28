@@ -241,7 +241,7 @@ R: Future<Output=()> + 'static
 	//Result<(), Box<dyn std::error::Error + Sync + Send>> 
 	//where S: Source
 	 {
-		// log!("watching blocks {}", self.chain_info.chain_index);
+		log!("watching blocks {}", self.chain_info.chain_index);
 		let mut tx: F = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
 		let as_of: Option<DotUrl> = self.as_of.take();

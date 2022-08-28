@@ -5,6 +5,13 @@ use polkapipe::Backend;
 use primitive_types::H256;
 // use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
 // use core::time::Duration;
+#[cfg(not(target_arch="wasm32"))]
+use futures::{sink::SinkErrInto, stream::SplitSink};
+#[cfg(not(target_arch="wasm32"))]
+use async_tungstenite::{
+	tungstenite::{Message},
+	WebSocketStream,
+};
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -235,12 +242,6 @@ pub trait Source  {
 // 	}
 // }
 
-#[cfg(not(target_arch="wasm32"))]
-use async_tungstenite::{
-	tungstenite::{Message},
-	WebSocketStream,
-};
-// use futures::{sink::SinkErrInto, stream::SplitSink};
 // #[cfg(target_arch="wasm32")]
 // use ws_stream_wasm::WsStream;
 // #[cfg(target_arch="wasm32")]

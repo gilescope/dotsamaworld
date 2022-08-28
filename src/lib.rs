@@ -4,6 +4,7 @@
 #![feature(slice_group_by)]
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
+#![feature(stmt_expr_attributes)]
 use crate::ui::UrlBar;
 use serde::{Serialize, Deserialize};
 use bevy::{ecs as bevy_ecs, prelude::*};
@@ -18,6 +19,8 @@ use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+
+#[cfg(target_arch="wasm32")]
 use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 use crate::movement::Destination;
@@ -376,13 +379,18 @@ fn chain_name_to_url(chain_name: &str) -> String {
 // struct SourceDataTask(bevy_tasks::FakeTask);
 
 #[cfg(not(target_arch="wasm32"))]
+async fn send_it_too_desktop(_blocks: Vec<datasource::DataUpdate>) {
+	log!("Got some results....! yay they're already in the right place.");
+}
+
+#[cfg(not(target_arch="wasm32"))]
 #[derive(Component)]
 struct SourceDataTask(bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>);
 
 
-fn send_it_to_main(blocks: Vec<datasource::DataUpdate>) -> () //+ Send + Sync + 'static
+fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) -> () //+ Send + Sync + 'static
 {
-	web_sys::console::log_1(&format!("got a block!!!").into());
+	log!("got a block!!!");
 }
 
 fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
@@ -392,8 +400,8 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
 	mut spec: ResMut<UrlBar>,
-	#[cfg(not(target_arch="wasm32"))]
-	writer: EventWriter<DataSourceStreamEvent>,
+	// #[cfg(not(target_arch="wasm32"))]
+	// writer: EventWriter<DataSourceStreamEvent>,
 ) {
 	for event in datasource_events.iter() {
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
@@ -427,7 +435,13 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 		// }
 
 		log!("event source {}", event.source);
-		sovereigns.default_track_speed = if is_live { 0.1 } else { 0.7 };
+		#[cfg(target_arch="wasm32")]
+		const HIST_SPEED: f32 = 0.05;
+		#[cfg(not(target_arch="wasm32"))]
+		const HIST_SPEED: f32 = 0.7;
+		log!("is live {}", is_live);
+		sovereigns.default_track_speed = if is_live { 0.1 } else { HIST_SPEED };
+		
 		log!("tracking speed set to {}", sovereigns.default_track_speed);
 		let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 			(DotUrl::default(), None)
@@ -492,17 +506,35 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 		for relay in relays.iter() {
 			let mut sov_relay = vec![];			
 			for chain in relay.iter() {
-				web_sys::console::log_1(&format!("set soverign index to {} {}", chain.info.chain_index, chain.info.chain_url).into());
+				log!("set soverign index to {} {}", chain.info.chain_index, chain.info.chain_url);
 				sov_relay.push(chain.info.clone());
 			}
 			sovereigns.relays.push(sov_relay);
 		}
 
-		//do_datasources(relays, as_of);
+		// #[cfg(not(target_arch="wasm32"))]
+		// // let t = async move |_| {
+		// // 	log!("Got some results....! yay they're already in the right place.");
+		// // 	// UPDATE_QUEUE.lock().unwrap().extend(result);
+		// // };
+		// async fn send_it_too_desktop(blocks: Vec<datasource::DataUpdate>) {
+		// 	log!("Got some results....! yay they're already in the right place.");
+		// }
 
+		#[cfg(not(target_arch="wasm32"))]
+		let thread_pool = AsyncComputeTaskPool::get();
+
+		#[cfg(not(target_arch="wasm32"))]
+		let data_source_task = thread_pool.spawn_local(
+			do_datasources(relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect() ).collect(), as_of, &send_it_too_desktop));
+		#[cfg(not(target_arch="wasm32"))]
+		data_source_task.detach();
+
+		#[cfg(target_arch="wasm32")]
 		let t = async move || {
-			web_sys::console::log_1(&format!("send to bridge").into());
+			log("send to bridge");
 
+			#[cfg(target_arch="wasm32")]
 			 use gloo_worker::WorkerBridge;
 			#[cfg(target_arch="wasm32")]
 			let bridge : WorkerBridge<IOWorker>
@@ -523,10 +555,10 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f,'g,'h,'i>(
 			}
 		};
 
+		#[cfg(target_arch="wasm32")]
 		wasm_bindgen_futures::spawn_local(t());
-
-
-		web_sys::console::log_1(&format!("sent to bridge").into());
+		#[cfg(target_arch="wasm32")]
+		log!("sent to bridge");
 	}
 }
 use core::future::Future;
@@ -540,8 +572,6 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 {
 	// #[cfg(not(feature="wasm32"))]
 	// AsyncComputeTaskPool::init();
-	// #[cfg(not(feature="wasm32"))]
-	// let thread_pool = AsyncComputeTaskPool::get();
 	// let callback = callback;
 
 	for relay in relays.into_iter() {
@@ -582,11 +612,12 @@ async fn do_datasources<F, R>(relays: Vec<Vec<ChainInfo>>,
 
 			//let block_watcher = Box::leak(Box::new(block_watcher));
 
+			#[cfg(target_arch="wasm32")]
 			wasm_bindgen_futures::spawn_local(block_watcher.watch_blocks());
-			//block_watcher.watch_blocks()
-			// let data_source_task = thread_pool.spawn_local(
-			// 	block_watcher.watch_blocks());
-			// data_source_task.detach();
+
+			#[cfg(not(target_arch="wasm32"))]
+			block_watcher.watch_blocks().await;
+			
 
 			// use crate::datasource::Source;
 
@@ -959,7 +990,7 @@ fn render_block(
 					}
 
 					let chain_info = chain_info.unwrap();
-											web_sys::console::log_1(&format!("got results on main rendere with chain info").into());
+					log!("got results on main rendere with chain info");
 
 					BLOCKS.fetch_add(1, Ordering::Relaxed);
 
@@ -988,7 +1019,7 @@ log!(
 					let mut base_time = *BASETIME.lock().unwrap();
 					if base_time == 0 {
 						base_time = block.timestamp.unwrap_or(0);
-						web_sys::console::log_1(&format!("BASETIME set to {}", base_time).into());
+						log!("BASETIME set to {}", base_time);
 						*BASETIME.lock().unwrap() = base_time;
 					}
 
@@ -2033,6 +2064,8 @@ pub mod html_body {
     // }
 }
 
+
+#[cfg(target_arch="wasm32")]
 use bevy::input::mouse::MouseButtonInput;
 // use bevy::prelude::*;
 
@@ -2076,9 +2109,10 @@ use wasm_bindgen::JsCast;
 
 #[cfg(target_arch="wasm32")]
 use gloo::events::EventListener;
+
+#[cfg(target_arch="wasm32")]
 use std::sync::{
     atomic::{Ordering::SeqCst},
-    
 };
 
 #[cfg(target_arch="wasm32")]
@@ -2181,6 +2215,7 @@ pub enum BridgeMessage {
 	GetNewBlocks,
 }
 
+#[cfg(target_arch="wasm32")]
 use gloo_worker::WorkerScope;
 
 #[cfg(target_arch="wasm32")]
