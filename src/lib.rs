@@ -89,7 +89,7 @@ impl Default for MovementSettings {
 }
 
 /// Distance vertically between layer 0 and layer 1
-const LAYER_GAP: f32 = 10.;
+const LAYER_GAP: f32 = 5.;
 use lazy_static::lazy_static;
 
 // The time by which all times should be placed relative to each other on the x axis.
@@ -957,7 +957,7 @@ fn render_block(
 					}
 
 					let chain_info = chain_info.unwrap();
-					log!("got results on main rendere with chain info");
+					// log!("got results on main rendere with chain info");
 
 					BLOCKS.fetch_add(1, Ordering::Relaxed);
 
@@ -968,7 +968,7 @@ fn render_block(
 					// 	EXTRINSICS.load(Ordering::Relaxed),
 					// 	EVENTS.load(Ordering::Relaxed)
 					// );
-					log!("block rend chain index {}", chain_info.chain_index);
+					// log!("block rend chain index {}", chain_info.chain_index);
 
 					// Skip data we no longer care about because the datasource has changed
 					let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
