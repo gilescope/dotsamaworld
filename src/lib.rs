@@ -39,10 +39,10 @@ use std::{
 	},
 };
 
-use bevy_instancing::prelude::{
-    ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
-    InstanceCompute, InstanceComputePlugin, InstanceSlice, InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin
-};
+// use bevy_instancing::prelude::{
+//     ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
+//     InstanceCompute, InstanceComputePlugin, InstanceSlice, InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin
+// };
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::tasks::AsyncComputeTaskPool;
 #[cfg(feature = "atmosphere")]
@@ -1186,6 +1186,7 @@ fn render_block(
 						&mut polyline_materials,
 						&mut polylines,
 						&encoded,
+						&mut handles
 					);
 
 					add_blocks(
@@ -1201,6 +1202,7 @@ fn render_block(
 						&mut polyline_materials,
 						&mut polylines,
 						&encoded,
+						&mut handles
 					);
 					event.send(RequestRedraw);
 				},
@@ -1231,19 +1233,12 @@ fn add_blocks<'a>(
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
+	mut handles: &mut ResMut<ResourceHandles>
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
 
-	let mesh = meshes.add(Mesh::from(shape::Icosphere { radius: 0.40, subdivisions: 32 }));
-	let mesh_xcm = meshes.add(Mesh::from(shape::Torus {
-		radius: 0.6,
-		ring_radius: 0.4,
-		subdivisions_segments: 20,
-		subdivisions_sides: 10,
-	}));
-	let mesh_extrinsic = meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)));
 	let mut mat_map = HashMap::new();
 
 	let layer = chain_info.chain_url.layer() as f32;
@@ -1291,11 +1286,11 @@ fn add_blocks<'a>(
 					})
 				});
 				let mesh = if content::is_message(&block) {
-					mesh_xcm.clone()
+					handles.xcm_torus_mesh.clone()
 				} else if matches!(block, DataEntity::Extrinsic { .. }) {
-					mesh_extrinsic.clone()
+					handles.extrinsic_mesh.clone()
 				} else {
-					mesh.clone()
+					handles.sphere_mesh.clone()
 				};
 
 				let call_data = format!("0x{}", hex::encode(block.as_bytes()));
@@ -1381,10 +1376,6 @@ fn add_blocks<'a>(
 					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
 					.insert(Name::new("Extrinsic"))
 					.insert(MedFi);
-				// .insert(Aabb::from_min_max(
-				//     Vec3::new(0., 0., 0.),
-				//     Vec3::new(1., 1., 1.),
-				// ));
 
 				for source in create_source {
 					bun.insert(source);
@@ -1448,23 +1439,9 @@ fn add_blocks<'a>(
 			});
 
 			let mesh = if content::is_event_message(&entity) {
-				mesh_xcm.clone()
+				handles.xcm_torus_mesh.clone()
 			} else {
-				// let mesh = meshes.add(Mesh::from(shape::Box {
-				//     min_x: 0.,
-				//     max_x: 0.8,
-
-				//     min_y: 0.,
-				//     max_y: 0.8 * height + (height - 1.) * 0.4,
-
-				//     min_z: 0.,
-				//     max_z: 0.8,
-				// }));
-				// let mesh = meshes.add(Mesh::from(shape::Icosphere {
-				//     radius: 0.40,
-				//     subdivisions: 32,
-				// }));
-				mesh.clone()
+				handles.sphere_mesh.clone()
 			};
 			rain_height[event_num % 81] += DOT_HEIGHT; // * height;
 			let target_y = next_y[event_num % 81];
@@ -1833,7 +1810,10 @@ struct ResourceHandles {
 	light: BlockHandles, 
 	dark: BlockHandles,
 	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
-	banner_mesh: Handle<Mesh>
+	banner_mesh: Handle<Mesh>,
+	sphere_mesh: Handle<Mesh>,
+	xcm_torus_mesh: Handle<Mesh>,
+	extrinsic_mesh: Handle<Mesh>
 }
 
 /// set up a simple 3D scene
@@ -1865,7 +1845,15 @@ fn setup(
 		banner_materials: default(),
 		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(
 									Vec2::new(BLOCK, BLOCK * aspect),
-								)))
+								))),
+		sphere_mesh: meshes.add(Mesh::from(shape::Icosphere { radius: 0.40, subdivisions: 32 })),
+		xcm_torus_mesh: meshes.add(Mesh::from(shape::Torus {
+			radius: 0.6,
+			ring_radius: 0.4,
+			subdivisions_segments: 20,
+			subdivisions_sides: 10,
+		})),
+		extrinsic_mesh: meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)))
 	});
 
 	commands.insert_resource(LightsideRectMaterial(materials.add(StandardMaterial {
