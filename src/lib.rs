@@ -38,6 +38,10 @@ use std::{
 	},
 };
 
+use bevy_instancing::prelude::{
+    ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
+    InstanceCompute, InstanceComputePlugin, InstanceSlice, InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin
+};
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::tasks::AsyncComputeTaskPool;
 #[cfg(feature = "atmosphere")]
@@ -227,6 +231,12 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	#[cfg(not(target_arch = "wasm32"))]
 	app.add_plugins(DefaultPlugins);
 
+	// Plugins related to instance rendering...
+	app.add_plugin(IndirectRenderingPlugin)
+        .add_plugin(BasicMaterialPlugin)
+        .add_plugin(CustomMaterialPlugin)
+        .add_plugin(TextureMaterialPlugin);
+
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
 	app.add_event::<DataSourceStreamEvent>();
@@ -293,6 +303,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_system(movement::scroll);
 
 	app.add_startup_system(setup);
+	// app.add_startup_system(load_assets_initial);
 	#[cfg(feature = "spacemouse")]
 	app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
 		scale.rotate_scale = 0.00010;
@@ -648,7 +659,15 @@ async fn do_datasources<F, R>(
 	}
 }
 
+
+struct ChainRectMesh(Handle<Mesh>);
+struct DarksideRectMaterial(Handle<StandardMaterial>);
+struct LightsideRectMaterial(Handle<StandardMaterial>);
+
 fn draw_chain_rect(
+	chain_rect: Res<ChainRectMesh>,
+	light_side: Res<LightsideRectMaterial>,
+	dark_side: Res<DarksideRectMaterial>,
 	chain_info: &ChainInfo,
 	commands: &mut Commands,
 	meshes: &mut ResMut<Assets<Mesh>>,
@@ -662,25 +681,11 @@ fn draw_chain_rect(
 	let is_relay = chain_info.chain_url.is_relay();
 	commands
 		.spawn_bundle(PbrBundle {
-			mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+			mesh: chain_rect.0.clone(),
 			material: if chain_info.chain_url.is_darkside() {
-				materials.add(StandardMaterial {
-					base_color: Color::rgba(0., 0., 0., 0.4),
-					alpha_mode: AlphaMode::Blend,
-					perceptual_roughness: 1.0,
-					reflectance: 0.5,
-					unlit: true,
-					..default()
-				})
+				dark_side.0.clone()
 			} else {
-				materials.add(StandardMaterial {
-					base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
-					alpha_mode: AlphaMode::Blend,
-					perceptual_roughness: 0.08,
-					reflectance: 0.0,
-					unlit: false,
-					..default()
-				})
+				light_side.0.clone()
 			},
 			transform: Transform::from_translation(Vec3::new(
 				(10000. / 2.) - 35.,
@@ -700,9 +705,7 @@ fn draw_chain_rect(
 		})
 		.insert(Name::new("Blockchain"))
 		.insert(ClearMeAlwaysVisible)
-		.insert(bevy::render::view::NoFrustumCulling)
-		// .insert_bundle(PickableBundle::default())
-		;
+		.insert(bevy::render::view::NoFrustumCulling);
 }
 
 fn clear_world(
@@ -921,6 +924,9 @@ fn render_block(
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
+	chain_rect: Res<ChainRectMesh>,
+	light_side: Res<LightsideRectMaterial>,
+	dark_side: Res<DarksideRectMaterial>,
 	// reader: EventReader<DataSourceStreamEvent>,
 ) {
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
@@ -1238,7 +1244,7 @@ fn render_block(
 				},
 				DataUpdate::NewChain(chain_info) => {
 					CHAINS.fetch_add(1, Ordering::Relaxed);
-					draw_chain_rect(&chain_info, &mut commands, &mut meshes, &mut materials)
+					draw_chain_rect(chain_rect, light_side, dark_side, &chain_info, &mut commands, &mut meshes, &mut materials)
 				},
 			}
 		}
@@ -1862,6 +1868,28 @@ fn setup(
 	// asset_server: Res<AssetServer>,
 	mut datasource_events: EventWriter<DataSourceChangedEvent>,
 ) {
+	let chain_rect = meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)));
+    commands.insert_resource(ChainRectMesh(chain_rect));
+
+	commands.insert_resource(DarksideRectMaterial(materials.add(StandardMaterial {
+					base_color: Color::rgba(0., 0., 0., 0.4),
+					alpha_mode: AlphaMode::Blend,
+					perceptual_roughness: 1.0,
+					reflectance: 0.5,
+					unlit: true,
+					..default()
+				})));
+
+	commands.insert_resource(LightsideRectMaterial(materials.add(StandardMaterial {
+					base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
+					alpha_mode: AlphaMode::Blend,
+					perceptual_roughness: 0.08,
+					reflectance: 0.0,
+					unlit: false,
+					..default()
+				})));
+
+
 	// add entities to the world
 	// plane
 
