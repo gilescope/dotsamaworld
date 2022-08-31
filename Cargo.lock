@@ -698,15 +698,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_instancing"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bytemuck",
- "wgpu",
-]
-
-[[package]]
 name = "bevy_internal"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1800,7 +1791,6 @@ dependencies = [
  "bevy_atmosphere",
  "bevy_egui",
  "bevy_flycam",
- "bevy_instancing",
  "bevy_mod_picking",
  "bevy_polyline",
  "bevy_spacemouse",

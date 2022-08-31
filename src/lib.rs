@@ -28,6 +28,7 @@ use crate::movement::Destination;
 use bevy::diagnostic::Diagnostics;
 use bevy::window::RequestRedraw;
 use bevy_polyline::{prelude::*, PolylinePlugin};
+use std::f32::consts::PI;
 // use scale_info::build;
 use std::{
 	collections::HashMap,
@@ -660,9 +661,6 @@ async fn do_datasources<F, R>(
 }
 
 
-struct ChainRectMesh(Handle<Mesh>);
-struct DarksideRectMaterial(Handle<StandardMaterial>);
-struct LightsideRectMaterial(Handle<StandardMaterial>);
 
 fn draw_chain_rect(
 	chain_rect: Res<ChainRectMesh>,
@@ -913,6 +911,13 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
+
+
+struct ChainRectMesh(Handle<Mesh>);
+struct DarksideRectMaterial(Handle<StandardMaterial>);
+struct LightsideRectMaterial(Handle<StandardMaterial>);
+
+
 fn render_block(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -927,6 +932,7 @@ fn render_block(
 	chain_rect: Res<ChainRectMesh>,
 	light_side: Res<LightsideRectMaterial>,
 	dark_side: Res<DarksideRectMaterial>,
+	mut handles: ResMut<ResourceHandles>
 	// reader: EventReader<DataSourceStreamEvent>,
 ) {
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
@@ -1061,10 +1067,10 @@ fn render_block(
 						// block_num);
 
 						let mut bun = commands.spawn_bundle(PbrBundle {
-							mesh: meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.))),
+							mesh: handles.block_mesh.clone(),
 							material: materials.add(StandardMaterial {
 								base_color: style::color_block_number(
-									timestamp_color,
+									timestamp_color,// TODO: material needs to be cached by color
 									chain_info.chain_url.is_darkside(),
 								), // Color::rgba(0., 0., 0., 0.7),
 								alpha_mode: AlphaMode::Blend,
@@ -1077,56 +1083,39 @@ fn render_block(
 						});
 
 						bun.insert(ClearMe);
-						// bun.insert(Aabb::from_min_max(
-						//     Vec3::new(0., 0., 0.),
-						//     Vec3::new(1., 1., 1.),
-						// ));
+						
 
 						let chain_str = details.doturl.chain_str();
 
 						bun.insert(details)
 							.insert(Name::new("Block"))
 							.with_children(|parent| {
-								// let name = chain_info
-								// .chain_name
-								// .replace(" ", "-")
-								// .replace("-Testnet", "");
+								let material_handle = handles.banner_materials.entry(chain_info.chain_index).or_insert_with(|| {
+									// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+									// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
+									#[cfg(target_arch="wasm32")]
+									let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
+									#[cfg(not(target_arch="wasm32"))]
+									let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
 
-								// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
-								// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
-								#[cfg(target_arch="wasm32")]
-								let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
-								#[cfg(not(target_arch="wasm32"))]
-								let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
-
-								let aspect = 1. / 3.;
-
-								// create a new quad mesh. this is what we will apply the
-								// texture to
-								let quad_width = BLOCK;
-								let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-									Vec2::new(quad_width, quad_width * aspect),
-								)));
-
-								// this material renders the texture normally
-								let material_handle = materials.add(StandardMaterial {
-									base_color_texture: Some(texture_handle.clone()),
-									alpha_mode: AlphaMode::Blend,
-									unlit: true, // !block_events.2.inserted_pic,
-									..default()
-								});
-
-								use std::f32::consts::PI;
+									materials.add(StandardMaterial {
+										base_color_texture: Some(texture_handle.clone()),
+										alpha_mode: AlphaMode::Blend,
+										unlit: true,
+										..default()
+									})
+								}).clone();
+								
+								
 								// textured quad - normal
 								let rot =
 									Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
-													// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-													// / 2.0);
+
 								let transform = Transform {
 									translation: Vec3::new(
-										-7., // + (BLOCK_AND_SPACER * block_num as f32),
-										0.1, //1.5
-										0.,  //(BLOCK_AND_SPACER * chain as f32) * rflip,
+										-7.,
+										0.1,
+										0.,
 									),
 									rotation: rot,
 									..default()
@@ -1134,42 +1123,22 @@ fn render_block(
 
 								parent
 									.spawn_bundle(PbrBundle {
-										mesh: quad_handle.clone(),
+										mesh: handles.banner_mesh.clone(),
 										material: material_handle.clone(),
-
 										transform,
 										..default()
 									})
 									.insert(Name::new("BillboardDown"))
 									.insert(ClearMe);
-								// by adding Details to the banners they are cleared down
-								// when we remove every entity with Details.
-
-								// create a new quad mesh. this is what we will apply the
-								// texture to
-								let quad_width = BLOCK;
-								let quad_handle = meshes.add(Mesh::from(shape::Quad::new(
-									Vec2::new(quad_width, quad_width * aspect),
-								)));
-
-								// this material renders the texture normally
-								let material_handle = materials.add(StandardMaterial {
-									base_color_texture: Some(texture_handle.clone()),
-									alpha_mode: AlphaMode::Blend,
-									unlit: true,
-									..default()
-								});
 
 								// textured quad - normal
 								let rot =
 									Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-													// let mut rot = Quat::from_rotation_x(-std::f32::consts::PI
-													// / 2.0);
 								let transform = Transform {
 									translation: Vec3::new(
-										-7., // + (BLOCK_AND_SPACER * block_num as f32),
-										0.1, //1.5
-										0.,  //(BLOCK_AND_SPACER  as f32) * rflip,
+										-7.,
+										0.1,
+										0., 
 									),
 									rotation: rot,
 									..default()
@@ -1177,20 +1146,13 @@ fn render_block(
 
 								parent
 									.spawn_bundle(PbrBundle {
-										mesh: quad_handle.clone(),
-										material: material_handle.clone(),
+										mesh: handles.banner_mesh.clone(),
+										material: material_handle,
 										transform,
 										..default()
 									})
 									.insert(Name::new("BillboardUp"))
 									.insert(ClearMe);
-								// .insert(Aabb::from_min_max(
-								//     Vec3::new(0., 0., 0.),
-								//     Vec3::new(1., 1., 1.),
-								// )); // TODO: should be able to add same component onto 3
-								// different entities maybe?
-
-								//block_events.2.inserted_pic = true;
 							})
 							.insert_bundle(PickableBundle::default());
 					}
@@ -1860,6 +1822,20 @@ pub fn right_click_system(
 	}
 }
 
+struct BlockHandles {
+	
+	// block_material: Handle<StandardMaterial>
+
+}
+
+struct ResourceHandles {
+	block_mesh: Handle<Mesh>,
+	light: BlockHandles, 
+	dark: BlockHandles,
+	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
+	banner_mesh: Handle<Mesh>
+}
+
 /// set up a simple 3D scene
 fn setup(
 	mut commands: Commands,
@@ -1879,6 +1855,18 @@ fn setup(
 					unlit: true,
 					..default()
 				})));
+
+	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
+	let aspect = 1. / 3.;
+	commands.insert_resource(ResourceHandles{
+		block_mesh,
+		light: BlockHandles {  },
+		dark: BlockHandles {  },
+		banner_materials: default(),
+		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(
+									Vec2::new(BLOCK, BLOCK * aspect),
+								)))
+	});
 
 	commands.insert_resource(LightsideRectMaterial(materials.add(StandardMaterial {
 					base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
