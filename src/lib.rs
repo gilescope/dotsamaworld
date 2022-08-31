@@ -1844,10 +1844,10 @@ pub fn right_click_system(
 		for (entity, hover) in click_query.iter() {
 			if hover.hovered() {
 				// Open browser.
-				#[cfg(not(target_arch = "wasm32"))]
-				let details = query_details.get(entity).unwrap();
-				#[cfg(not(target_arch = "wasm32"))]
-				open::that(&details.url).unwrap();
+				// #[cfg(not(target_arch = "wasm32"))]
+				// let details = query_details.get(entity).unwrap();
+				// #[cfg(not(target_arch = "wasm32"))]
+				// open::that(&details.url).unwrap();
 				// picking_events.send(PickingEvent::Clicked(entity));
 			}
 		}

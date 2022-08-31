@@ -5,7 +5,7 @@ authors = []
 edition = "2021"
 repository = "https://github.com/gilescope/dotsamaworld"
 resolver = "2"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+default-run = "app"
 
 [features]
 default = ["normalmouse"]
@@ -27,7 +27,7 @@ async-recursion = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
 futures = "0.3.13"
-winit = { version = "*", features = ["x11"] }
+winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
@@ -99,7 +99,7 @@ bevy_polyline = "0.3"
 
 [target.'cfg(all(not(target_env = "msvc"),not(target_arch = "wasm32")))'.dependencies]
 tikv-jemallocator = "0.5"
-rayon = "*"
+# rayon = "*"
 
 #
 # Dependencies for native only.
@@ -114,7 +114,7 @@ bevy = { version = "0.8", default-features = false, features = [
     "jpeg",
 ] }
 # subxt = { git = "https://github.com/paritytech/subxt.git" }
-open = "1"
+# open = "1"
 polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["wss"]}
 # polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
 #     "wss",
