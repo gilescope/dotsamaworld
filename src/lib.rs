@@ -232,10 +232,10 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_plugins(DefaultPlugins);
 
 	// Plugins related to instance rendering...
-	app.add_plugin(IndirectRenderingPlugin)
-        .add_plugin(BasicMaterialPlugin)
-        .add_plugin(CustomMaterialPlugin)
-        .add_plugin(TextureMaterialPlugin);
+	// app.add_plugin(IndirectRenderingPlugin);
+    // app.add_plugin(BasicMaterialPlugin)
+    //       .add_plugin(CustomMaterialPlugin)
+    //       .add_plugin(TextureMaterialPlugin);
 
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
