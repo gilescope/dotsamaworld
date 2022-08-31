@@ -26,7 +26,7 @@ async-trait = "0.1"
 async-recursion = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
-futures = "0.3.13"
+futures = {version = "0.3.13", defalult-features=false, features=[] } 
 winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
@@ -36,13 +36,13 @@ parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", defaul
     "bit-vec",
 ] }
 palette = { version = "0.6.1", features=["libm"], default-features = false } # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
-fastrand = "*"
+fastrand = {version="*",  default-features=false }
 #serde_bytes = "0.11"
-serde = "*"
-serde_json = "*"
-url = "*"
+serde = {version="*",  default-features=false }
+serde_json = {version="*",  default-features=false }
+url = {version="*",  default-features=false }
 # async-tungstenite = "*"
-async-tls = "*"
+async-tls = {version="*",  default-features=false }
 color-eyre = { version = "0.5", default-features = false }
 
 #
@@ -75,7 +75,7 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e5
 #
 # Bevy Dependencies
 #
-egui = {version="0.18"}
+egui = {version="0.18", default-features=false }
 egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
@@ -90,7 +90,7 @@ bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git"
 # bevy-inspector-egui = "0.10"
 
 bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
-bevy_egui = "0.15"
+bevy_egui = {version="0.15", default-features=false}
 # bevy_pkv = "*"
 bevy_polyline = "0.3"
 # bevy_hanabi = "0.2"
