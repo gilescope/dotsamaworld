@@ -1,6 +1,4 @@
-src/coded.rs
 target
-bin
 play.csv
 record.csv
 .old
