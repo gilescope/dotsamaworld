@@ -27,7 +27,6 @@ async-recursion = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
 futures = "0.3.13"
-egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 winit = { version = "*", features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
@@ -76,8 +75,10 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e5
 #
 # Bevy Dependencies
 #
-egui = "0.18"
-# egui_extras = { version = "0.18", features = ["image", "image"] }
+egui = {version="0.18"}
+egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
+# egui extras has a date but not time chooser
+# egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
 # image = { version = "0.24", features = ["jpeg"] }
 bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "c5a2f15" }
 bevy_mod_picking = "0.8"
@@ -106,10 +107,10 @@ rayon = "*"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 chrono = { version = "*", default-features = false }
 bevy = { version = "0.8", default-features = false, features = [
-    "bevy_gltf",
+    # "bevy_gltf",
     "bevy_winit",
     "render",
-    "png",
+    # "png",
     "jpeg",
 ] }
 # subxt = { git = "https://github.com/paritytech/subxt.git" }
