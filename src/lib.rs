@@ -2054,7 +2054,7 @@ use wasm_bindgen::JsCast;
 // use bevy_webgl2::renderer::JsCast;
 
 #[cfg(target_arch = "wasm32")]
-use gloo::events::EventListener;
+use gloo_events::EventListener;
 
 #[cfg(target_arch = "wasm32")]
 use std::sync::atomic::Ordering::SeqCst;

@@ -31,8 +31,8 @@ mod utils;
 // use utils::{flattern};
 //mod cached_source_inc_web;
 
-#[cfg(target_arch = "wasm32")]
-mod cached_source_indexeddb;
+// #[cfg(target_arch = "wasm32")]
+// mod cached_source_indexeddb;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod cached_source;
@@ -42,8 +42,8 @@ mod raw_source;
 pub use cached_source::CachedDataSource;
 //pub use cached_source_inc_web::CachedDataSource;
 
-#[cfg(target_arch = "wasm32")]
-pub use cached_source_indexeddb::CachedDataSource;
+// #[cfg(target_arch = "wasm32")]
+// pub use cached_source_indexeddb::CachedDataSource;
 pub use raw_source::{RawDataSource, Source};
 
 macro_rules! log {

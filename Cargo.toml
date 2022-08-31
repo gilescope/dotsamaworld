@@ -15,12 +15,12 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
-primitive-types = {version="0.11", features=["serde"]} 
-log = "0.4.14"
+primitive-types = {version="0.11", default-features = false, features=["serde_no_std"]} # alt serde_no_std 
+log = {version = "0.4.14", default-features = false }
 async-std = { version = "1.12.0", features = [
-    "attributes",
-    "tokio1",
-    "async-channel",
+    # "attributes",
+    # "tokio1",
+    # "async-channel",
 ] }
 async-trait = "0.1"
 async-recursion = "*"
@@ -77,8 +77,8 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e5
 # Bevy Dependencies
 #
 egui = "0.18"
-egui_extras = { version = "0.18", features = ["image", "image"] }
-image = { version = "0.24", features = ["jpeg"] }
+# egui_extras = { version = "0.18", features = ["image", "image"] }
+# image = { version = "0.24", features = ["jpeg"] }
 bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "c5a2f15" }
 bevy_mod_picking = "0.8"
 # bevy-inspector-egui-derive = "*"
@@ -128,7 +128,7 @@ async-tungstenite = { version = "0.15.0", default-features = true, features = [
 #
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # rexie is for indexeddb web caching
-rexie = "0.4"
+# rexie = "0.4"
 console_log = "*"
 console_error_panic_hook = "0.1"
 chrono = { version = "*", default-features = false, features = ["wasmbind"] }
@@ -142,17 +142,17 @@ polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf50991806
 #     "ws-web",
 # ] }
 
-gloo = "*"
 # wee_alloc = "0.4.5"
+gloo-events = "0.1"
 gloo-worker = "0.2.1"
 wasm-bindgen-futures = "*"
 bevy_web_asset = "0.4"
 bevy_tasks = "0.8"
 bevy = { version = "0.8", default-features = false, features = [
-    "bevy_gltf",
+    # "bevy_gltf",
     "bevy_winit",
     "render",
-    "png",
+    # "png",
     "jpeg",
 ] }
 # bevy_webgl2 = "*"
@@ -193,10 +193,13 @@ features = [
 opt-level = 1
 
 [profile.release]
-
-
-# lto = true
-# opt-level = 's'
+lto = true
+opt-level = 's'
+debuginfo = 0
+strip="debuginfo" # strip symbols brakes it findong the worker.
+codegen-units = 1
+panic="abort"
+incremental=false
 
 
 [profile.dev.package.backtrace]
