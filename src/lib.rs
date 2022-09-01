@@ -478,7 +478,7 @@ fn source_data(
 					.as_slice()
 					.iter()
 					.enumerate()
-					.filter_map(|(chain_index, (para_id, chain_name))| {
+					.map(|(chain_index, (para_id, chain_name))| {
 						let url = chain_name_to_url(chain_name);
 
 						// #[cfg(not(target_arch="wasm32"))]
@@ -492,7 +492,7 @@ fn source_data(
 						// }
 						//let para_id = para_id.unwrap();
 
-						Some(
+					
 							// Chain {
 							// shared: send_it_to_main,
 							// // name: chain_name.to_string(),
@@ -507,8 +507,7 @@ fn source_data(
 								},
 								chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
 								// chain_name: parachain_name,
-							},
-						)
+							}
 					})
 					.collect::<Vec<ChainInfo>>()
 			})
@@ -2016,8 +2015,8 @@ pub mod html_body {
 		// From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
 		let window = web_sys::window().expect("no global `window` exists");
 		let document = window.document().expect("should have a document on window");
-		let body = document.body().expect("document should have a body");
-		body
+		
+		document.body().expect("document should have a body")
 	}
 
 	// Browser provides esc as an escape anyhow.
