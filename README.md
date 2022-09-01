@@ -55,11 +55,11 @@ There's probably some prerequites but if you have nix or run nixos then you can 
 
 ## Build and serve WASM version
 
-trunk serve
+trunk serve --release
 
 ## Build and run native version
 ```
-cargo run --bin app
+cargo run --release
 ```
 
 You will need to change Cargo.toml to wayland if your using that - at the moment it's set to X11.
