@@ -49,32 +49,32 @@ pub fn ui_bars_system(
 				ui.separator();
 
 				// if inspector.selected.is_some() {
-					// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
+				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
 
-					// #[cfg(target_arch = "wasm32")]
-					// let maybe_bytes: Option<Vec<u8>> = None;
-					// let maybe_bytes = {
-					// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
-					// 	use wasm_bindgen::JsCast;
-					// 	use wasm_bindgen_futures::JsFuture;
-					// 	let window = web_sys::window().unwrap();
-					// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
-					// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
-					// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
-					// 	Some(js_sys::Uint8Array::new(&data).to_vec())
-					// };
+				// #[cfg(target_arch = "wasm32")]
+				// let maybe_bytes: Option<Vec<u8>> = None;
+				// let maybe_bytes = {
+				// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
+				// 	use wasm_bindgen::JsCast;
+				// 	use wasm_bindgen_futures::JsFuture;
+				// 	let window = web_sys::window().unwrap();
+				// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
+				// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
+				// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
+				// 	Some(js_sys::Uint8Array::new(&data).to_vec())
+				// };
 
-					// #[cfg(not(target_arch = "wasm32"))]
-					// let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
+				// #[cfg(not(target_arch = "wasm32"))]
+				// let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
 
-					// if let Some(bytes) = maybe_bytes {
-					// 	let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
-					// 	let _texture: &egui::TextureHandle =
-					// 		inspector.texture.get_or_insert_with(|| {
-					// 			// Load the texture only once.
-					// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
-					// 		});
-					// }
+				// if let Some(bytes) = maybe_bytes {
+				// 	let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
+				// 	let _texture: &egui::TextureHandle =
+				// 		inspector.texture.get_or_insert_with(|| {
+				// 			// Load the texture only once.
+				// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
+				// 		});
+				// }
 				// }
 
 				if let Some(selected) = &inspector.selected {
@@ -146,11 +146,13 @@ pub fn ui_bars_system(
 					if spec.find.len() <= 4 {
 						if let Ok(para_id) = spec.find.parse() {
 							for (loc, details) in entities.iter() {
-								if details.doturl.para_id == Some(para_id) && details.doturl.block_number.is_some() {
-        										destination.location = Some(loc.translation());
-        										inspector.selected = Some(details.clone());
-        										found += 1;
-        									}
+								if details.doturl.para_id == Some(para_id) &&
+									details.doturl.block_number.is_some()
+								{
+									destination.location = Some(loc.translation());
+									inspector.selected = Some(details.clone());
+									found += 1;
+								}
 							}
 						}
 					}

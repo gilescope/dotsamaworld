@@ -1,6 +1,6 @@
 // use async_std::stream::StreamExt;
 use async_trait::async_trait;
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
@@ -17,12 +17,12 @@ pub struct AgnosticBlock {
 	pub extrinsics: Vec<Vec<u8>>,
 }
 
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 impl AgnosticBlock {
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.encode()
 	}
-	
+
 	pub fn from_bytes(mut bytes: &[u8]) -> Result<Self, parity_scale_codec::Error> {
 		parity_scale_codec::Decode::decode(&mut bytes)
 	}
@@ -451,11 +451,7 @@ impl Source for RawDataSource {
 	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()> {
 		if let Some(client) = self.client().await {
 			if let Some(as_of) = as_of {
-				client
-					.query_metadata(Some(as_of.as_bytes()))
-					.await
-					.map(Some)
-					.map_err(|_e| ())
+				client.query_metadata(Some(as_of.as_bytes())).await.map(Some).map_err(|_e| ())
 			} else {
 				client.query_metadata(None).await.map(Some).map_err(|_e| ())
 			}

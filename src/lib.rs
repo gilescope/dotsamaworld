@@ -7,9 +7,9 @@
 #![feature(stmt_expr_attributes)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
-use serde::{Deserialize, Serialize};
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use core::future::Future;
+use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiPlugin;
@@ -43,8 +43,8 @@ use std::{
 
 // use bevy_instancing::prelude::{
 //     ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
-//     InstanceCompute, InstanceComputePlugin, InstanceSlice, InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin
-// };
+//     InstanceCompute, InstanceComputePlugin, InstanceSlice,
+// InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin };
 
 #[cfg(feature = "atmosphere")]
 use bevy_atmosphere::prelude::*;
@@ -236,9 +236,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 
 	// Plugins related to instance rendering...
 	// app.add_plugin(IndirectRenderingPlugin);
-    // app.add_plugin(BasicMaterialPlugin)
-    //       .add_plugin(CustomMaterialPlugin)
-    //       .add_plugin(TextureMaterialPlugin);
+	// app.add_plugin(BasicMaterialPlugin)
+	//       .add_plugin(CustomMaterialPlugin)
+	//       .add_plugin(TextureMaterialPlugin);
 
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
@@ -492,22 +492,21 @@ fn source_data(
 						// }
 						//let para_id = para_id.unwrap();
 
-					
-							// Chain {
-							// shared: send_it_to_main,
-							// // name: chain_name.to_string(),
-							// info: 
-							ChainInfo {
-								chain_ws: url,
-								// +2 to skip 0 and relay chain.
-								chain_index: if relay_url.is_darkside() {
-									-((chain_index + 2) as isize)
-								} else {
-									(chain_index + 2) as isize
-								},
-								chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
-								// chain_name: parachain_name,
-							}
+						// Chain {
+						// shared: send_it_to_main,
+						// // name: chain_name.to_string(),
+						// info:
+						ChainInfo {
+							chain_ws: url,
+							// +2 to skip 0 and relay chain.
+							chain_index: if relay_url.is_darkside() {
+								-((chain_index + 2) as isize)
+							} else {
+								(chain_index + 2) as isize
+							},
+							chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
+							// chain_name: parachain_name,
+						}
 					})
 					.collect::<Vec<ChainInfo>>()
 			})
@@ -524,10 +523,7 @@ fn source_data(
 		}
 
 		#[cfg(not(target_arch = "wasm32"))]
-		do_datasources(
-			relays,
-			as_of,
-		);
+		do_datasources(relays, as_of);
 
 		#[cfg(target_arch = "wasm32")]
 		let t = async move || {
@@ -562,7 +558,6 @@ fn source_data(
 		log!("sent to bridge");
 	}
 }
-
 
 #[cfg(not(target_arch = "wasm32"))]
 fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
@@ -663,8 +658,6 @@ async fn do_datasources<F, R>(
 	}
 }
 
-
-
 fn draw_chain_rect(
 	chain_rect: Res<ChainRectMesh>,
 	light_side: Res<LightsideRectMaterial>,
@@ -699,7 +692,7 @@ fn draw_chain_rect(
 			..Default::default()
 		})
 		.insert(Details {
-			doturl: DotUrl { block_number:None, ..chain_info.chain_url.clone()},
+			doturl: DotUrl { block_number: None, ..chain_info.chain_url.clone() },
 			flattern: chain_info.chain_ws.to_string(),
 			url: format!("https://polkadot.js.org/apps/?{}", &encoded),
 			..default()
@@ -914,12 +907,9 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
-
-
 struct ChainRectMesh(Handle<Mesh>);
 struct DarksideRectMaterial(Handle<StandardMaterial>);
 struct LightsideRectMaterial(Handle<StandardMaterial>);
-
 
 fn render_block(
 	mut commands: Commands,
@@ -935,8 +925,7 @@ fn render_block(
 	chain_rect: Res<ChainRectMesh>,
 	light_side: Res<LightsideRectMaterial>,
 	dark_side: Res<DarksideRectMaterial>,
-	mut handles: ResMut<ResourceHandles>
-	// reader: EventReader<DataSourceStreamEvent>,
+	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
 ) {
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
 		// web_sys::console::log_1(&format!("check results").into());
@@ -1056,7 +1045,7 @@ fn render_block(
 						let timestamp_color = if chain_info.chain_url.is_relay() {
 							block.timestamp.unwrap()
 						} else {
-							block.timestamp_parent.unwrap_or_else(||block.timestamp.unwrap())
+							block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
 						} / 400;
 
 						let transform = Transform::from_translation(Vec3::new(
@@ -1073,7 +1062,7 @@ fn render_block(
 							mesh: handles.block_mesh.clone(),
 							material: materials.add(StandardMaterial {
 								base_color: style::color_block_number(
-									timestamp_color,// TODO: material needs to be cached by color
+									timestamp_color, // TODO: material needs to be cached by color
 									chain_info.chain_url.is_darkside(),
 								), // Color::rgba(0., 0., 0., 0.7),
 								alpha_mode: AlphaMode::Blend,
@@ -1086,7 +1075,6 @@ fn render_block(
 						});
 
 						bun.insert(ClearMe);
-						
 
 						let chain_str = details.doturl.chain_str();
 
@@ -1108,8 +1096,7 @@ fn render_block(
 										..default()
 									})
 								}).clone();
-								
-								
+
 								// textured quad - normal
 								let rot =
 									Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
@@ -1138,11 +1125,7 @@ fn render_block(
 								let rot =
 									Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
 								let transform = Transform {
-									translation: Vec3::new(
-										-7.,
-										0.1,
-										0., 
-									),
+									translation: Vec3::new(-7.,0.1,0),
 									rotation: rot,
 									..default()
 								};
@@ -1189,7 +1172,7 @@ fn render_block(
 						&mut polyline_materials,
 						&mut polylines,
 						&encoded,
-						&mut handles
+						&mut handles,
 					);
 
 					add_blocks(
@@ -1205,13 +1188,21 @@ fn render_block(
 						&mut polyline_materials,
 						&mut polylines,
 						&encoded,
-						&mut handles
+						&mut handles,
 					);
 					event.send(RequestRedraw);
 				},
 				DataUpdate::NewChain(chain_info) => {
 					CHAINS.fetch_add(1, Ordering::Relaxed);
-					draw_chain_rect(chain_rect, light_side, dark_side, &chain_info, &mut commands, &mut meshes, &mut materials)
+					draw_chain_rect(
+						chain_rect,
+						light_side,
+						dark_side,
+						&chain_info,
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+					)
 				},
 			}
 		}
@@ -1236,7 +1227,7 @@ fn add_blocks(
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
-	handles: &mut ResMut<ResourceHandles>
+	handles: &mut ResMut<ResourceHandles>,
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
@@ -1322,9 +1313,8 @@ fn add_blocks(
 								// Create rainbow from entity to current extrinsic location.
 								commands
 									.spawn_bundle(PolylineBundle {
-										polyline: polylines.add(Polyline {
-											vertices: vertices.clone()
-										}),
+										polyline: polylines
+											.add(Polyline { vertices: vertices.clone() }),
 										material: polyline_materials.add(PolylineMaterial {
 											width: 10.0,
 											color,
@@ -1806,20 +1796,20 @@ pub fn right_click_system(
 }
 
 // struct BlockHandles {
-	
+
 // 	// block_material: Handle<StandardMaterial>
 
 // }
 
 struct ResourceHandles {
 	block_mesh: Handle<Mesh>,
-	// light: BlockHandles, 
+	// light: BlockHandles,
 	// dark: BlockHandles,
 	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
 	banner_mesh: Handle<Mesh>,
 	sphere_mesh: Handle<Mesh>,
 	xcm_torus_mesh: Handle<Mesh>,
-	extrinsic_mesh: Handle<Mesh>
+	extrinsic_mesh: Handle<Mesh>,
 }
 
 /// set up a simple 3D scene
@@ -1831,27 +1821,25 @@ fn setup(
 	mut datasource_events: EventWriter<DataSourceChangedEvent>,
 ) {
 	let chain_rect = meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)));
-    commands.insert_resource(ChainRectMesh(chain_rect));
+	commands.insert_resource(ChainRectMesh(chain_rect));
 
 	commands.insert_resource(DarksideRectMaterial(materials.add(StandardMaterial {
-					base_color: Color::rgba(0., 0., 0., 0.4),
-					alpha_mode: AlphaMode::Blend,
-					perceptual_roughness: 1.0,
-					reflectance: 0.5,
-					unlit: true,
-					..default()
-				})));
+		base_color: Color::rgba(0., 0., 0., 0.4),
+		alpha_mode: AlphaMode::Blend,
+		perceptual_roughness: 1.0,
+		reflectance: 0.5,
+		unlit: true,
+		..default()
+	})));
 
 	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
 	let aspect = 1. / 3.;
-	commands.insert_resource(ResourceHandles{
+	commands.insert_resource(ResourceHandles {
 		block_mesh,
 		// light: BlockHandles {  },
 		// dark: BlockHandles {  },
 		banner_materials: default(),
-		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(
-									Vec2::new(BLOCK, BLOCK * aspect),
-								))),
+		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(Vec2::new(BLOCK, BLOCK * aspect)))),
 		sphere_mesh: meshes.add(Mesh::from(shape::Icosphere { radius: 0.40, subdivisions: 32 })),
 		xcm_torus_mesh: meshes.add(Mesh::from(shape::Torus {
 			radius: 0.6,
@@ -1859,18 +1847,17 @@ fn setup(
 			subdivisions_segments: 20,
 			subdivisions_sides: 10,
 		})),
-		extrinsic_mesh: meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8)))
+		extrinsic_mesh: meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8))),
 	});
 
 	commands.insert_resource(LightsideRectMaterial(materials.add(StandardMaterial {
-					base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
-					alpha_mode: AlphaMode::Blend,
-					perceptual_roughness: 0.08,
-					reflectance: 0.0,
-					unlit: false,
-					..default()
-				})));
-
+		base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
+		alpha_mode: AlphaMode::Blend,
+		perceptual_roughness: 0.08,
+		reflectance: 0.0,
+		unlit: false,
+		..default()
+	})));
 
 	// add entities to the world
 	// plane
@@ -2015,7 +2002,7 @@ pub mod html_body {
 		// From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
 		let window = web_sys::window().expect("no global `window` exists");
 		let document = window.document().expect("should have a document on window");
-		
+
 		document.body().expect("document should have a body")
 	}
 
