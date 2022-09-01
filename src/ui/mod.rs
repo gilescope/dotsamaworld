@@ -146,13 +146,11 @@ pub fn ui_bars_system(
 					if spec.find.len() <= 4 {
 						if let Ok(para_id) = spec.find.parse() {
 							for (loc, details) in entities.iter() {
-								if details.doturl.para_id == Some(para_id) {
-									if details.doturl.block_number.is_some() {
-										destination.location = Some(loc.translation());
-										inspector.selected = Some(details.clone());
-										found += 1;
-									}
-								}
+								if details.doturl.para_id == Some(para_id) && details.doturl.block_number.is_some() {
+        										destination.location = Some(loc.translation());
+        										inspector.selected = Some(details.clone());
+        										found += 1;
+        									}
 							}
 						}
 					}
@@ -256,13 +254,12 @@ pub struct UrlBar {
 impl UrlBar {
 	pub fn new(location: String, timestamp: NaiveDateTime) -> Self {
 		let loc_clone = location.clone();
-		let time_clone = timestamp.clone();
 		Self {
 			location,
 			was_location: loc_clone,
 			find: String::new(),
 			timestamp,
-			was_timestamp: time_clone,
+			was_timestamp: timestamp,
 			env: Env::Prod,
 			was_env: Env::Prod,
 		}
@@ -283,7 +280,7 @@ impl UrlBar {
 
 	pub fn reset_changed(&mut self) {
 		self.was_location = self.location.clone();
-		self.was_timestamp = self.timestamp.clone();
+		self.was_timestamp = self.timestamp;
 		self.was_env = self.env.clone();
 	}
 }

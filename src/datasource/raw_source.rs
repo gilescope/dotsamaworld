@@ -1,5 +1,6 @@
 // use async_std::stream::StreamExt;
 use async_trait::async_trait;
+#[cfg(not(target_arch="wasm32"))]
 use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
@@ -16,11 +17,12 @@ pub struct AgnosticBlock {
 	pub extrinsics: Vec<Vec<u8>>,
 }
 
+#[cfg(not(target_arch="wasm32"))]
 impl AgnosticBlock {
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.encode()
 	}
-
+	
 	pub fn from_bytes(mut bytes: &[u8]) -> Result<Self, parity_scale_codec::Error> {
 		parity_scale_codec::Decode::decode(&mut bytes)
 	}
@@ -330,7 +332,7 @@ impl Source for RawDataSource {
 		if let Some(client) = self.client().await {
 			// log!("got client");
 			client
-				.query_block_hash(&vec![block_number])
+				.query_block_hash(&[block_number])
 				.await
 				.map(|res| Some(H256::from_slice(&res[..])))
 		} else {
@@ -367,7 +369,7 @@ impl Source for RawDataSource {
 								num = format!("0{}", num);
 							}
 
-							let bytes = hex::decode(&num).unwrap();
+							let _bytes = hex::decode(&num).unwrap();
 
 						//	bytes.reverse(); //TODO: why is this needed? it gets the right number but...
 							/* while bytes.len() < 4 {
@@ -437,9 +439,9 @@ impl Source for RawDataSource {
 	) -> Result<Option<Vec<u8>>, BError> {
 		if let Some(client) = self.client().await {
 			if let Some(as_of) = as_of {
-				client.query_storage(key, Some(as_of.as_bytes())).await.map(|r| Some(r))
+				client.query_storage(key, Some(as_of.as_bytes())).await.map(Some)
 			} else {
-				client.query_storage(key, None).await.map(|r| Some(r))
+				client.query_storage(key, None).await.map(Some)
 			}
 		} else {
 			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
@@ -452,10 +454,10 @@ impl Source for RawDataSource {
 				client
 					.query_metadata(Some(as_of.as_bytes()))
 					.await
-					.map(|r| Some(r))
+					.map(Some)
 					.map_err(|_e| ())
 			} else {
-				client.query_metadata(None).await.map(|r| Some(r)).map_err(|_e| ())
+				client.query_metadata(None).await.map(Some).map_err(|_e| ())
 			}
 		} else {
 			Err(())

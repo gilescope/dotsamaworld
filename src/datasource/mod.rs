@@ -13,18 +13,25 @@ use bevy::prelude::warn;
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use std::{
-	collections::{hash_map::DefaultHasher, HashMap},
+	collections::{ HashMap},
 	convert::TryFrom,
-	hash::Hash,
+	
 	num::NonZeroU32,
 	sync::atomic::Ordering,
 	time::Duration,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::{
+	hash::Hash,
+	collections::hash_map::DefaultHasher
+};
+
 //  use bevy::ecs::event::EventWriter;
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
-use scale_value::Value;
+// use scale_value::Value;
 // use scale_value::*;
 mod time_predictor;
 mod utils;
@@ -52,6 +59,7 @@ macro_rules! log {
     ($($t:tt)*) => (super::log(&format_args!($($t)*).to_string()))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn please_hash<T: Hash>(val: &T) -> u64 {
 	use std::hash::Hasher;
 	let mut hasher = DefaultHasher::default();
@@ -64,7 +72,7 @@ async fn get_metadata<S: Source>(
 	version: Option<(String, H256)>,
 ) -> Option<frame_metadata::RuntimeMetadataPrefixed> {
 	let url = source.url().to_string();
-	let hash = please_hash(&url);
+	// let _hash = please_hash(&url);
 
 	// let mut metadata_path = format!("target/{hash}.metadata.scale");
 	let as_of = if let Some((_version, hash)) = version {
@@ -196,7 +204,7 @@ async fn get_metadata_version(
 			}
 		},
 	};
-	call.map(|data| hex::encode(data))
+	call.map(hex::encode)
 }
 
 // pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<String> {
@@ -245,7 +253,7 @@ where
 		// H256)>>>,
 
 		// mut source: S,
-	) -> ()
+	)
 //Result<(), Box<dyn std::error::Error + Sync + Send>> 
 	//where S: Source
 	{
@@ -267,7 +275,7 @@ where
 		#[cfg(target_arch = "wasm32")]
 		let mut source = RawDataSource::new(url);
 
-		let para_id = chain_info.chain_url.para_id.clone();
+		let para_id = chain_info.chain_url.para_id;
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
@@ -301,7 +309,7 @@ where
 					)
 					.await;
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						return () //Ok(())
+						return  //Ok(())
 					}
 					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
 						async_std::task::sleep(Duration::from_secs(2)).await;
@@ -405,7 +413,7 @@ where
 					};
 					// check for stop signal
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						return () //Ok(())
+						return  //Ok(())
 					}
 
 					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -434,7 +442,7 @@ where
 						// check for stop signal
 						if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 							log!("epoc has changed, ending for {:?}.", as_of);
-							return () //Ok(())
+							return  //Ok(())
 						}
 
 						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -535,7 +543,7 @@ where
 			}
 		}
 		let (events, _start_link) =
-			get_events_for_block(source, block_hash, &sender, &blockurl, &metad, timestamp.clone())
+			get_events_for_block(source, block_hash, sender, &blockurl, &metad, timestamp)
 				.await
 				.or(Err(()))?;
 
@@ -543,12 +551,12 @@ where
 
 		//Can't decode time https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fkhala-rpc.dwellir.com#/explorer/query/900909
 		//debug_assert!(timestamp.is_some(), "events found {:?}", extrinsics.len());
-		if let None = timestamp {
+		if timestamp.is_none() {
 			timestamp = timestamp_parent; // aproximation
 		}
 		let current = PolkaBlock {
 			data_epoc: our_data_epoc,
-			timestamp: timestamp.clone(),
+			timestamp,
 			timestamp_parent,
 			blockurl,
 			blockhash: block_hash,
@@ -570,7 +578,7 @@ async fn find_timestamp<S: Source>(
 ) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
-			let result = polkadyn::decode_extrinsic(&metad, encoded_extrinsic.as_slice());
+			let result = polkadyn::decode_extrinsic(metad, encoded_extrinsic.as_slice());
 			if let Ok(extrinsic) = result {
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic, true);
 				if let Some(scale_borrow::Value::U64(val)) =
@@ -610,7 +618,7 @@ async fn process_extrisic<'a, 'scale>(
 	extrinsic_url: DotUrl,
 	url: &str,
 ) -> Option<DataEntity> {
-	let block_number = extrinsic_url.block_number.unwrap();
+	// let _block_number = extrinsic_url.block_number.unwrap();
 	// let para_id = extrinsic_url.para_id.clone();
 	// let s : String = ext_bytes;
 	// ext_bytes.using_encoded(|ref slice| {
@@ -673,17 +681,17 @@ async fn process_extrisic<'a, 'scale>(
 		}
 
 		if (pallet, variant) == ("ParachainSystem", "set_validation_data") {
-			let s = format!("{:?}", &payload);
+			// let _s = format!("{:?}", &payload);
 
-			if let Some(_) = payload.find2("data", "upward_messages") {
+			if payload.find2("data", "upward_messages").is_some() {
 				println!("found upward msgs (first time)");
 			}
 			if let Some(channels) = payload.find2("data", "horizontal_messages") {
 				// println!("found horizontal_messages msgs (first time)");
-				for (ch_index, msg) in channels {
+				for (_ch_index, msg) in channels {
 					// println!("found {:?} and msg {:?}", ch_index, msg);
-					for (msg_index, val) in msg {
-						for (val_name, inner_val) in val {
+					for (_msg_index, val) in msg {
+						for (_val_name, inner_val) in val {
 							if let scale_borrow::Value::Object(rows) = inner_val {
 								if rows.len() > 1 {
 									println!("found horiz {}", inner_val);
@@ -709,7 +717,7 @@ async fn process_extrisic<'a, 'scale>(
 
 				for (msg_index, msg) in channels {
 					println!("found {} downward_message is, {}", msg_index, &msg);
-					if let (Some(msg), Some(sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
+					if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
 						if let scale_borrow::Value::ScaleOwned(bytes) = msg {
 							let v = polkadyn::decode_xcm(meta, &bytes[2..]).unwrap();
 							println!("xcm msgv= {}", v);
@@ -735,7 +743,7 @@ async fn process_extrisic<'a, 'scale>(
 									});
 
 									if *instruction == "TransferAsset" {
-										if let Some(dest) = payload.get("dest") {}
+										if let Some(_dest) = payload.get("dest") {}
 										// panic!();
 									}
 								}
@@ -759,7 +767,7 @@ async fn process_extrisic<'a, 'scale>(
 									});
 
 									if *instruction == "TransferAsset" {
-										if let Some(dest) = payload.get("dest") {}
+										if let Some(_dest) = payload.get("dest") {}
 										// panic!();
 									}
 								}
@@ -783,7 +791,7 @@ async fn process_extrisic<'a, 'scale>(
 									});
 
 									if *instruction == "TransferAsset" {
-										if let Some(dest) = payload.get("dest") {}
+										if let Some(_dest) = payload.get("dest") {}
 										// panic!();
 									}
 								}
@@ -1182,11 +1190,11 @@ async fn process_extrisic<'a, 'scale>(
 	// extrinsic");
 }
 
-async fn check_reserve_asset<'a, 'b>(
-	args: &Vec<Value<()>>,
-	extrinsic_url: &DotUrl,
-	start_link: &'b mut Vec<(String, LinkType)>,
-) {
+// async fn check_reserve_asset<'a, 'b>(
+// 	_args: &Vec<Value<()>>,
+// 	_extrinsic_url: &DotUrl,
+// 	_start_link: &'b mut Vec<(String, LinkType)>,
+// ) {
 	// let mut flat0 = HashMap::new();
 	// flattern(&args[0].value, "", &mut flat0);
 	// // println!("FLATTERN {:#?}", flat0);
@@ -1233,7 +1241,7 @@ async fn check_reserve_asset<'a, 'b>(
 	// 	}
 	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	// }
-}
+// }
 
 #[derive(Deserialize, Serialize)]
 pub enum DataUpdate {
@@ -1275,7 +1283,7 @@ async fn get_events_for_block(
 	// 	.expect("can decode storage");
 
 	let bytes = source
-		.fetch_storage(&storage_key[..], Some(H256::from(blockhash)))
+		.fetch_storage(&storage_key[..], Some(blockhash))
 		.await
 		.map_err(|_| "oops num 332")?;
 
@@ -1287,7 +1295,7 @@ async fn get_events_for_block(
 			let events: Vec<_> = events
 				.iter()
 				.map(|(phase, event_val)| {
-					(phase, scale_value_to_borrowed::convert(&event_val, true))
+					(phase, scale_value_to_borrowed::convert(event_val, true))
 				})
 				.collect();
 			for (phase, event) in events.iter() {
@@ -1399,7 +1407,7 @@ async fn get_events_for_block(
 			if !inclusions.is_empty() {
 				// For live mode we listen to all parachains for blocks so sender will be none.
 				for (_, hash) in &inclusions {
-					let hash: &[u8] = *hash;
+					let hash: &[u8] = hash;
 					start_links.push((hash.to_vec(), LinkType::ParaInclusion));
 				}
 				if let Some(sender) = sender.as_ref() {

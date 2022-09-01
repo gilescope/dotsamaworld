@@ -50,7 +50,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			// chain_info.chain_url.clone(),
 			block_hash.unwrap(),
 			source,
-			&metad_current,
+			metad_current,
 		)
 		.await
 	}
@@ -76,7 +76,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			// chain_info.chain_url.clone(),
 			block_hash.unwrap(),
 			source,
-			&metad_current,
+			metad_current,
 		)
 		.await
 	}
@@ -105,7 +105,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 			// chain_info.chain_url.clone(),
 			block_hash.unwrap(),
 			source,
-			&metad_current,
+			metad_current,
 		)
 		.await
 	}

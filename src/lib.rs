@@ -8,6 +8,8 @@
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use serde::{Deserialize, Serialize};
+#[cfg(target_arch="wasm32")]
+use core::future::Future;
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiPlugin;
@@ -43,8 +45,7 @@ use std::{
 //     ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
 //     InstanceCompute, InstanceComputePlugin, InstanceSlice, InstanceSliceBundle,BasicMaterialPlugin,TextureMaterialPlugin
 // };
-#[cfg(not(target_arch = "wasm32"))]
-use bevy::tasks::AsyncComputeTaskPool;
+
 #[cfg(feature = "atmosphere")]
 use bevy_atmosphere::prelude::*;
 // use rayon::prelude::*;
@@ -178,10 +179,11 @@ fn log(s: &str) {
 	println!("{}", s);
 }
 
-pub fn main() -> () {
-	let res = async_std::task::block_on(async_main());
+pub fn main() {
+	#[cfg(target_arch = "wasm32")]
+	async_std::task::block_on(async_main());
 	#[cfg(not(target_arch = "wasm32"))]
-	res.unwrap();
+	async_std::task::block_on(async_main()).unwrap();
 }
 
 macro_rules! log {
@@ -203,7 +205,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	#[cfg(not(feature = "wasm32"))]
 	let _ = std::fs::create_dir_all("target");
 
-	let low_power_mode = false;
+	let _low_power_mode = false;
 
 	#[cfg(target_feature = "atomics")]
 	log!("Yay atomics!");
@@ -355,7 +357,7 @@ fn chain_name_to_url(chain_name: &str) -> String {
 	}
 
 	if chain_name[5..].contains(':') {
-		format!("{chain_name}")
+		chain_name.to_string()
 	} else {
 		format!("{chain_name}:443")
 	}
@@ -393,10 +395,10 @@ struct SourceDataTask(
 	bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>,
 );
 
-fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) -> () //+ Send + Sync + 'static
-{
-	log!("got a block!!!");
-}
+// fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) //+ Send + Sync + 'static
+// {
+// 	log!("got a block!!!");
+// }
 
 fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
@@ -459,7 +461,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 		//let as_of = Some(dot_url.clone());
 		log!("Block number selected for relay chains: {:?}", &as_of);
 
-		let networks = networks::get_network(&selected_env);
+		let networks = networks::get_network(selected_env);
 
 		// let is_self_sovereign = selected_env.is_self_sovereign();
 		let relays = networks
@@ -477,7 +479,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 					.iter()
 					.enumerate()
 					.filter_map(|(chain_index, (para_id, chain_name))| {
-						let url = chain_name_to_url(&chain_name);
+						let url = chain_name_to_url(chain_name);
 
 						// #[cfg(not(target_arch="wasm32"))]
 						// let para_id =
@@ -490,10 +492,12 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 						// }
 						//let para_id = para_id.unwrap();
 
-						Some(Chain {
-							shared: send_it_to_main,
-							// name: chain_name.to_string(),
-							info: ChainInfo {
+						Some(
+							// Chain {
+							// shared: send_it_to_main,
+							// // name: chain_name.to_string(),
+							// info: 
+							ChainInfo {
 								chain_ws: url,
 								// +2 to skip 0 and relay chain.
 								chain_index: if relay_url.is_darkside() {
@@ -501,12 +505,12 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 								} else {
 									(chain_index + 2) as isize
 								},
-								chain_url: DotUrl { para_id: para_id.clone(), ..relay_url.clone() },
+								chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
 								// chain_name: parachain_name,
 							},
-						})
+						)
 					})
-					.collect::<Vec<Chain<_>>>()
+					.collect::<Vec<ChainInfo>>()
 			})
 			.collect::<Vec<Vec<_>>>();
 
@@ -514,15 +518,15 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 		for relay in relays.iter() {
 			let mut sov_relay = vec![];
 			for chain in relay.iter() {
-				log!("set soverign index to {} {}", chain.info.chain_index, chain.info.chain_url);
-				sov_relay.push(chain.info.clone());
+				log!("set soverign index to {} {}", chain.chain_index, chain.chain_url);
+				sov_relay.push(chain.clone());
 			}
 			sovereigns.relays.push(sov_relay);
 		}
 
 		#[cfg(not(target_arch = "wasm32"))]
 		do_datasources(
-			relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect()).collect(),
+			relays,
 			as_of,
 		);
 
@@ -542,7 +546,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 			#[cfg(target_arch = "wasm32")]
 			let bridge = Box::leak(Box::new(bridge));
 			bridge.send(BridgeMessage::SetDatasource(
-				relays.iter().map(|r| r.iter().map(|c| c.info.clone()).collect()).collect(),
+				relays,
 				as_of,
 				DATASOURCE_EPOC.load(Ordering::Relaxed),
 			));
@@ -559,7 +563,7 @@ fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
 		log!("sent to bridge");
 	}
 }
-use core::future::Future;
+
 
 #[cfg(not(target_arch = "wasm32"))]
 fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
@@ -668,11 +672,11 @@ fn draw_chain_rect(
 	dark_side: Res<DarksideRectMaterial>,
 	chain_info: &ChainInfo,
 	commands: &mut Commands,
-	meshes: &mut ResMut<Assets<Mesh>>,
-	materials: &mut ResMut<Assets<StandardMaterial>>,
+	_meshes: &mut ResMut<Assets<Mesh>>,
+	_materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
 	let rfip = chain_info.chain_url.rflip();
-	let chain_index = chain_info.chain_index.abs() as usize;
+	let chain_index = chain_info.chain_index.unsigned_abs();
 	let encoded: String = url::form_urlencoded::Serializer::new(String::new())
 		.append_pair("rpc", &chain_info.chain_ws)
 		.finish();
@@ -847,13 +851,13 @@ impl DataEntity {
 
 	pub fn start_link(&self) -> &Vec<(String, LinkType)> {
 		match self {
-			Self::Extrinsic { start_link, .. } => &start_link,
+			Self::Extrinsic { start_link, .. } => start_link,
 			Self::Event(DataEvent { .. }) => &EMPTY_VEC,
 		}
 	}
 	pub fn end_link(&self) -> &Vec<(String, LinkType)> {
 		match self {
-			Self::Extrinsic { end_link, .. } => &end_link,
+			Self::Extrinsic { end_link, .. } => end_link,
 			Self::Event(DataEvent { .. }) => &EMPTY_VEC,
 		}
 	}
@@ -865,13 +869,13 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
-pub struct Chain<F>
-where
-	F:,
-{
-	shared: F,
-	info: ChainInfo,
-}
+// pub struct Chain<F>
+// // where
+// // 	F:,
+// {
+// 	// shared: F,
+// 	info: ChainInfo,
+// }
 
 pub struct Sovereigns {
 	//                            name    para_id             url
@@ -1075,7 +1079,7 @@ fn render_block(
 								), // Color::rgba(0., 0., 0., 0.7),
 								alpha_mode: AlphaMode::Blend,
 								perceptual_roughness: 0.08,
-								unlit: if block.blockurl.is_darkside() { true } else { false },
+								unlit: block.blockurl.is_darkside(),
 								..default()
 							}),
 							transform,
@@ -1099,7 +1103,7 @@ fn render_block(
 									let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
 
 									materials.add(StandardMaterial {
-										base_color_texture: Some(texture_handle.clone()),
+										base_color_texture: Some(texture_handle),
 										alpha_mode: AlphaMode::Blend,
 										unlit: true,
 										..default()
@@ -1174,7 +1178,7 @@ fn render_block(
 						});
 
 					add_blocks(
-						&chain_info,
+						chain_info,
 						block_num,
 						fun,
 						&mut commands,
@@ -1190,7 +1194,7 @@ fn render_block(
 					);
 
 					add_blocks(
-						&chain_info,
+						chain_info,
 						block_num,
 						boring,
 						&mut commands,
@@ -1225,7 +1229,7 @@ fn add_blocks<'a>(
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
 	commands: &mut Commands,
-	meshes: &mut ResMut<Assets<Mesh>>,
+	_meshes: &mut ResMut<Assets<Mesh>>,
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	block_hash: &H256,
@@ -1233,7 +1237,7 @@ fn add_blocks<'a>(
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
-	mut handles: &mut ResMut<ResourceHandles>
+	handles: &mut ResMut<ResourceHandles>
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
@@ -1271,21 +1275,21 @@ fn add_blocks<'a>(
 				let target_y = next_y[event_num % 81];
 				next_y[event_num % 81] += DOT_HEIGHT;
 				let dark = block.details().doturl.is_darkside();
-				let style = style::style_event(&block);
+				let style = style::style_event(block);
 				let material = mat_map.entry(style.clone()).or_insert_with(|| {
 					materials.add(if dark {
 						StandardMaterial {
-							base_color: style.color.clone(),
-							emissive: style.color.clone(),
+							base_color: style.color,
+							emissive: style.color,
 							perceptual_roughness: 0.3,
 							metallic: 1.0,
 							..default()
 						}
 					} else {
-						style.color.clone().into()
+						style.color.into()
 					})
 				});
-				let mesh = if content::is_message(&block) {
+				let mesh = if content::is_message(block) {
 					handles.xcm_torus_mesh.clone()
 				} else if matches!(block, DataEntity::Extrinsic { .. }) {
 					handles.extrinsic_mesh.clone()
@@ -1427,14 +1431,14 @@ fn add_blocks<'a>(
 			let material = mat_map.entry(style.clone()).or_insert_with(|| {
 				materials.add(if dark {
 					StandardMaterial {
-						base_color: style.color.clone(),
-						emissive: style.color.clone(),
+						base_color: style.color,
+						emissive: style.color,
 						perceptual_roughness: 0.3,
 						metallic: 1.0,
 						..default()
 					}
 				} else {
-					style.color.clone().into()
+					style.color.into()
 				})
 			});
 
@@ -1482,7 +1486,6 @@ fn add_blocks<'a>(
 
 /// Yes this is now a verb. Who knew?
 fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
-	use std::f32::consts::PI;
 	let start = vertices[0];
 	let end = vertices[1];
 	let diff = end - start;
@@ -1654,7 +1657,7 @@ pub fn print_events(
 				let prev = LAST_CLICK_TIME.swap(now as i32, Ordering::Relaxed);
 				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
 				if let Some(selected) = &inspector.selected {
-					if selected.doturl == details.doturl && !(now - prev < 400) {
+					if selected.doturl == details.doturl && now - prev >= 400 {
 						inspector.selected = None;
 						return
 					}
@@ -1785,13 +1788,13 @@ pub fn right_click_system(
 	//     (Entity, &Selection, ChangeTrackers<Selection>),
 	//     (Changed<Selection>, With<PickableMesh>),
 	// >,
-	query_details: Query<&Details>,
+	_query_details: Query<&Details>,
 	click_query: Query<(Entity, &Hover)>,
 ) {
 	if mouse_button_input.just_pressed(MouseButton::Right) ||
 		touches_input.iter_just_pressed().next().is_some()
 	{
-		for (entity, hover) in click_query.iter() {
+		for (_entity, hover) in click_query.iter() {
 			if hover.hovered() {
 				// Open browser.
 				// #[cfg(not(target_arch = "wasm32"))]
@@ -1804,16 +1807,16 @@ pub fn right_click_system(
 	}
 }
 
-struct BlockHandles {
+// struct BlockHandles {
 	
-	// block_material: Handle<StandardMaterial>
+// 	// block_material: Handle<StandardMaterial>
 
-}
+// }
 
 struct ResourceHandles {
 	block_mesh: Handle<Mesh>,
-	light: BlockHandles, 
-	dark: BlockHandles,
+	// light: BlockHandles, 
+	// dark: BlockHandles,
 	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
 	banner_mesh: Handle<Mesh>,
 	sphere_mesh: Handle<Mesh>,
@@ -1845,8 +1848,8 @@ fn setup(
 	let aspect = 1. / 3.;
 	commands.insert_resource(ResourceHandles{
 		block_mesh,
-		light: BlockHandles {  },
-		dark: BlockHandles {  },
+		// light: BlockHandles {  },
+		// dark: BlockHandles {  },
 		banner_materials: default(),
 		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(
 									Vec2::new(BLOCK, BLOCK * aspect),
@@ -2026,8 +2029,8 @@ pub mod html_body {
 	// }
 }
 
-#[cfg(target_arch = "wasm32")]
-use bevy::input::mouse::MouseButtonInput;
+// #[cfg(target_arch = "wasm32")]
+// use bevy::input::mouse::MouseButtonInput;
 // use bevy::prelude::*;
 
 // pub struct UiPlugin;
@@ -2039,21 +2042,21 @@ use bevy::input::mouse::MouseButtonInput;
 //     }
 // }
 
-#[cfg(target_arch = "wasm32")]
-fn capture_mouse_on_click(mut mousebtn: EventReader<MouseButtonInput>) {
-	for ev in (mousebtn).iter() {
-		if let bevy::input::ButtonState::Pressed = &ev.state {
-			log!("did the lock thing.");
-			html_body::get().request_pointer_lock();
-			break
-		}
+// #[cfg(target_arch = "wasm32")]
+// fn capture_mouse_on_click(mut mousebtn: EventReader<MouseButtonInput>) {
+// 	for ev in (mousebtn).iter() {
+// 		if let bevy::input::ButtonState::Pressed = &ev.state {
+// 			log!("did the lock thing.");
+// 			html_body::get().request_pointer_lock();
+// 			break
+// 		}
 
-		// if let bevy::input::ButtonState::Released = &ev.state {
-		// 	html_body::document().exit_pointer_lock();
-		// 	break;
-		// }
-	}
-}
+// 		// if let bevy::input::ButtonState::Released = &ev.state {
+// 		// 	html_body::document().exit_pointer_lock();
+// 		// 	break;
+// 		// }
+// 	}
+// }
 
 // use crate::utils::html_body;
 // use bevy::prelude::*;

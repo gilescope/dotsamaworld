@@ -162,6 +162,6 @@ where
 	}
 
 	fn url(&self) -> &str {
-		&self.underlying_source.url()
+		self.underlying_source.url()
 	}
 }
