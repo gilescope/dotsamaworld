@@ -156,6 +156,15 @@ pub fn ui_bars_system(
 							}
 						}
 					}
+					for (loc, details) in entities.iter() {
+						if spec.find.len() <= details.pallet.len() && spec.find.as_bytes().eq_ignore_ascii_case(&details.pallet.as_bytes()[..spec.find.len()])
+						// if details.pallet.contains(&spec.find) || details.variant.contains(&spec.find)
+						{
+							destination.location = Some(loc.translation());
+							inspector.selected = Some(details.clone());
+							found += 1;
+						}
+					}
 
 					println!("find {}", spec.find);
 				}

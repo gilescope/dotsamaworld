@@ -106,7 +106,7 @@ tikv-jemallocator = "0.5"
 
 #
 # Dependencies for native only.
-# dynamic
+#
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 chrono = { version = "*", default-features = false }
 bevy = { version = "0.8.1", default-features = false, features = [
@@ -115,9 +115,9 @@ bevy = { version = "0.8.1", default-features = false, features = [
     "render",
     # "png",
     "jpeg",
+    "dynamic",
 ] }
-# subxt = { git = "https://github.com/paritytech/subxt.git" }
-# open = "1"
+
 polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["wss"]}
 # polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
 #     "wss",
