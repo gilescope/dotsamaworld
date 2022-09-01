@@ -20,7 +20,7 @@ use std::{
 	sync::atomic::Ordering,
 	time::Duration,
 };
-
+use bevy::utils::default;
 #[cfg(not(target_arch = "wasm32"))]
 use std::{
 	hash::Hash,
@@ -258,7 +258,7 @@ where
 	//where S: Source
 	{
 		log!("watching blocks {}", self.chain_info.chain_index);
-		let mut tx: F = self.tx.take().unwrap();
+		let tx: F = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
 		let as_of: Option<DotUrl> = self.as_of.take();
 		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> =
@@ -299,7 +299,7 @@ where
 					receive_channel.recv().await
 				{
 					let _ = process_extrinsics(
-						&mut tx,
+						&tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
@@ -399,7 +399,7 @@ where
 					}
 					let block_hash = block_hash.unwrap();
 					if let Ok(timestamp) = process_extrinsics(
-						&mut tx,
+						&tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
@@ -430,7 +430,7 @@ where
 					// println!("subscribed!");
 					while let Some(Ok(block_hash)) = block_headers.next().await {
 						let _ = process_extrinsics(
-							&mut tx,
+							&tx,
 							chain_info.chain_url.clone(),
 							block_hash,
 							&mut source,
@@ -1302,9 +1302,7 @@ async fn get_events_for_block(
 				// let event = scale_value_to_borrowed::convert(&event2);
 				let start_link = vec![];
 				// let end_link = vec![];
-				let mut details = Details::default();
-				details.url = source.url().to_string();
-				details.doturl = DotUrl { ..block_url.clone() };
+				let mut details = Details{ url: source.url().to_string(), doturl:DotUrl { ..block_url.clone() }, ..default()};
 
 				if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
 					details.parent = Some(*extrinsic_num as u32);
@@ -1645,7 +1643,7 @@ mod tests {
 	fn polkadot_millionth_block_hash() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
+		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
@@ -1655,7 +1653,7 @@ mod tests {
 	fn polkadot_millionth_block_3_extrinsics() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
+		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");

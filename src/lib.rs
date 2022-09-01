@@ -357,7 +357,7 @@ fn chain_name_to_url(chain_name: &str) -> String {
 	}
 
 	if chain_name[5..].contains(':') {
-		chain_name.to_string()
+		chain_name
 	} else {
 		format!("{chain_name}:443")
 	}
@@ -400,12 +400,12 @@ struct SourceDataTask(
 // 	log!("got a block!!!");
 // }
 
-fn source_data<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i>(
-	mut datasource_events: EventReader<'a, 'b, DataSourceChangedEvent>,
-	mut commands: Commands<'c, 'd>,
-	mut sovereigns: ResMut<'e, Sovereigns>,
-	details: Query<'f, 'g, Entity, With<ClearMeAlwaysVisible>>,
-	clean_me: Query<'h, 'i, Entity, With<ClearMe>>,
+fn source_data(
+	mut datasource_events: EventReader<DataSourceChangedEvent>,
+	mut commands: Commands,
+	mut sovereigns: ResMut<Sovereigns>,
+	details: Query<Entity, With<ClearMeAlwaysVisible>>,
+	clean_me: Query<Entity, With<ClearMe>>,
 	mut spec: ResMut<UrlBar>,
 	// #[cfg(not(target_arch="wasm32"))]
 	// writer: EventWriter<DataSourceStreamEvent>,
@@ -1057,7 +1057,7 @@ fn render_block(
 						let timestamp_color = if chain_info.chain_url.is_relay() {
 							block.timestamp.unwrap()
 						} else {
-							block.timestamp_parent.unwrap_or(block.timestamp.unwrap())
+							block.timestamp_parent.unwrap_or_else(||block.timestamp.unwrap())
 						} / 400;
 
 						let transform = Transform::from_translation(Vec3::new(
@@ -1224,7 +1224,7 @@ fn render_block(
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
 // space?
-fn add_blocks<'a>(
+fn add_blocks(
 	chain_info: &ChainInfo,
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
@@ -1324,16 +1324,15 @@ fn add_blocks<'a>(
 								commands
 									.spawn_bundle(PolylineBundle {
 										polyline: polylines.add(Polyline {
-											vertices: vertices.clone(),
-											..Default::default()
+											vertices: vertices.clone()
 										}),
 										material: polyline_materials.add(PolylineMaterial {
 											width: 10.0,
 											color,
 											perspective: true,
-											..Default::default()
+											..default()
 										}),
-										..Default::default()
+										..default()
 									})
 									.insert(ClearMe);
 
