@@ -48,7 +48,7 @@ pub fn ui_bars_system(
 				});
 				ui.separator();
 
-				if inspector.selected.is_some() {
+				// if inspector.selected.is_some() {
 					// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
 
 					// #[cfg(target_arch = "wasm32")]
@@ -75,7 +75,7 @@ pub fn ui_bars_system(
 					// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
 					// 		});
 					// }
-				}
+				// }
 
 				if let Some(selected) = &inspector.selected {
 					ui.heading(&selected.variant);
