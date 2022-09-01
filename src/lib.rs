@@ -857,14 +857,6 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
-// pub struct Chain<F>
-// // where
-// // 	F:,
-// {
-// 	// shared: F,
-// 	info: ChainInfo,
-// }
-
 pub struct Sovereigns {
 	//                            name    para_id             url
 	pub relays: Vec<Vec<ChainInfo>>,
@@ -1204,7 +1196,6 @@ fn add_blocks(
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
 	commands: &mut Commands,
-	// _meshes: &mut ResMut<Assets<Mesh>>,
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	block_hash: &H256,
@@ -1443,10 +1434,6 @@ fn add_blocks(
 				.insert(Name::new("BlockEvent"))
 				.insert(ClearMe)
 				.insert(HiFi);
-			// .insert(Aabb::from_min_max(
-			//     Vec3::new(0., 0., 0.),
-			//     Vec3::new(1., 1., 1.),
-			// ));
 
 			for (link, link_type) in &event.start_link {
 				// println!("inserting source of rainbow (an event)!");
@@ -1804,15 +1791,12 @@ fn setup(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
-	// asset_server: Res<AssetServer>,
 	mut datasource_events: EventWriter<DataSourceChangedEvent>,
 ) {
 	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
 	let aspect = 1. / 3.;
 	commands.insert_resource(ResourceHandles {
 		block_mesh,
-		// light: BlockHandles {  },
-		// dark: BlockHandles {  },
 		banner_materials: default(),
 		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(Vec2::new(BLOCK, BLOCK * aspect)))),
 		sphere_mesh: meshes.add(Mesh::from(shape::Icosphere { radius: 0.40, subdivisions: 32 })),
