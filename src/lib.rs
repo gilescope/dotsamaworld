@@ -94,7 +94,7 @@ impl Default for MovementSettings {
 }
 
 /// Distance vertically between layer 0 and layer 1
-const LAYER_GAP: f32 = 5.;
+const LAYER_GAP: f32 = 0.;
 use lazy_static::lazy_static;
 
 // The time by which all times should be placed relative to each other on the x axis.
@@ -1718,6 +1718,8 @@ fn update_visibility(
 	let x = transform.translation.x;
 	let y = transform.translation.y;
 
+	let user_y = y.signum();
+
 	// If nothing's visible because we're far away make a few things visible so you know which dir
 	// to go in and can double click to get there...
 	#[cfg(feature = "adaptive-fps")]
@@ -1742,19 +1744,22 @@ fn update_visibility(
 
 	let mut vis_count = 0;
 	for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
 		if vis.is_visible {
 			vis_count += 1;
 		}
 	}
 	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
 		if y > 500. {
 			vis.is_visible = false;
 		}
 	}
 	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-		vis.is_visible = transform.translation().x > min && transform.translation().x < max;
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
 		if y > 800. {
 			vis.is_visible = false;
 		}
