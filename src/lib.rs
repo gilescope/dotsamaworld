@@ -659,13 +659,9 @@ async fn do_datasources<F, R>(
 }
 
 fn draw_chain_rect(
-	chain_rect: Res<ChainRectMesh>,
-	light_side: Res<LightsideRectMaterial>,
-	dark_side: Res<DarksideRectMaterial>,
+	handles: &ResourceHandles,
 	chain_info: &ChainInfo,
 	commands: &mut Commands,
-	_meshes: &mut ResMut<Assets<Mesh>>,
-	_materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
@@ -675,11 +671,11 @@ fn draw_chain_rect(
 	let is_relay = chain_info.chain_url.is_relay();
 	commands
 		.spawn_bundle(PbrBundle {
-			mesh: chain_rect.0.clone(),
+			mesh: handles.chain_rect_mesh.clone(),
 			material: if chain_info.chain_url.is_darkside() {
-				dark_side.0.clone()
+				handles.darkside_rect_material.clone()
 			} else {
-				light_side.0.clone()
+				handles.lightside_rect_material.clone()
 			},
 			transform: Transform::from_translation(Vec3::new(
 				(10000. / 2.) - 35.,
@@ -907,24 +903,17 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
-struct ChainRectMesh(Handle<Mesh>);
-struct DarksideRectMaterial(Handle<StandardMaterial>);
-struct LightsideRectMaterial(Handle<StandardMaterial>);
+
 
 fn render_block(
 	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	relays: Res<Sovereigns>,
 	asset_server: Res<AssetServer>,
-	// effects: Res<Assets<EffectAsset>>,
 	links: Query<(Entity, &MessageSource, &GlobalTransform)>,
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
-	chain_rect: Res<ChainRectMesh>,
-	light_side: Res<LightsideRectMaterial>,
-	dark_side: Res<DarksideRectMaterial>,
 	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
 ) {
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
@@ -1125,7 +1114,7 @@ fn render_block(
 								let rot =
 									Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
 								let transform = Transform {
-									translation: Vec3::new(-7.,0.1,0),
+									translation: Vec3::new(-7.,0.1,0.),
 									rotation: rot,
 									..default()
 								};
@@ -1164,7 +1153,7 @@ fn render_block(
 						block_num,
 						fun,
 						&mut commands,
-						&mut meshes,
+						// &mut meshes,
 						&mut materials,
 						BuildDirection::Up,
 						&block.blockhash,
@@ -1180,7 +1169,7 @@ fn render_block(
 						block_num,
 						boring,
 						&mut commands,
-						&mut meshes,
+						// &mut meshes,
 						&mut materials,
 						BuildDirection::Down,
 						&block.blockhash,
@@ -1195,13 +1184,9 @@ fn render_block(
 				DataUpdate::NewChain(chain_info) => {
 					CHAINS.fetch_add(1, Ordering::Relaxed);
 					draw_chain_rect(
-						chain_rect,
-						light_side,
-						dark_side,
+						handles.as_ref(),
 						&chain_info,
-						&mut commands,
-						&mut meshes,
-						&mut materials,
+						&mut commands
 					)
 				},
 			}
@@ -1219,7 +1204,7 @@ fn add_blocks(
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
 	commands: &mut Commands,
-	_meshes: &mut ResMut<Assets<Mesh>>,
+	// _meshes: &mut ResMut<Assets<Mesh>>,
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	block_hash: &H256,
@@ -1776,7 +1761,7 @@ pub fn right_click_system(
 	//     (Entity, &Selection, ChangeTrackers<Selection>),
 	//     (Changed<Selection>, With<PickableMesh>),
 	// >,
-	_query_details: Query<&Details>,
+	// _query_details: Query<&Details>,
 	click_query: Query<(Entity, &Hover)>,
 ) {
 	if mouse_button_input.just_pressed(MouseButton::Right) ||
@@ -1803,13 +1788,15 @@ pub fn right_click_system(
 
 struct ResourceHandles {
 	block_mesh: Handle<Mesh>,
-	// light: BlockHandles,
-	// dark: BlockHandles,
 	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
 	banner_mesh: Handle<Mesh>,
 	sphere_mesh: Handle<Mesh>,
 	xcm_torus_mesh: Handle<Mesh>,
 	extrinsic_mesh: Handle<Mesh>,
+
+	chain_rect_mesh: Handle<Mesh>,
+	darkside_rect_material: Handle<StandardMaterial>,
+	lightside_rect_material: Handle<StandardMaterial>
 }
 
 /// set up a simple 3D scene
@@ -1820,18 +1807,6 @@ fn setup(
 	// asset_server: Res<AssetServer>,
 	mut datasource_events: EventWriter<DataSourceChangedEvent>,
 ) {
-	let chain_rect = meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)));
-	commands.insert_resource(ChainRectMesh(chain_rect));
-
-	commands.insert_resource(DarksideRectMaterial(materials.add(StandardMaterial {
-		base_color: Color::rgba(0., 0., 0., 0.4),
-		alpha_mode: AlphaMode::Blend,
-		perceptual_roughness: 1.0,
-		reflectance: 0.5,
-		unlit: true,
-		..default()
-	})));
-
 	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
 	let aspect = 1. / 3.;
 	commands.insert_resource(ResourceHandles {
@@ -1848,16 +1823,24 @@ fn setup(
 			subdivisions_sides: 10,
 		})),
 		extrinsic_mesh: meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8))),
+		lightside_rect_material: materials.add(StandardMaterial {
+			base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
+			alpha_mode: AlphaMode::Blend,
+			perceptual_roughness: 0.08,
+			reflectance: 0.0,
+			unlit: false,
+			..default()
+		}),
+		darkside_rect_material: materials.add(StandardMaterial {
+			base_color: Color::rgba(0., 0., 0., 0.4),
+			alpha_mode: AlphaMode::Blend,
+			perceptual_roughness: 1.0,
+			reflectance: 0.5,
+			unlit: true,
+			..default()
+		}),
+		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)))
 	});
-
-	commands.insert_resource(LightsideRectMaterial(materials.add(StandardMaterial {
-		base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
-		alpha_mode: AlphaMode::Blend,
-		perceptual_roughness: 0.08,
-		reflectance: 0.0,
-		unlit: false,
-		..default()
-	})));
 
 	// add entities to the world
 	// plane
