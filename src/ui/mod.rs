@@ -4,7 +4,7 @@ pub mod details;
 pub mod doturl;
 pub mod toggle;
 //  use egui::ImageData;
-use crate::{Anchor, Env, Inspector, Viewport};
+use crate::{Anchor, Env, Inspector, Viewport, log};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
@@ -22,6 +22,11 @@ pub struct OccupiedScreenSpace {
 	top: f32,
 	// right: f32,
 	bottom: f32,
+}
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
 pub struct OriginalCameraTransform(pub Transform);
@@ -76,15 +81,24 @@ pub fn ui_bars_system(
 				// 		});
 				// }
 				// }
-
-				if let Some(selected) = &inspector.selected {
+use egui::Link;
+				if let Some(selected) = &inspector.selected {					
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					ui.add(egui::Hyperlink::from_label_and_url(
-						"open in polkadot.js",
-						&selected.url,
-					));
+					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so use open.				
+					if ui.add(Link::new("open in polkadot.js")).clicked() {
+						open::that(&selected.url).unwrap();
+					}
+					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
+					ui.label("RAW Scale:");
+					
+					if ui.button("📋").clicked() {
+						let s = hex::encode(&selected.raw);
+						log!("{}", &s);
+						ui.output().copied_text = s;//TODO not working...
+					};
+					ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
 					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
 						if let Some(hand) = inspector.texture.as_ref() {

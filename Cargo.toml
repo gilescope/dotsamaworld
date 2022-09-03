@@ -24,6 +24,7 @@ async-std = { version = "1.12.0", features = [
 ] }
 async-trait = "0.1"
 async-recursion = "*"
+
 # Not needed since rust 1.63
 lazy_static = "*"
 futures = {version = "0.3.13", defalult-features=false, features=[] } 
@@ -44,7 +45,8 @@ url = {version="*",  default-features=false }
 # async-tungstenite = "*"
 async-tls = {version="*",  default-features=false }
 color-eyre = { version = "0.5", default-features = false }
-
+dashmap = {version="*"}
+open = {path="/home/gilescope/git/open-rs" }
 #
 # substrate deps
 #

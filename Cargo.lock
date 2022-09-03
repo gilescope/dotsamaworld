@@ -1810,6 +1810,7 @@ dependencies = [
  "chrono",
  "color-eyre",
  "console_error_panic_hook",
+ "dashmap",
  "egui",
  "egui-datepicker",
  "fastrand",
@@ -1821,6 +1822,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
+ "open",
  "palette",
  "parity-scale-codec",
  "polkadyn",
@@ -3361,6 +3363,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
+name = "open"
+version = "3.0.2"
+dependencies = [
+ "pathdiff",
+ "web-sys",
+ "windows-sys",
+]
+
+[[package]]
 name = "osmesa-sys"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3486,6 +3497,12 @@ dependencies = [
  "smallvec",
  "windows-sys",
 ]
+
+[[package]]
+name = "pathdiff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "percent-encoding"

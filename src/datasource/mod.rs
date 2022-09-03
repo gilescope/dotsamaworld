@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use bevy::{prelude::warn, utils::default};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
-#[cfg(not(target_arch = "wasm32"))]
 use std::{collections::hash_map::DefaultHasher, hash::Hash};
 use std::{
 	collections::HashMap, convert::TryFrom, num::NonZeroU32, sync::atomic::Ordering, time::Duration,
@@ -47,7 +46,6 @@ macro_rules! log {
     ($($t:tt)*) => (super::log(&format_args!($($t)*).to_string()))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn please_hash<T: Hash>(val: &T) -> u64 {
 	use std::hash::Hasher;
 	let mut hasher = DefaultHasher::default();
@@ -157,7 +155,7 @@ where
 {
 	pub async fn watch_blocks(mut self)
 	{
-		log!("watching blocks {}", self.chain_info.chain_index);
+		// log!("watching blocks {}", self.chain_info.chain_index);
 		let tx: F = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
 		let as_of: Option<DotUrl> = self.as_of.take();
@@ -339,6 +337,11 @@ where
 	}
 }
 
+struct OwnedScale {
+	raw: Vec<u8>,
+	derived: DataEntity
+}
+
 // Returns the timestamp of the block decoded.
 async fn process_extrinsics<S: Source, F, R>(
 	tx: &F,
@@ -375,22 +378,44 @@ where
 		let metad = metad.unwrap();
 
 		let mut exts = vec![];
-		for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
 			//TODO: did we need to double decode extrinsics????
-			let ex_slice = &encoded_extrinsic[..];
+			
 			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 
+			let mut the_extrinsic = OwnedScale{
+				raw: encoded_extrinsic.clone(),
+				derived:DataEntity::Extrinsic {
+					args: vec![],
+					contains: vec![],
+					start_link: vec![],
+					end_link: vec![],
+					details: Details {
+						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
+						flattern: "can't yet decode.".to_string(),
+						url: source.url().to_string(),
+						parent: None,
+						success: crate::ui::details::Success::Worried,
+						pallet: "?".to_string(),
+						variant: "?".to_string(),
+						raw: encoded_extrinsic,
+					},
+				}
+			};
+			let ex_slice = &the_extrinsic.raw[..];
 			// let ex_slice = &ext_bytes.0;
-			if let Ok(extrinsic2) = polkadyn::decode_extrinsic(&metad, encoded_extrinsic.as_slice())
+			if let Ok(extrinsic2) = polkadyn::decode_extrinsic(&metad, ex_slice)
 			{
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic2, true);
 				let entity = process_extrinsic(
 					&metad,
+					
 					ex_slice,
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 					source.url(),
+					&mut the_extrinsic.derived
 				)
 				.await;
 				if let Some(entity) = entity {
@@ -402,23 +427,8 @@ where
 					exts.push(entity);
 				}
 			} else {
-				log!("can't decode block ext {} {}", i, &blockurl);
-				exts.push(DataEntity::Extrinsic {
-					args: vec![],
-					contains: vec![],
-					raw: ex_slice.to_vec(),
-					start_link: vec![],
-					end_link: vec![],
-					details: Details {
-						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-						flattern: "can't yet decode.".to_string(),
-						url: source.url().to_string(),
-						parent: None,
-						success: crate::ui::details::Success::Worried,
-						pallet: "?".to_string(),
-						variant: "?".to_string(),
-					},
-				});
+				// log!("can't decode block ext {} {}", i, &blockurl);
+				exts.push(the_extrinsic.derived);
 			}
 		}
 		let (events, _start_link) =
@@ -496,6 +506,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
 	url: &str,
+	data_event: &mut DataEntity
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
 	// let para_id = extrinsic_url.para_id.clone();
@@ -594,7 +605,9 @@ async fn process_extrinsic<'a, 'scale>(
 							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
 								let v = polkadyn::decode_xcm(meta, &bytes[2..]).unwrap();
 								println!("xcm msgv= {}", v);
-								let msg = scale_value_to_borrowed::convert(&v, true);
+								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
+								// msg.set("msg_decoded", msg_decoded);
+								let msg = msg_decoded;
 								println!("xcm msg = {}", msg);
 
 								if let Some(instructions) = msg.get("V0") {
@@ -604,13 +617,14 @@ async fn process_extrinsic<'a, 'scale>(
 											// id: (block_number, extrinsic_index),
 											args: vec![instruction.to_string()],
 											contains: vec![],
-											raw: vec![], //TODO: should be simples
+											
 											start_link: vec![],
 											end_link: vec![],
 											details: Details {
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
+												raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
@@ -628,19 +642,22 @@ async fn process_extrinsic<'a, 'scale>(
 											// id: (block_number, extrinsic_index),
 											args: vec![instruction.to_string()],
 											contains: vec![],
-											raw: vec![], //TODO: should be simples
+										
 											start_link: vec![],
 											end_link: vec![],
 											details: Details {
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
+													raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
 
 										if *instruction == "TransferAsset" {
-											if let Some(_dest) = payload.get("dest") {}
+											if let Some(ben) = payload.get("beneficiary") {
+
+											}
 											// panic!();
 										}
 									}
@@ -652,13 +669,14 @@ async fn process_extrinsic<'a, 'scale>(
 											// id: (block_number, extrinsic_index),
 											args: vec![instruction.to_string()],
 											contains: vec![],
-											raw: vec![], //TODO: should be simples
+											
 											start_link: vec![],
 											end_link: vec![],
 											details: Details {
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
+												raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
@@ -715,7 +733,7 @@ async fn process_extrinsic<'a, 'scale>(
 							// 														))
 							// 													);
 							// 													println!(
-							// 														"RECIEVE HASH v1 {}",
+							// 														"RECEIVE HASH v1 {}",
 							// 														msg_id
 							// 													);
 							// 													end_link.push((
@@ -773,7 +791,7 @@ async fn process_extrinsic<'a, 'scale>(
 							// 														))
 							// 													);
 							// 													println!(
-							// 														"RECIEVE HASH v0 {}",
+							// 														"RECEIVE HASH v0 {}",
 							// 														msg_id
 							// 													);
 							// 													end_link.push((
@@ -784,7 +802,7 @@ async fn process_extrinsic<'a, 'scale>(
 							// 													// for reserve assets received.
 							// 												};
 							// 											} else {
-							// 												panic!("unknonwn")
+							// 												panic!("unknown")
 							// 											}
 							// 										}
 							// 									},
@@ -847,7 +865,7 @@ async fn process_extrinsic<'a, 'scale>(
 							// 															)
 							// 														);
 							// 														println!(
-							// 															"RECIEVE HASH v2 {}",
+							// 															"RECEIVE HASH v2 {}",
 							// 															msg_id
 							// 														);
 							// 														end_link
@@ -872,7 +890,7 @@ async fn process_extrinsic<'a, 'scale>(
 				}
 			},
 			("XcmPallet", "limited_teleport_assets") => {
-			// if pallet == "XcmPallet" && variant == "limited_teleport_assets" {
+		
 				// 	let mut flat0 = HashMap::new();
 				// 	flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
 				// 	// println!("FLATTERN {:#?}", flat0);
@@ -888,7 +906,7 @@ async fn process_extrinsic<'a, 'scale>(
 				// 			// println!("SEND MSG v0 hash {}", msg_id);
 				// 			start_link.push((msg_id, LinkType::Teleport));
 				// 		}
-				// 	// println!("first time seeen");
+				// 	// println!("first time seen");
 				// 	// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
 				// 	} else if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
 				// 		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
@@ -899,7 +917,7 @@ async fn process_extrinsic<'a, 'scale>(
 				// 			// println!("SEND MSG v0 hash {}", msg_id);
 				// 			start_link.push((msg_id, LinkType::Teleport));
 				// 		}
-				// 	// println!("first time seeen");
+				// 	// println!("first time seen");
 				// 	// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
 				// 	} else if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
 				// 		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
@@ -918,7 +936,6 @@ async fn process_extrinsic<'a, 'scale>(
 				// 	//          print_val(&ext.call_data.arguments[0].value);
 				// 	//          println!("BOB");
 				// 	//         print_val(&ext.call_data.arguments[1].value);
-				// }
 			},
 			("XcmPallet", "reserve_transfer_assets") => {
 				check_reserve_asset(&payload, &extrinsic_url, &mut start_link).await;
@@ -930,14 +947,14 @@ async fn process_extrinsic<'a, 'scale>(
 						for (_, instruction) in args {
 							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) = instruction.only3() 
 							{
-								log!("found batch instructionC {} {} {:#?}", inner_pallet, inner_variant, instruction);
+								log!("found batch instructionC {} {} {:?}", inner_pallet, inner_variant, instruction);
 									children.push(DataEntity::Extrinsic {
 										args: vec![format!("{}", instruction)],
 										contains: vec![],
-										raw: ex_slice.to_vec(),//TODO reference not own.
 										start_link: vec![],
 										end_link: vec![],
 										details: Details {
+											raw: ex_slice.to_vec(),//TODO reference not own.
 											pallet: inner_pallet.to_string(),
 											variant: inner_variant.to_string(),
 											doturl: extrinsic_url.clone(),
@@ -1004,7 +1021,6 @@ async fn process_extrinsic<'a, 'scale>(
 		// id: (block_number, extrinsic_url.extrinsic.unwrap()),
 		args: vec![],
 		contains: children,
-		raw: ex_slice.to_vec(),
 		start_link,
 		end_link,
 		details: Details {
@@ -1016,6 +1032,7 @@ async fn process_extrinsic<'a, 'scale>(
 			success: crate::ui::details::Success::Happy,
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
+			raw: ex_slice.to_vec(),
 		},
 	})
 
@@ -1332,7 +1349,7 @@ async fn get_events_for_block(
 			}
 		// }
 		} else {
-			println!("can't decode events {} / {}", &source.url(), blocknum);
+			// println!("can't decode events {} / {}", &source.url(), blocknum);
 		};
 	} else {
 		warn!("could not find events {}", &blocknum);

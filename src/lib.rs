@@ -9,6 +9,7 @@ use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
+use core::slice::SlicePattern;
 use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
@@ -516,7 +517,7 @@ fn source_data(
 		for relay in relays.iter() {
 			let mut sov_relay = vec![];
 			for chain in relay.iter() {
-				log!("set soverign index to {} {}", chain.chain_index, chain.chain_url);
+				// log!("set soverign index to {} {}", chain.chain_index, chain.chain_url);
 				sov_relay.push(chain.clone());
 			}
 			sovereigns.relays.push(sov_relay);
@@ -582,7 +583,7 @@ fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
 			let maybe_sender = if chain.chain_url.is_relay() { send_map.take() } else { None };
 
 			let as_of = as_of.clone();
-			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
+			// log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 			let chain_info = chain.clone();
 
 			let block_watcher = datasource::BlockWatcher {
@@ -635,7 +636,7 @@ async fn do_datasources<F, R>(
 
 			// let lock_clone = chain.shared;
 			let as_of = as_of.clone();
-			log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
+			// log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 			let chain_info = chain.clone();
 
 			let block_watcher = datasource::BlockWatcher {
@@ -760,7 +761,7 @@ pub enum DataEntity {
 		// variant: String,
 		args: Vec<String>,
 		contains: Vec<DataEntity>,
-		raw: Vec<u8>,
+		// raw: Vec<u8>,
 		/// pseudo-unique id to link to some other node(s).
 		/// There can be multiple destinations per block! (TODO: need better resolution)
 		/// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
@@ -795,7 +796,7 @@ pub enum LinkType {
 }
 
 static EMPTY_SLICE: Vec<DataEntity> = vec![];
-static EMPTY_BYTE_SLICE: Vec<u8> = vec![];
+// static EMPTY_BYTE_SLICE: Vec<u8> = vec![];
 
 impl DataEntity {
 	pub fn details(&self) -> &Details {
@@ -831,10 +832,11 @@ impl DataEntity {
 	}
 
 	pub fn as_bytes(&self) -> &[u8] {
-		match self {
-			Self::Event(DataEvent { .. }) => EMPTY_BYTE_SLICE.as_slice(),
-			Self::Extrinsic { raw, .. } => raw.as_slice(),
-		}
+		self.details().raw.as_slice()
+		// match self {
+		// 	Self::Event(DataEvent { .. }) => EMPTY_BYTE_SLICE.as_slice(),
+		// 	Self::Extrinsic { raw, .. } => raw.as_slice(),
+		// }
 	}
 
 	pub fn start_link(&self) -> &Vec<(String, LinkType)> {
@@ -1339,6 +1341,7 @@ fn add_blocks(
 						success: ui::details::Success::Happy,
 						pallet: block.pallet().to_string(),
 						variant: block.variant().to_string(),
+						raw: block.as_bytes().to_vec()
 					})
 					.insert(ClearMe)
 					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })

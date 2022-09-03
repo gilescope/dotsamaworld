@@ -18,7 +18,8 @@ pub enum Success {
 }
 
 #[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
-pub struct Details {
+pub struct Details//<'scale> - would require details being stored somewhere with ids.
+{
 	pub pallet: String,
 	pub doturl: DotUrl,
 	pub parent: Option<u32>,
@@ -29,7 +30,7 @@ pub struct Details {
 	// #[inspectable(label = "Url:")]
 	pub url: String,
 	// pub chain_name: String,
-	// pub raw: Vec<u8>
+	pub raw: Vec<u8>
 }
 
 // use egui::Grid;
