@@ -34,5 +34,9 @@
   import init from './target/wasm.js'
   init()
 </script>
-
+<!-- Current web restrictions require full screen mode to be initiated by the user so there's a button -->
+<button id="grabmouse"
+  onclick="document.addEventListener('pointerlockchange', (e) => {document.getElementById('bevycanvas').focus();});bevycanvas.requestPointerLock();">&#x26F6;</button>
+<canvas id="bevycanvas" tabindex="0" data-raw-handle="1" style="width: 100%; height: 100%;" alt="I am a window!"
+  cursor="auto" tabindex="1"></canvas>
 </html>

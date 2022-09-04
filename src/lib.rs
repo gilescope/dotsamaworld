@@ -215,6 +215,12 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	// app
 	app.insert_resource(Msaa { samples: 4 });
 
+    #[cfg(target_family = "wasm")]
+    app.insert_resource(WindowDescriptor {
+        canvas: Some("canvas".into()), // CSS selector of the first canvas on the page.
+        ..default()
+    });
+
 	// The web asset plugin must be inserted before the `AssetPlugin` so
 	// that the asset plugin doesn't create another instance of an asset
 	// server. In general, the AssetPlugin should still run so that other
@@ -262,6 +268,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(NoCameraPlayerPlugin);
 	app.insert_resource(movement::MouseCapture::default());
 	app.insert_resource(Anchor::default());
+	#[cfg(not(target_family = "wasm"))]
+	app.insert_resource(Width(750.));
+	#[cfg(target_family = "wasm")]
 	app.insert_resource(Width(500.));
 	app.insert_resource(Inspector::default());
 

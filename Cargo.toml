@@ -85,7 +85,7 @@ egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", br
 
 # bevy_instancing = { git= "https://github.com/Shfty/bevy_instancing.git" }
 # bevy_instancing = { path = "/home/gilescope/git/bevy_instancing" }
-bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "c5a2f15" }
+bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "0c99056b5c4e512766b370270a3bf020b2e5f856" }
 bevy_mod_picking = "0.8"
 # bevy-inspector-egui-derive = "*"
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
@@ -112,10 +112,8 @@ tikv-jemallocator = "0.5"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 chrono = { version = "*", default-features = false }
 bevy = { version = "0.8.1", default-features = false, features = [
-    # "bevy_gltf",
     "bevy_winit",
     "render",
-    # "png",
     "jpeg",
     "dynamic",
 ] }
@@ -155,10 +153,8 @@ wasm-bindgen-futures = "*"
 bevy_web_asset = "0.4"
 bevy_tasks = "0.8"
 bevy = { version = "0.8.1", default-features = false, features = [
-    # "bevy_gltf",
     "bevy_winit",
     "render",
-    # "png",
     "jpeg",
 ] }
 # bevy_webgl2 = "*"
