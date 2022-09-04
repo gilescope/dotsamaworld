@@ -3,7 +3,7 @@ use crate::MovementSettings;
 use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
 use bevy::{
 	ecs::system::{Query, Res},
-	input::{keyboard::KeyCode, mouse::MouseWheel, Input},
+	input::{keyboard::KeyCode, Input},
 	prelude::*,
 	time::Time,
 	transform::components::Transform,
@@ -175,27 +175,6 @@ pub fn player_move_arrows(
 				velocity = velocity.normalize_or_zero();
 				transform.translation += velocity * time.delta_seconds() * settings.speed
 			}
-		}
-	}
-}
-
-/// the mouse-scroll does not change the field-of-view of the camera
-/// because if you change that too far the world goes inside out.
-/// Instead scroll moves forwards or backwards.
-pub fn scroll(
-	time: Res<Time>,
-	mut mouse_wheel_events: EventReader<MouseWheel>,
-	mut query: Query<&mut Transform, With<Viewport>>,
-) {
-	for event in mouse_wheel_events.iter() {
-		LAST_KEYSTROKE_TIME.store(time.seconds_since_startup() as i32, Ordering::Relaxed);
-		for mut viewport in query.iter_mut() {
-			let forward = viewport.forward();
-			#[cfg(target_arch = "wasm32")]
-			const DIRECTION: f32 = -0.2; // TODO: boost shift should affect this
-			#[cfg(not(target_arch = "wasm32"))]
-			const DIRECTION: f32 = 1.;
-			viewport.translation += forward * event.y * DIRECTION;
 		}
 	}
 }

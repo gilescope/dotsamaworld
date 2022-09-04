@@ -85,7 +85,7 @@ egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", br
 
 # bevy_instancing = { git= "https://github.com/Shfty/bevy_instancing.git" }
 # bevy_instancing = { path = "/home/gilescope/git/bevy_instancing" }
-bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "0c99056b5c4e512766b370270a3bf020b2e5f856" }
+bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "e6b21f4fbb0eecb3a65c6b272235e2b50e268abe" }
 bevy_mod_picking = "0.8"
 # bevy-inspector-egui-derive = "*"
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }

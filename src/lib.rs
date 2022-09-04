@@ -313,7 +313,6 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_plugin(PolylinePlugin);
 	app.add_plugin(EguiPlugin);
 	app.insert_resource(ui::OccupiedScreenSpace::default());
-	app.add_system(movement::scroll);
 
 	app.add_startup_system(setup);
 	// app.add_startup_system(load_assets_initial);
