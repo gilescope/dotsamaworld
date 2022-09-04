@@ -3368,6 +3368,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 [[package]]
 name = "open"
 version = "3.0.2"
+source = "git+https://github.com/gilescope/open-rs.git?rev=255025b420dbfec81d0c28e67055402e14295921#255025b420dbfec81d0c28e67055402e14295921"
 dependencies = [
  "pathdiff",
  "web-sys",

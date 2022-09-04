@@ -46,7 +46,7 @@ url = {version="*",  default-features=false }
 async-tls = {version="*",  default-features=false }
 color-eyre = { version = "0.5", default-features = false }
 dashmap = {version="*"}
-open = {path="/home/gilescope/git/open-rs" }
+open = { git="https://github.com/gilescope/open-rs.git", rev="255025b420dbfec81d0c28e67055402e14295921" }
 #
 # substrate deps
 #
