@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
-// use subxt::{rpc::ClientT, Client, ClientBuilder, DefaultConfig, DefaultExtra};
-// use core::time::Duration;
+
 #[cfg(not(target_arch = "wasm32"))]
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,18 +50,6 @@ pub trait Source {
 	) -> Result<Option<Vec<u8>>, BError>;
 
 	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()>;
-
-	/// We subscribe to relay chains and self sovereign chains
-	/// TODO -> impl Iter<BlockHash>
-	async fn subscribe_finalised_blocks(
-		&mut self,
-	) -> Result<
-		// Subscription<
-		//     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
-		// >
-		Box<dyn futures::Stream<Item = Result<H256, ()>> + Send + Unpin>,
-		(),
-	>;
 
 	fn url(&self) -> &str;
 
@@ -355,7 +342,8 @@ impl Source for RawDataSource {
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError> {
 		if let Some(client) = self.client().await {
-			let result = client.query_block(&hex::encode(block_hash.unwrap().as_bytes())).await;
+			let opt = block_hash.map(|b|hex::encode(b.as_bytes()));
+			let result = client.query_block(opt.as_deref()).await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
 				// println!("got 2here");
@@ -458,36 +446,6 @@ impl Source for RawDataSource {
 		} else {
 			Err(())
 		}
-	}
-
-	/// We subscribe to relay chains and self sovereign chains
-	async fn subscribe_finalised_blocks(
-		&mut self,
-	) -> Result<
-		// Subscription<
-		//     subxt::sp_runtime::generic::Header<u32, subxt::sp_runtime::traits::BlakeTwo256>,
-		// >
-		Box<dyn futures::Stream<Item = Result<H256, ()>> + Send + Unpin>,
-		(),
-	> {
-		todo!();
-		// let result = self.get_api().await.client.rpc().subscribe_finalized_blocks().await;
-		// if let Ok(sub) = result {
-		// 	// sub is a Stream... can we map a stream?
-		// 	Ok(Box::new(sub.map(|block_header_result| {
-		// 		if let Ok(block_header) = block_header_result {
-		// 			let block_header: subxt::sp_runtime::generic::Header<
-		// 				u32,
-		// 				subxt::sp_runtime::traits::BlakeTwo256,
-		// 			> = block_header;
-		// 			Ok(block_header.hash())
-		// 		} else {
-		// 			Err(())
-		// 		}
-		// 	})))
-		// } else {
-		// 	Err(())
-		// }
 	}
 
 	fn url(&self) -> &str {

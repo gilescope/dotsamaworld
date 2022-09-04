@@ -5,7 +5,7 @@ use crate::{
 	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
 	PAUSE_DATA_FETCH,
 };
-use async_std::stream::StreamExt;
+// use async_std::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 // #[cfg(not(target_arch = "wasm32"))]
 // use async_tungstenite::tungstenite::util::NonBlockingResult;
@@ -303,12 +303,14 @@ where
 			}
 		} else {
 			log!("listening to live");
-			let mut reconnects = 0;
-			while reconnects < 20 {
-				// println!("try subscribe!");
-				if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
-					// println!("subscribed!");
-					while let Some(Ok(block_hash)) = block_headers.next().await {
+
+			if let Ok(Some(latest_block)) = source.fetch_block(None).await {
+				let mut block_num : u32 = latest_block.block_number;
+				log!("live mode starting at block num {}", block_num);
+				loop {
+					let next = source.fetch_block_hash(block_num).await;
+					if let Ok(Some(block_hash)) = next {
+						log!("found new block on {}", source.url());
 						let _ = process_extrinsics(
 							&tx,
 							chain_info.chain_url.clone(),
@@ -328,10 +330,12 @@ where
 						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
 							async_std::task::sleep(Duration::from_secs(2)).await;
 						}
+
+						// yield val;
+						block_num += 1;
 					}
+					async_std::task::sleep(Duration::from_secs(6)).await;
 				}
-				async_std::task::sleep(std::time::Duration::from_secs(20)).await;
-				reconnects += 1;
 			}
 		}
 	}
@@ -384,7 +388,7 @@ where
 			
 			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 
-			let mut the_extrinsic = OwnedScale{
+			let the_extrinsic = OwnedScale{
 				raw: encoded_extrinsic.clone(),
 				derived:DataEntity::Extrinsic {
 					args: vec![],
@@ -415,7 +419,6 @@ where
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 					source.url(),
-					&mut the_extrinsic.derived
 				)
 				.await;
 				if let Some(entity) = entity {
@@ -506,7 +509,6 @@ async fn process_extrinsic<'a, 'scale>(
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
 	url: &str,
-	data_event: &mut DataEntity
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
 	// let para_id = extrinsic_url.para_id.clone();

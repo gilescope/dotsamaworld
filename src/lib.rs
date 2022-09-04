@@ -9,7 +9,7 @@ use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
-use core::slice::SlicePattern;
+// use core::slice::SlicePattern;
 use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
 use bevy_ecs::prelude::Component;
@@ -1036,6 +1036,10 @@ fn render_block(
 						let timestamp_color = if chain_info.chain_url.is_relay() {
 							block.timestamp.unwrap()
 						} else {
+							if block.timestamp_parent.is_none() && block.timestamp.is_none() {
+								log!("skiping block from {} as has no timestamp", details.doturl);
+								return;
+							}
 							block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
 						} / 400;
 
@@ -1911,7 +1915,8 @@ fn setup(
 
 	// Kick off the live mode automatically so people have something to look at
 	datasource_events.send(DataSourceChangedEvent {
-		source: "dotsama:/1//10504599".to_string(), // LIVE.to_string(),
+		//source: "dotsama:/1//10504599".to_string(), 
+		source: LIVE.to_string(),
 		timestamp: None,
 	});
 }
@@ -1992,101 +1997,7 @@ pub mod html_body {
 	// }
 }
 
-// #[cfg(target_arch = "wasm32")]
-// use bevy::input::mouse::MouseButtonInput;
-// use bevy::prelude::*;
 
-// pub struct UiPlugin;
-
-// impl Plugin for UiPlugin {
-//     fn build(&self, app: &mut AppBuilder) {
-//         // app.init_resource::<TrackInputState>()
-//         app  .add_system(capture_mouse_on_click);
-//     }
-// }
-
-// #[cfg(target_arch = "wasm32")]
-// fn capture_mouse_on_click(mut mousebtn: EventReader<MouseButtonInput>) {
-// 	for ev in (mousebtn).iter() {
-// 		if let bevy::input::ButtonState::Pressed = &ev.state {
-// 			log!("did the lock thing.");
-// 			html_body::get().request_pointer_lock();
-// 			break
-// 		}
-
-// 		// if let bevy::input::ButtonState::Released = &ev.state {
-// 		// 	html_body::document().exit_pointer_lock();
-// 		// 	break;
-// 		// }
-// 	}
-// }
-
-// use crate::utils::html_body;
-// use bevy::prelude::*;
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsCast;
-// use bevy_webgl2::renderer::JsCast;
-
-#[cfg(target_arch = "wasm32")]
-use gloo_events::EventListener;
-
-#[cfg(target_arch = "wasm32")]
-use std::sync::atomic::Ordering::SeqCst;
-
-#[cfg(target_arch = "wasm32")]
-use web_sys::MouseEvent;
-
-#[cfg(target_arch = "wasm32")]
-pub struct WasmMouseTracker {
-	delta_x: Arc<AtomicI32>,
-	delta_y: Arc<AtomicI32>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl WasmMouseTracker {
-	pub fn get_delta_and_reset(&self) -> Vec2 {
-		let delta = Vec2::new(self.delta_x.load(SeqCst) as f32, self.delta_y.load(SeqCst) as f32);
-		self.delta_x.store(0, SeqCst);
-		self.delta_y.store(0, SeqCst);
-		delta
-	}
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Default for WasmMouseTracker {
-	fn default() -> Self {
-		let delta_x = Arc::new(AtomicI32::new(0));
-		let delta_y = Arc::new(AtomicI32::new(0));
-
-		let dx = Arc::clone(&delta_x);
-		let dy = Arc::clone(&delta_y);
-
-		// From https://www.webassemblyman.com/rustwasm/how_to_add_mouse_events_in_rust_webassembly.html
-		let on_move = EventListener::new(&html_body::get(), "mousemove", move |e| {
-			let mouse_event = e.clone().dyn_into::<MouseEvent>().unwrap();
-			dx.store(mouse_event.movement_x(), SeqCst);
-			dy.store(mouse_event.movement_y(), SeqCst);
-		});
-		on_move.forget();
-		Self { delta_x, delta_y }
-	}
-}
-
-#[cfg(target_arch = "wasm32")]
-use bevy::input::mouse::MouseMotion;
-
-#[cfg(target_arch = "wasm32")]
-pub fn get_mouse_movement(
-	wasm_mouse_tracker: Res<WasmMouseTracker>,
-	mut ev: EventWriter<MouseMotion>,
-) {
-	let delta = wasm_mouse_tracker.get_delta_and_reset();
-	if delta != Vec2::ZERO {
-		info!("Mouse movement: ({:?})", delta);
-		ev.send(MouseMotion { delta })
-	}
-}
 
 #[cfg(target_arch = "wasm32")]
 use gloo_worker::{HandlerId, Worker};

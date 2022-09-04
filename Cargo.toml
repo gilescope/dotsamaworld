@@ -118,8 +118,8 @@ bevy = { version = "0.8.1", default-features = false, features = [
     "dynamic",
 ] }
 
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["wss"]}
-# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["wss"]}
+# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "wss",
 # ] }
 async-tungstenite = { version = "0.15.0", default-features = true, features = [
@@ -141,13 +141,12 @@ getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "*"
 ws_stream_wasm = "*"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="22faf5099180680eae9118d71b6931352ec6fc10", features = ["ws-web"]}
-# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["ws-web"]}
+# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "ws-web",
 # ] }
 
 # wee_alloc = "0.4.5"
-gloo-events = "0.1"
 gloo-worker = "0.2.1"
 wasm-bindgen-futures = "*"
 bevy_web_asset = "0.4"

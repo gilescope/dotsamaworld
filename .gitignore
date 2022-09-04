@@ -4,3 +4,4 @@ record.csv
 .old
 *.metadata.scale
 dist
+node_modules
