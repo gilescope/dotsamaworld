@@ -126,12 +126,21 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 
 #[cfg(test)]
 mod tests {
-	use super::{get_block_number_near_timestamp, TIME};
+	use crate::datasource::RawDataSource;
+
+use super::{get_block_number_near_timestamp, TIME};
+	use super::super::get_metadata;
 
 	#[test]
-	fn real_polkadot_example() {
-		let _ = color_eyre::install();
+	fn real_polkadot_example_test() {
+		async_std::task::block_on(real_polkadot_example());
+	}
 
+	async fn real_polkadot_example() {
+		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
+		let _ = color_eyre::install();
+			let metad_current = get_metadata(&mut source, None).await.unwrap();
+		
 		fn time_for_blocknum(blocknum: u32) -> Option<TIME> {
 			Some(match blocknum {
 				10000000 => 1_650_715_386_009,
@@ -160,9 +169,9 @@ mod tests {
 			get_block_number_near_timestamp(
 				1_650_715_386_009,
 				10500000,
-				&mut time_for_blocknum,
-				None
-			)
+				&mut source,
+				None, &metad_current
+			).await
 		);
 
 		// // Track forwards in time:
@@ -171,9 +180,9 @@ mod tests {
 			get_block_number_near_timestamp(
 				1_653_739_872_004,
 				10000000,
-				&mut time_for_blocknum,
-				None
-			)
+				&mut source,
+				None, &metad_current
+			).await
 		);
 
 		// Track backwards to genesis:
@@ -182,9 +191,9 @@ mod tests {
 			get_block_number_near_timestamp(
 				1_590_507_378_000,
 				10500000,
-				&mut time_for_blocknum,
-				None
-			)
+				&mut source,
+				None, &metad_current
+			).await
 		);
 
 		// Track forwards to the restaurant at the end of the universe:
@@ -193,9 +202,9 @@ mod tests {
 			get_block_number_near_timestamp(
 				1_653_739_872_004_000_000,
 				10000000,
-				&mut time_for_blocknum,
-				None
-			)
+				&mut source,
+				None,&metad_current
+			).await
 		);
 	}
 }
