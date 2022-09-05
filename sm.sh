@@ -1,4 +1,3 @@
 # start the daemon if not already
 spacenavd
-cargo run --no-default-features --features spacemouse
-
+cargo run --bin app --no-default-features --features spacemouse

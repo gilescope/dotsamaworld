@@ -6,15 +6,21 @@ let
       rev = "e1f7540fc0a8b989fb8cf701dc4fd7fc76bcf168";
     });
   nixpkgs = import <nixpkgs> { overlays = [ mozillaOverlay ]; };
-  rust-nightly = with nixpkgs; ((rustChannelOf { date = "2022-05-27"; channel = "nightly"; }).rust.override {
+  rust-nightly = with nixpkgs; ((rustChannelOf { date = "2022-08-30"; channel = "nightly"; }).rust.override {
     extensions = [
 	  "rust-src"
 	];
+    targets = [
+      "wasm32-unknown-unknown"
+    ];
   });
 in
 with nixpkgs; mkShell {
   nativeBuildInputs = [
     pkgconfig
+    trunk # wasm only
+    wasm-bindgen-cli # wasm only
+    binaryen # wasm only
     clang lld # To use lld linker
   ];
   buildInputs = [

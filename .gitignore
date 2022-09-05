@@ -1,6 +1,7 @@
 target
-bin
 play.csv
 record.csv
 .old
 *.metadata.scale
+dist
+node_modules

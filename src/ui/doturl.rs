@@ -1,7 +1,8 @@
 use crate::Env;
+use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] //TODO use scale
 pub struct DotUrl {
 	pub env: Env,
 	// 0 is the no mans land in the middle
@@ -13,16 +14,49 @@ pub struct DotUrl {
 }
 
 impl DotUrl {
+	// Is a block in this parachain etc.
+	pub fn contains(&self, other: &Self) -> bool {
+		if let (Some(sov), Some(other_sov)) = (self.sovereign, other.sovereign) {
+			if sov == other_sov {
+				if self.para_id.is_none() {
+					return true
+				}
+				if let (Some(para_id), Some(other_para_id)) = (self.para_id, other.para_id) {
+					if para_id == other_para_id {
+						if self.block_number.is_none() {
+							return true
+						}
+						if let (Some(block_number), Some(other_block_number)) =
+							(self.block_number, other.block_number)
+						{
+							if block_number == other_block_number {
+								if self.extrinsic.is_none() {
+									return true
+								}
+								if let (Some(extrinsic), Some(other_extrinsic)) =
+									(self.extrinsic, other.extrinsic)
+								{
+									return extrinsic == other_extrinsic
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		false
+	}
+
 	pub fn parse(url: &str) -> Result<Self, ()> {
 		let (protocol, rest) = url.split_once(':').ok_or(())?;
 		let mut result = DotUrl::default();
 		result.env = match protocol {
-			"indies" => Env::SelfSovereign,
-			"testindies" => Env::SelfSovereignTest,
-			"test" => Env::Test,
-			"nfts" => Env::NFTs,
-			"local" => Env::Local,
-			"cgp" => Env::CGP,
+			// "indies" => Env::SelfSovereign,
+			// "testindies" => Env::SelfSovereignTest,
+			// "test" => Env::Test,
+			// "nfts" => Env::NFTs,
+			// "local" => Env::Local,
+			// "cgp" => Env::CGP,
 			"dotsama" | _ => Env::Prod,
 		};
 
@@ -72,22 +106,34 @@ impl DotUrl {
 			1
 		}
 	}
+
+	pub fn chain_str(&self) -> String {
+		let mut sov = self.sovereign.unwrap();
+		if sov == -1 {
+			sov = 0;
+		}
+		if let Some(para_id) = self.para_id {
+			format!("{}-{}", sov, u32::from(para_id))
+		} else {
+			format!("{}", sov)
+		}
+	}
 }
 
 impl std::fmt::Display for DotUrl {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let protocol = match self.env {
-			Env::SelfSovereign => "indies",
+			// Env::SelfSovereign => "indies",
 			Env::Prod => "dotsama",
-			Env::SelfSovereignTest => "testindies",
-			Env::Test => "test",
-			Env::NFTs => "nfts",
-			Env::Local => "local",
-			Env::CGP => "cgp",
+			// Env::SelfSovereignTest => "testindies",
+			// Env::Test => "test",
+			// Env::NFTs => "nfts",
+			// Env::Local => "local",
+			// Env::CGP => "cgp",
 		};
 
 		f.write_fmt(format_args!(
-			"{}:",
+			"{}:/",
 			protocol,
 			// self.sovereign.map(|s| s.to_string()).unwrap_or("".to_string()),
 			// self.para_id.map(|s| s.to_string()).unwrap_or("".to_string()),

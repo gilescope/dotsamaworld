@@ -1,35 +1,49 @@
 use self::raw_source::AgnosticBlock;
-
-use super::polkadot;
+use core::future::Future;
+// use super::polkadot;
 use crate::{
-	polkadot::runtime_types::xcm::VersionedXcm, ui::DotUrl, ABlocks, ChainInfo, DataEntity,
-	DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
+	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
+	PAUSE_DATA_FETCH,
 };
-use async_std::{stream::StreamExt, task::block_on};
-use bevy::prelude::warn;
-use desub_current::{decoder, value::*, Metadata, ValueDef};
+// use async_std::stream::StreamExt;
+use serde::{Deserialize, Serialize};
+// #[cfg(not(target_arch = "wasm32"))]
+// use async_tungstenite::tungstenite::util::NonBlockingResult;
+use bevy::{prelude::warn, utils::default};
 use parity_scale_codec::Decode;
-use sp_core::H256;
+use primitive_types::H256;
+use std::{collections::hash_map::DefaultHasher, hash::Hash};
 use std::{
-	collections::{hash_map::DefaultHasher, HashMap},
-	convert::TryFrom,
-	hash::Hash,
-	num::NonZeroU32,
-	sync::atomic::Ordering,
-	time::Duration,
+	collections::HashMap, convert::TryFrom, num::NonZeroU32, sync::atomic::Ordering, time::Duration,
 };
 
+//  use bevy::ecs::event::EventWriter;
 #[derive(Decode, Debug)]
 pub struct ExtrinsicVec(pub Vec<u8>);
 
 mod time_predictor;
-mod utils;
-use utils::{flattern, print_val};
+//mod cached_source_inc_web;
+
+// #[cfg(target_arch = "wasm32")]
+// mod cached_source_indexeddb;
+
+#[cfg(not(target_arch = "wasm32"))]
 mod cached_source;
 mod raw_source;
-use crate::datasource::raw_source::Source;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub use cached_source::CachedDataSource;
-pub use raw_source::RawDataSource;
+//pub use cached_source_inc_web::CachedDataSource;
+
+// #[cfg(target_arch = "wasm32")]
+// pub use cached_source_indexeddb::CachedDataSource;
+pub use raw_source::{RawDataSource, Source};
+
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (super::log(&format_args!($($t)*).to_string()))
+}
 
 fn please_hash<T: Hash>(val: &T) -> u64 {
 	use std::hash::Hasher;
@@ -38,160 +52,81 @@ fn please_hash<T: Hash>(val: &T) -> u64 {
 	hasher.finish()
 }
 
-async fn get_desub_metadata<S: Source>(
+async fn get_metadata<S: Source>(
 	source: &mut S,
 	version: Option<(String, H256)>,
-) -> Option<Metadata> {
-	let url = source.url().to_string();
-	let hash = please_hash(&url);
-
-	let mut metadata_path = format!("target/{hash}.metadata.scale");
-	let as_of = if let Some((version, hash)) = version {
-		metadata_path = format!("{}.{}", metadata_path, version);
+) -> Option<frame_metadata::RuntimeMetadataPrefixed> {
+	let as_of = if let Some((_version, hash)) = version {
 		Some(hash)
 	} else {
 		None
 	};
 
-	let metadata_bytes = if let Ok(result) = std::fs::read(&metadata_path) {
-		result
-	} else {
-		println!("cache miss metadata for {} from {}", url, metadata_path);
-		let metadata_bytes: sp_core::Bytes = {
-			const MAX_RETRIES: usize = 6;
-			let mut retries = 0;
-			loop {
-				if retries >= MAX_RETRIES {
-					panic!("Cannot connect to substrate node after {} retries", retries);
-				}
-
-				println!("trying to get metadata from {}", source.url());
-				// It might take a while for substrate node that spin up the RPC server.
-				// Thus, the connection might get rejected a few times.
-
-				let res = source.fetch_metadata(as_of).await;
-				println!("finished trying {}", url);
-				match res {
-					Ok(Some(res)) => {
-						// let _ = cmd.kill();
-						break res
-					},
-					_ => {
-						async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
-						retries += 1;
-					},
-				};
+	let metadata_bytes = {
+		const MAX_RETRIES: usize = 6;
+		let mut retries = 0;
+		loop {
+			if retries >= MAX_RETRIES {
+				return None;
 			}
-		};
 
-		println!("writing to {:?}", metadata_path);
-		std::fs::write(&metadata_path, &metadata_bytes.0).expect("Couldn't write metadata output");
-		std::fs::read(
-			metadata_path, //    "/home/gilescope/git/bevy_webgl_template/polkadot_metadata.scale"
-		)
-		.unwrap()
+			// log!("trying to get metadata from {}", source.url());
+			// It might take a while for substrate node that spin up the RPC server.
+			// Thus, the connection might get rejected a few times.
+
+			let res = source.fetch_metadata(as_of).await;
+			match res {
+				Ok(Some(res)) => {
+					break res
+				},
+				_ => {
+					async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
+					retries += 1;
+				},
+			};
+		}
 	};
 
-	let result = Metadata::from_bytes(&metadata_bytes);
+	let result = polkadyn::decode_metadata(&metadata_bytes);
+	// let result = Metadata::from_bytes(&metadata_bytes);
 	if result.is_err() {
-		eprintln!("should be able to get metadata from {}", &url);
+		log!("WARN: should be able to get metadata from {}, {:?}", &source.url(), &result);
 	}
 	result.ok()
 }
 
-pub async fn get_parachain_id<S: Source>(source: &mut S) -> Option<NonZeroU32> {
-	if is_relay_chain(source.url()) {
-		return None
-	}
-	fetch_parachain_id::<S>(source).await
-}
-
-pub async fn fetch_parachain_id<S: Source>(source: &mut S) -> Option<NonZeroU32> {
-	// parachainInfo / parachainId returns u32 paraId
-	let storage_key =
-		hex::decode("0d715f2646c8f85767b5d2764bb2782604a74d81251e398fd8a0a4d55023bb3f").unwrap();
-	let call = source
-		.fetch_storage(subxt::sp_core::storage::StorageKey(storage_key), None)
-		.await
-		.unwrap();
-
-	if let Some(subxt::sp_core::storage::StorageData(val)) = call {
-		let para_id = <u32 as Decode>::decode(&mut val.as_slice()).unwrap();
-		// println!("{} is para id {}", &url, para_id);
-		let para_id = NonZeroU32::try_from(para_id).expect("para id should not be 0");
-		Some(para_id)
-	} else {
-		// This is expected for relay chains...
-		warn!("could not find para id for {}", &source.url());
-		None
-	}
-}
-
-pub fn is_relay_chain(url: &str) -> bool {
-	url == "wss://kusama-rpc.polkadot.io:443" || url == "wss://rpc.polkadot.io:443"
-}
-
-pub fn get_parachain_id_from_url<S: Source>(source: &mut S) -> Result<Option<NonZeroU32>, ()> {
-	Ok(async_std::task::block_on(get_parachain_id(source)))
-}
-
-async fn get_metadata_version(source: &mut impl Source, hash: sp_core::H256) -> Option<String> {
+async fn get_metadata_version(
+	source: &mut impl Source,
+	hash: primitive_types::H256,
+) -> Option<String> {
 	let storage_key =
 		hex::decode("26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8").unwrap();
-	let call = source
-		.fetch_storage(subxt::sp_core::storage::StorageKey(storage_key.clone()), Some(hash))
-		.await;
+	let call = source.fetch_storage(&storage_key[..], Some(hash)).await;
 	let call = match call {
 		Ok(call) => call,
-		Err(err) => {
-			let err = err.to_string();
-			// TODO: if we're looking at finalised blocks why are we running into this?
-			let needle = "State already discarded for BlockId::Hash(";
+		Err(_err) => {
+			// let err = err.to_string();
+			// happens if not hitting archive nodes.
+			// let needle = "State already discarded for BlockId::Hash(";
 
-			let pos = err.find(needle);
-			if let Some(_pos) = pos {
-				// eprintln!(
-				// 	"{} is not alas an archive node and does not go back this far in time.",
-				// 	&url
-				// );
-				return None // If you get this error you need to point to an archive node.
-				 // println!("error message (recoverable) {}", &err);
-				 // let pos = pos + needle.len() + "0x".len();
-				 // if let Ok(new_hash) = hex::decode(&err[pos..(pos + 64)]) {
-				 //     println!("found new hash decoded {}", &err[pos..(pos + 64)]);
-				 //     // T::Hashing()
-				 //     let hash = T::Hashing::hash(new_hash.as_slice());
-				 //     let call = client
-				 //         .storage()
-				 //         .fetch_raw(sp_core::storage::StorageKey(storage_key), Some(hash))
-				 //         .await
-				 //         .unwrap();
-				 //     call
-				 // } else {
-				 //     panic!("could not recover from error {:?}", err);
-				 // }
-			} else {
+			// let pos = err.find(needle);
+			// if let Some(_pos) = pos {
+			// 	return None // If you get this error you need to point to an archive node.
+			// } else {
 				//panic!("could not recover from error2 {:?}", err);
-				return None
-			}
+			return None
+			// }
 		},
 	};
-
-	if let Some(subxt::sp_core::storage::StorageData(val)) = call {
-		Some(hex::encode(val.as_slice()))
-	} else {
-		warn!("could not find metadata id for {}", &source.url());
-		None
-	}
+	call.map(hex::encode)
 }
 
-pub(crate) fn get_parachain_name_sync<S: Source>(source: &mut S) -> Option<String> {
-	Some(block_on(source.fetch_chainname()).unwrap().unwrap())
-}
-
-async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<sp_core::H256> {
-	if let Ok(Some(block_hash)) = source.fetch_block_hash(block_number).await {
-		Some(block_hash)
+async fn get_block_hash<S: Source>(
+	source: &mut S,
+	block_number: u32,
+) -> Option<primitive_types::H256> {
+	if let Ok(block_hash) = source.fetch_block_hash(block_number).await {
+		block_hash
 	} else {
 		None
 	}
@@ -199,176 +134,165 @@ async fn get_block_hash<S: Source>(source: &mut S, block_number: u32) -> Option<
 
 pub type RelayBlockNumber = u32;
 
-pub async fn watch_blocks<S: Source>(
-	tx: ABlocks,
-	chain_info: ChainInfo,
-	as_of: Option<DotUrl>,
-	receive_channel: crossbeam_channel::Receiver<(RelayBlockNumber, i64, H256)>,
-	sender: Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
-	mut source: S,
-) -> Result<(), Box<dyn std::error::Error>> {
-	let url = &chain_info.chain_ws;
-	let para_id = chain_info.chain_url.para_id.clone();
+pub struct BlockWatcher<F, R>
+where
+	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	R: Future<Output = ()>,
+{
+	pub tx: Option<F>,
+	pub chain_info: ChainInfo,
+	pub as_of: Option<DotUrl>,
+	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
+	pub sender:
+		Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+}
 
-	let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
-	println!("our epoc for watching blocks is {}", our_data_epoc);
-
-	// Tell renderer to draw a new chain...
+impl<F, R> BlockWatcher<F, R>
+where
+	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	R: Future<Output = ()> + 'static,
+{
+	pub async fn watch_blocks(mut self)
 	{
-		let mut handle = tx.lock().unwrap();
-		handle.push(DataUpdate::NewChain(chain_info.clone()));
-	}
+		// log!("watching blocks {}", self.chain_info.chain_index);
+		let tx: F = self.tx.take().unwrap();
+		let chain_info: ChainInfo = self.chain_info.clone();
+		let as_of: Option<DotUrl> = self.as_of.take();
+		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> =
+			self.receive_channel.take().unwrap();
+		let sender: Option<
+			HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>,
+		> = self.sender.take();
+		// let mut source = &mut self.source;
+		// log!("listening to as of {:?}", as_of);
 
-	if let Some(as_of) = as_of {
-		debug_assert!(as_of.block_number.is_some());
-		// if we are a parachain then we need the relay chain to tell us which numbers it is
-		// interested in
-		if para_id.is_some() {
-			// Parachain (listening for relay blocks' para include candidate included events.)
-			while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
-				receive_channel.recv()
-			{
-				let _ = process_extrinsics(
-					&tx,
-					chain_info.chain_url.clone(),
-					block_hash,
-					&mut source,
-					&sender,
-					our_data_epoc,
-					Some(timestamp_parent),
-				)
-				.await;
-				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-					return Ok(())
-				}
-				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
-					async_std::task::sleep(Duration::from_secs(2)).await;
-				}
-			}
-		} else {
-			println!("listening to relay chain {:?}", as_of);
-			// Relay chain.
-			let mut as_of = as_of.clone();
-			let basetime = BASETIME.load(Ordering::Relaxed);
+		let url = &chain_info.chain_ws;
+		#[cfg(not(target_arch = "wasm32"))]
+		let mut source = CachedDataSource::new(RawDataSource::new(url));
+		#[cfg(target_arch = "wasm32")]
+		let mut source = RawDataSource::new(url);
 
-			// Is the as of the block number of a different relay chain?
-			// (datepicker could have set basetime)
-			if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
-				// if so, we have to wait till we know what the time is of that block to proceed.
-				// then we can figure out our nearest block based on that timestamp...
-				while BASETIME.load(Ordering::Relaxed) == 0 {
-					async_std::task::sleep(Duration::from_millis(250)).await;
-				}
+		let para_id = chain_info.chain_url.para_id;
 
-				// Timestamp is unlikely to change so we can use generic metadata
-				let metad_current = get_desub_metadata(&mut source, None).await.unwrap();
-				let basetime = BASETIME.load(Ordering::Relaxed);
-				let mut time_for_blocknum = |blocknum: u32| {
-					let mut block_hash: Option<sp_core::H256> =
-						block_on(get_block_hash(&mut source, blocknum));
-					for _ in 0..10 {
-						if block_hash.is_some() {
-							break
-						}
-						block_hash = block_on(get_block_hash(&mut source, blocknum));
-					}
+		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
+		// println!("our epoc for watching blocks is {}", our_data_epoc);
 
-					block_on(find_timestamp(
-						// chain_info.chain_url.clone(),
-						block_hash.unwrap(),
-						&mut source,
-						&metad_current,
-					))
-				};
-				as_of.block_number = time_predictor::get_block_number_near_timestamp(
-					basetime,
-					10_000_000,
-					&mut time_for_blocknum,
-					None,
-				);
-				debug_assert!(
-					as_of.block_number.is_some(),
-					"could not convert time {} to blocknum for {}",
-					basetime,
-					as_of
-				);
-			}
-
-			let mut last_timestamp = None;
-			for block_number in as_of.block_number.unwrap().. {
-				async_std::task::sleep(std::time::Duration::from_secs(2)).await;
-				let block_hash: Option<sp_core::H256> =
-					get_block_hash(&mut source, block_number).await;
-
-				if block_hash.is_none() {
-					eprintln!(
-						"should be able to get from relay chain hash for block num {} of url {}",
-						block_number, url
-					);
-					// TODO: timestamp probably incorrect
-					tx.lock().unwrap().push(DataUpdate::NewBlock(PolkaBlock {
-						data_epoc: our_data_epoc,
-						// Place it in the approximately right location...
-						timestamp: last_timestamp.map(|t| t + 12_000_000),
-						timestamp_parent: None,
-						blockurl: DotUrl {
-							block_number: Some(block_number),
-							..chain_info.chain_url.clone()
-						},
-						blockhash: sp_core::H256::default(),
-						extrinsics: vec![],
-						events: vec![],
-					}));
-
-					continue
-				}
-				let block_hash = block_hash.unwrap();
-				if let Ok(timestamp) = process_extrinsics(
-					&tx,
-					chain_info.chain_url.clone(),
-					block_hash,
-					&mut source,
-					&sender,
-					our_data_epoc,
-					None,
-				)
-				.await
-				{
-					last_timestamp = timestamp;
-				};
-				// check for stop signal
-				if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-					return Ok(())
-				}
-
-				while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
-					async_std::task::sleep(Duration::from_secs(2)).await;
-				}
-			}
+		// Tell renderer to draw a new chain...
+		{
+			// log!("acquiring lock");
+			//let mut handle = tx.lock().unwrap();
+			tx(vec![DataUpdate::NewChain(chain_info.clone())]).await;
+			// log!("got lock");
 		}
-	} else {
-		println!("listening to live");
-		let mut reconnects = 0;
-		while reconnects < 20 {
-			// println!("try subscribe!");
-			if let Ok(mut block_headers) = source.subscribe_finalised_blocks().await {
-				// println!("subscribed!");
-				while let Some(Ok(block_hash)) = block_headers.next().await {
-					println!("got live block");
+
+		if let Some(as_of) = as_of {
+			debug_assert!(as_of.block_number.is_some());
+			// if we are a parachain then we need the relay chain to tell us which numbers it is
+			// interested in
+			if para_id.is_some() {
+				// log!("polling parachain {:?}", para_id);
+				// Parachain (listening for relay blocks' para include candidate included events.)
+				while let Ok((_relay_block_number, timestamp_parent, block_hash)) =
+					receive_channel.recv().await
+				{
 					let _ = process_extrinsics(
 						&tx,
 						chain_info.chain_url.clone(),
 						block_hash,
 						&mut source,
-						&None,
+						&sender,
+						our_data_epoc,
+						Some(timestamp_parent),
+					)
+					.await;
+					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+						return //Ok(())
+					}
+					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+						async_std::task::sleep(Duration::from_secs(2)).await;
+					}
+				}
+			} else {
+				log!("listening to relay chain {:?}", as_of);
+				// Relay chain.
+				let mut as_of = as_of.clone();
+				let basetime = *BASETIME.lock().unwrap();
+
+				// Is the as of the block number of a different relay chain?
+				// (datepicker could have set basetime)
+				if as_of.sovereign != chain_info.chain_url.sovereign || basetime > 0 {
+					// if so, we have to wait till we know what the time is of that block to
+					// proceed. then we can figure out our nearest block based on that timestamp...
+					while *BASETIME.lock().unwrap() == 0 {
+						async_std::task::sleep(Duration::from_millis(250)).await;
+					}
+
+					// Timestamp is unlikely to change so we can use generic metadata
+					let metad_current = get_metadata(&mut source, None).await.unwrap();
+					let basetime = *BASETIME.lock().unwrap();
+					
+					as_of.block_number = time_predictor::get_block_number_near_timestamp(
+						basetime,
+						10_000_000,
+						&mut source,
+						None,
+						&metad_current,
+					)
+					.await;
+					debug_assert!(
+						as_of.block_number.is_some(),
+						"could not convert time {} to block number for {}",
+						basetime,
+						as_of
+					);
+				}
+
+				let mut last_timestamp = None;
+				for block_number in as_of.block_number.unwrap().. {
+					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
+					// log!("get block {:?}", block_number);
+					let block_hash: Option<primitive_types::H256> =
+						get_block_hash(&mut source, block_number).await;
+					// log!("hash is {:?}", block_hash);
+					if block_hash.is_none() {
+						eprintln!(
+							"should be able to get from relay chain hash for block num {} of url {}",
+							block_number, url
+						);
+						// TODO: timestamp probably incorrect
+						tx(vec![DataUpdate::NewBlock(PolkaBlock {
+							data_epoc: our_data_epoc,
+							// Place it in the approximately right location...
+							timestamp: last_timestamp.map(|t| t + 12_000_000),
+							timestamp_parent: None,
+							blockurl: DotUrl {
+								block_number: Some(block_number),
+								..chain_info.chain_url.clone()
+							},
+							blockhash: H256::default(),
+							extrinsics: vec![],
+							events: vec![],
+						})]);
+
+						continue
+					}
+					let block_hash = block_hash.unwrap();
+					if let Ok(timestamp) = process_extrinsics(
+						&tx,
+						chain_info.chain_url.clone(),
+						block_hash,
+						&mut source,
+						&sender,
 						our_data_epoc,
 						None,
 					)
-					.await;
+					.await
+					{
+						last_timestamp = timestamp;
+					};
 					// check for stop signal
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
-						println!("epoc has changed, ending for {:?}.", as_of);
-						return Ok(())
+						return
 					}
 
 					while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -376,36 +300,79 @@ pub async fn watch_blocks<S: Source>(
 					}
 				}
 			}
-			async_std::task::sleep(std::time::Duration::from_secs(20)).await;
-			reconnects += 1;
+		} else {
+			log!("listening to live");
+
+			if let Ok(Some(latest_block)) = source.fetch_block(None).await {
+				let mut block_num : u32 = latest_block.block_number;
+				log!("live mode starting at block num {}", block_num);
+				loop {
+					let next = source.fetch_block_hash(block_num).await;
+					if let Ok(Some(block_hash)) = next {
+						log!("found new block on {}", source.url());
+						let _ = process_extrinsics(
+							&tx,
+							chain_info.chain_url.clone(),
+							block_hash,
+							&mut source,
+							&None,
+							our_data_epoc,
+							None,
+						)
+						.await;
+						// check for stop signal
+						if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
+							log!("epoc has changed, ending for {:?}.", as_of);
+							return 
+						}
+
+						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
+							async_std::task::sleep(Duration::from_secs(2)).await;
+						}
+
+						// yield val;
+						block_num += 1;
+					}
+					async_std::task::sleep(Duration::from_secs(6)).await;
+				}
+			}
 		}
 	}
-	Ok(())
+}
+
+struct OwnedScale {
+	raw: Vec<u8>,
+	derived: DataEntity
 }
 
 // Returns the timestamp of the block decoded.
-async fn process_extrinsics<S: Source>(
-	tx: &ABlocks,
+async fn process_extrinsics<S: Source, F, R>(
+	tx: &F,
 	mut blockurl: DotUrl,
 	block_hash: H256,
 	source: &mut S,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
-) -> Result<Option<i64>, ()> {
+) -> Result<Option<i64>, ()>
+where
+	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	R: Future<Output = ()> + 'static,
+{
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		let got_block_num = block.block_number;
 		let extrinsics = block.extrinsics;
 		blockurl.block_number = Some(got_block_num);
-		let block_number = blockurl.block_number.unwrap();
+		// let block_number = blockurl.block_number.unwrap();
 
 		let version = get_metadata_version(source, block_hash).await;
+
 		let metad = if let Some(version) = version {
-			get_desub_metadata(source, Some((version, block_hash))).await
+			get_metadata(source, Some((version, block_hash))).await
 		} else {
 			//TODO: This is unlikely to work. we should try the oldest metadata we have instead...
-			get_desub_metadata(source, None).await
+			get_metadata(source, None).await
 		};
 		if metad.is_none() {
 			//println!("skip")
@@ -414,43 +381,20 @@ async fn process_extrinsics<S: Source>(
 		let metad = metad.unwrap();
 
 		let mut exts = vec![];
-		for (i, encoded_extrinsic) in extrinsics.iter().enumerate() {
+		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-			let ex_slice =
-				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
+			//TODO: did we need to double decode extrinsics????
+			
+			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 
-			// let ex_slice = &ext_bytes.0;
-			if let Ok(extrinsic) =
-				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-			{
-				let entity = process_extrisic(
-					(ex_slice).clone(),
-					&extrinsic,
-					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-					source.url(),
-				)
-				.await;
-				if let Some(entity) = entity {
-					if entity.pallet() == "Timestamp" && entity.variant() == "set" {
-						if let ValueDef::Primitive(Primitive::U64(val)) =
-							extrinsic.call_data.arguments[0].value
-						{
-							timestamp = Some(val as i64);
-						}
-					}
-					exts.push(entity);
-				}
-			} else {
-				// println!("can't decode block ext {}-{} {}", block_number, i, &url);
-				exts.push(DataEntity::Extrinsic {
-					// id: (block_number, extrinsic_url.extrinsic.unwrap()),
+			let the_extrinsic = OwnedScale{
+				raw: encoded_extrinsic.clone(),
+				derived:DataEntity::Extrinsic {
 					args: vec![],
 					contains: vec![],
-					raw: ex_slice.as_slice().to_vec(),
 					start_link: vec![],
 					end_link: vec![],
 					details: Details {
-						hover: "".to_string(),
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 						flattern: "can't yet decode.".to_string(),
 						url: source.url().to_string(),
@@ -458,20 +402,52 @@ async fn process_extrinsics<S: Source>(
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
 						variant: "?".to_string(),
+						raw: encoded_extrinsic,
 					},
-				});
+				}
+			};
+			let ex_slice = &the_extrinsic.raw[..];
+			// let ex_slice = &ext_bytes.0;
+			if let Ok(extrinsic2) = polkadyn::decode_extrinsic(&metad, ex_slice)
+			{
+				let extrinsic = scale_value_to_borrowed::convert(&extrinsic2, true);
+				let entity = process_extrinsic(
+					&metad,
+					
+					ex_slice,
+					&extrinsic,
+					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
+					source.url(),
+				)
+				.await;
+				if let Some(entity) = entity {
+					if let Some(scale_borrow::Value::U64(time)) =
+						extrinsic.expect4("Timestamp", "0", "set", "now")
+					{
+						timestamp = Some(*time as i64);
+					}
+					exts.push(entity);
+				}
+			} else {
+				// log!("can't decode block ext {} {}", i, &blockurl);
+				exts.push(the_extrinsic.derived);
 			}
 		}
 		let (events, _start_link) =
-			get_events_for_block(source, block_hash, &sender, &blockurl, &metad, timestamp.clone())
+			get_events_for_block(source, block_hash, sender, &blockurl, &metad, timestamp)
 				.await
 				.or(Err(()))?;
 
-		let mut handle = tx.lock().unwrap();
+		//let mut handle = tx.lock().unwrap();
 
+		//Can't decode time https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fkhala-rpc.dwellir.com#/explorer/query/900909
+		//debug_assert!(timestamp.is_some(), "events found {:?}", extrinsics.len());
+		if timestamp.is_none() {
+			timestamp = timestamp_parent; // aproximation
+		}
 		let current = PolkaBlock {
 			data_epoc: our_data_epoc,
-			timestamp: timestamp.clone(),
+			timestamp,
 			timestamp_parent,
 			blockurl,
 			blockhash: block_hash,
@@ -480,7 +456,7 @@ async fn process_extrinsics<S: Source>(
 		};
 
 		//FYI: blocks sometimes have no events in them.
-		handle.push(DataUpdate::NewBlock(current));
+		tx(vec![DataUpdate::NewBlock(current)]).await;
 	}
 	Ok(timestamp)
 }
@@ -489,26 +465,29 @@ async fn process_extrinsics<S: Source>(
 async fn find_timestamp<S: Source>(
 	block_hash: H256,
 	source: &mut S,
-	metad: &Metadata,
+	metad: &frame_metadata::RuntimeMetadataPrefixed,
 ) -> Option<i64> {
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
-			let ex_slice =
-				<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
-			if let Ok(extrinsic) =
-				decoder::decode_unwrapped_extrinsic(&metad, &mut ex_slice.as_slice())
-			{
-				let pallet = extrinsic.call_data.pallet_name.to_string();
-				let variant = extrinsic.call_data.ty.name().to_owned();
-				if pallet == "Timestamp" && variant == "set" {
-					if let ValueDef::Primitive(Primitive::U64(val)) =
-						extrinsic.call_data.arguments[0].value
-					{
-						// Timestamps are usually represented as i64
-						// I'm sure i64 time will be enough for a while.
-						return Some(val as i64)
-					}
+			let result = polkadyn::decode_extrinsic(metad, encoded_extrinsic.as_slice());
+			if let Ok(extrinsic) = result {
+				let extrinsic = scale_value_to_borrowed::convert(&extrinsic, true);
+				if let Some(scale_borrow::Value::U64(val)) =
+					extrinsic.expect4("Timestamp", "0", "set", "now")
+				{
+					// Timestamps are usually represented as i64
+					// I'm sure i64 time will be enough for a while.
+					return Some(*val as i64)
 				}
+			} else {
+				println!(
+					"couldn't {}, {} understand {}th code {:?} {}",
+					source.url(),
+					hex::encode(block_hash.as_bytes()),
+					i,
+					result,
+					hex::encode(encoded_extrinsic)
+				);
 			}
 		}
 	}
@@ -516,22 +495,22 @@ async fn find_timestamp<S: Source>(
 }
 
 // fetches extrinsics from node for a block number (wrapped by a file cache).
-use subxt::GenericError;
 async fn get_extrinsics(
 	source: &mut impl Source,
 	block_hash: H256,
-) -> Result<Option<AgnosticBlock>, GenericError<std::convert::Infallible>> {
+) -> Result<Option<AgnosticBlock>, polkapipe::Error> {
 	source.fetch_block(Some(block_hash)).await
 }
 
-async fn process_extrisic<'a>(
-	ex_slice: Vec<u8>,
-	ext: &desub_current::decoder::Extrinsic<'a>,
+async fn process_extrinsic<'a, 'scale>(
+	meta: &frame_metadata::RuntimeMetadataPrefixed,
+	ex_slice: &'scale [u8],
+	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
 	url: &str,
 ) -> Option<DataEntity> {
-	let block_number = extrinsic_url.block_number.unwrap();
-	let para_id = extrinsic_url.para_id.clone();
+	// let _block_number = extrinsic_url.block_number.unwrap();
+	// let para_id = extrinsic_url.para_id.clone();
 	// let s : String = ext_bytes;
 	// ext_bytes.using_encoded(|ref slice| {
 	//     assert_eq!(slice, &b"\x0f");
@@ -545,45 +524,479 @@ async fn process_extrisic<'a>(
 
 	// use parity_scale_codec::Encode;
 	// ext_bytes.encode();
-	let pallet = ext.call_data.pallet_name.to_string();
-	let variant = ext.call_data.ty.name().to_owned();
+
+	let mut children = vec![];
 	let mut start_link: Vec<(String, LinkType)> = vec![];
-	let mut end_link: Vec<(String, LinkType)> = vec![];
+	let end_link: Vec<(String, LinkType)> = vec![];
 
-	let mut args: Vec<_> = ext
-		.call_data
-		.arguments
-		.iter()
-		.map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
-		.collect();
+	let (pallet, variant) = if let Some((pallet, "0", variant, payload)) = ext.only3() {
+		match (pallet, variant) {
+			("System", "remark") => {
+				log!("REMARK {:?}", payload);
+				// match &payload.get("0") {
+				// 	scale_value::ValueDef::Primitive(scale_value::Composite::Unnamed(
+				// 		chars_vals,
+				// 	)) => {
+				// 		let bytes = chars_vals
+				// 			.iter()
+				// 			.map(|arg| match arg.value {
+				// 				scale_value::ValueDef::Primitive(
+				// 					scale_value::Primitive::U8(ch),
+				// 				) => ch,
+				// 				_ => b'!',
+				// 			})
+				// 			.collect::<Vec<u8>>();
+				// 		let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
+				// 		args.insert(0, rmrk);
+				// 	},
 
-	if pallet == "System" && variant == "remark" {
-		match &ext.call_data.arguments[0].value {
-			desub_current::ValueDef::Composite(desub_current::value::Composite::Unnamed(
-				chars_vals,
-			)) => {
-				let bytes = chars_vals
-					.iter()
-					.map(|arg| match arg.value {
-						desub_current::ValueDef::Primitive(
-							desub_current::value::Primitive::U8(ch),
-						) => ch,
-						_ => b'!',
-					})
-					.collect::<Vec<u8>>();
-				let rmrk = String::from_utf8_lossy(bytes.as_slice()).to_string();
-				args.insert(0, rmrk);
+				// 	_ => {},
+				// }
 			},
+			// Seek out and expand Ump / UpwardMessageReceived;
+			("ParaInherent", "enter") => {
+				//let mut results = HashMap::new();
+				// payload.
+				// flattern(&ext.call_data.arguments[0].value, "",&mut results);
+				// let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
+				// let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
+				// let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
 
-			_ => {},
+				//println!("FLATTERN UMP {:#?}", results);
+			},
+			// Seek out and expand Dmp / DownwardMessageReceived;
+			("ParachainSystem", "set_validation_data") => {
+				// let _s = format!("{:?}", &payload);
+
+				if payload.find2("data", "upward_messages").is_some() {
+					println!("found upward msgs (first time)");
+				}
+				if let Some(channels) = payload.find2("data", "horizontal_messages") {
+					// println!("found horizontal_messages msgs (first time)");
+					for (_ch_index, msg) in channels {
+						// println!("found {:?} and msg {:?}", ch_index, msg);
+						for (_msg_index, val) in msg {
+							for (_val_name, inner_val) in val {
+								if let scale_borrow::Value::Object(rows) = inner_val {
+									if rows.len() > 1 {
+										println!("found horiz {}", inner_val);
+										if let Some(scale_borrow::Value::U64(para_id)) =
+											inner_val.get("0")
+										{
+											println!(
+												"TODO: do something with horiz to para {}",
+												para_id
+											);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if let Some(channels) = payload.find2("data", "downward_messages") {
+					// if let scale_borrow::Value::ScaleOwned(bytes) = channels {
+					// 	println!("got downward message {:?}", bytes);
+					// }
+
+					for (msg_index, msg) in channels {
+						println!("found {} downward_message is, {}", msg_index, &msg);
+						if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
+							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
+								let v = polkadyn::decode_xcm(meta, &bytes[2..]).unwrap();
+								println!("xcm msgv= {}", v);
+								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
+								// msg.set("msg_decoded", msg_decoded);
+								let msg = msg_decoded;
+								println!("xcm msg = {}", msg);
+
+								if let Some(instructions) = msg.get("V0") {
+									for (instruction, payload) in instructions {
+										println!("instruction {}", &payload);
+										children.push(DataEntity::Extrinsic {
+											// id: (block_number, extrinsic_index),
+											args: vec![instruction.to_string()],
+											contains: vec![],
+											
+											start_link: vec![],
+											end_link: vec![],
+											details: Details {
+												pallet: "Instruction".to_string(),
+												variant: instruction.to_string(),
+												doturl: extrinsic_url.clone(),
+												raw: bytes.to_vec(),
+												..Details::default()
+											},
+										});
+
+										if *instruction == "TransferAsset" {
+											if let Some(_dest) = payload.get("dest") {}
+											// panic!();
+										}
+									}
+								}
+								if let Some(instructions) = msg.get("V1") {
+									for (instruction, payload) in instructions {
+										println!("instruction {}", &payload);
+										children.push(DataEntity::Extrinsic {
+											// id: (block_number, extrinsic_index),
+											args: vec![instruction.to_string()],
+											contains: vec![],
+										
+											start_link: vec![],
+											end_link: vec![],
+											details: Details {
+												pallet: "Instruction".to_string(),
+												variant: instruction.to_string(),
+												doturl: extrinsic_url.clone(),
+													raw: bytes.to_vec(),
+												..Details::default()
+											},
+										});
+
+										if *instruction == "TransferAsset" {
+											if let Some(ben) = payload.get("beneficiary") {
+
+											}
+											// panic!();
+										}
+									}
+								}
+								if let Some(instructions) = msg.get("V2") {
+									for (instruction, payload) in instructions {
+										println!("instruction {}", &payload);
+										children.push(DataEntity::Extrinsic {
+											// id: (block_number, extrinsic_index),
+											args: vec![instruction.to_string()],
+											contains: vec![],
+											
+											start_link: vec![],
+											end_link: vec![],
+											details: Details {
+												pallet: "Instruction".to_string(),
+												variant: instruction.to_string(),
+												doturl: extrinsic_url.clone(),
+												raw: bytes.to_vec(),
+												..Details::default()
+											},
+										});
+
+										if *instruction == "TransferAsset" {
+											if let Some(_dest) = payload.get("dest") {}
+											// panic!();
+										}
+									}
+								}
+							}
+
+							// VersionedXcm::V1(msg) => {
+							// 										// Only one xcm instruction in a v1 message.
+							// 										let instruction = format!("{:?}", &msg);
+							// 										println!("instruction {:?}", &instruction);
+							// 										children.push(DataEntity::Extrinsic {
+							// 											// id: (block_number, extrinsic_index),
+							// 											args: vec![instruction.clone()],
+							// 											contains: vec![],
+							// 											raw: vec![], //TODO: should be simples
+							// 											start_link: vec![],
+							// 											end_link: vec![],
+							// 											details: Details {
+							// 												pallet: "Instruction".to_string(),
+							// 												variant: instruction
+							// 													.split_once(' ')
+							// 													.unwrap()
+							// 													.0
+							// 													.to_string(),
+							// 												doturl: extrinsic_url.clone(),
+							// 												..Details::default()
+							// 											},
+							// 										});
+							// 										let inst = msg;
+							// 										if let TransferReserveAsset {
+							// { 														dest, ..
+							// 										} = inst
+							// 										{
+							// 											let MultiLocation { interior, .. } =
+							// 												&dest;
+							// 											//todo assert parent
+							// 											if let Junctions::X1(x1) = interior {
+							// 												if let Junction::AccountId32 {
+							// 													id,
+							// 													..
+							// 												} = x1
+							// 												{
+							// 													let msg_id = format!(
+							// 														"{}-{}",
+							// 														sent_at,
+							// 														please_hash(&hex::encode(
+							// 															id
+							// 														))
+							// 													);
+							// 													println!(
+							// 														"RECEIVE HASH v1 {}",
+							// 														msg_id
+							// 													);
+							// 													end_link.push((
+							// 														msg_id.clone(),
+							// 														LinkType::ReserveTransfer,
+							// 													));
+							// 													start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
+							// 													// for reserve assets received.
+							// 												};
+							// 											} else {
+							// 												panic!("unknonwn")
+							// 											}
+							// 										}
+							// 									},
+							// 									VersionedXcm::V0(msg) => {
+							// 										// Only one xcm instruction in a v1 message.
+							// 										let instruction = format!("{:?}", &msg);
+							// 										println!("instruction {:?}", &instruction);
+							// 										children.push(DataEntity::Extrinsic {
+							// 											// id: (block_number,
+							// 											// extrinsic_urlbextrinsic_index),
+							// 											args: vec![instruction.clone()],
+							// 											contains: vec![],
+							// 											raw: vec![], //TODO: should be simples
+							// 											start_link: vec![],
+							// 											end_link: vec![],
+							// 											details: Details {
+							// 												pallet: "Instruction".to_string(),
+							// 												variant: instruction
+							// 													.split_once(' ')
+							// 													.unwrap()
+							// 													.0
+							// 													.to_string(),
+							// 												doturl: extrinsic_url.clone(),
+							// 												..Details::default()
+							// 											},
+							// 										});
+							// 										let inst = msg;
+							// 										if let TransferReserveAsset {
+							// { 														dest, ..
+							// 										} = inst
+							// 										{
+							// 											if let MultiLocation::X1(x1) = &dest {
+							// 												//todo assert parent
+							// 												if let Junction::AccountId32 {
+							// 													id,
+							// 													..
+							// 												} = x1
+							// 												{
+							// 													let msg_id = format!(
+							// 														"{}-{}",
+							// 														sent_at,
+							// 														please_hash(&hex::encode(
+							// 															id
+							// 														))
+							// 													);
+							// 													println!(
+							// 														"RECEIVE HASH v0 {}",
+							// 														msg_id
+							// 													);
+							// 													end_link.push((
+							// 														msg_id.clone(),
+							// 														LinkType::ReserveTransfer,
+							// 													));
+							// 													start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
+							// 													// for reserve assets received.
+							// 												};
+							// 											} else {
+							// 												panic!("unknown")
+							// 											}
+							// 										}
+							// 									},
+							//
+							// 									VersionedXcm::V2(msg) => {
+							// 										for instruction in &msg.0 {
+							// 											let instruction =
+							// 												format!("{:?}", instruction);
+							// 											println!(
+							// 												"instruction {:?}",
+							// 												&instruction
+							// 											);
+							// 											children.push(DataEntity::Extrinsic {
+							// 												args: vec![instruction.clone()],
+							// 												contains: vec![],
+							// 												raw: vec![], /* TODO: should be
+							// 																* simples */
+							// 												start_link: vec![],
+							// 												end_link: vec![],
+							// 												details: Details {
+							// 													pallet: "Instruction"
+							// 														.to_string(),
+							// 													variant: instruction
+							// 														.split_once(' ')
+							// 														.unwrap_or((
+							// 															&instruction,
+							// 															"",
+							// 														))
+							// 														.0
+							// 														.to_string(),
+							// 													doturl: extrinsic_url.clone(),
+							// 													..Details::default()
+							// 												},
+							// 											});
+							// 										}
+							// 										for inst in msg.0 {
+							// 											//TODO: should only be importing from
+							// 											// one version probably.
+							// 											if let DepositAsset {
+							// 												beneficiary,
+							// 												..
+							// 											} = inst
+							// 											{
+							// 												let MultiLocation {
+							// 													interior, ..
+							// 												} = &beneficiary;
+							// 												//todo assert parent
+							// 												if let Junctions::X1(x1) = interior
+							// 												{
+							// 													if let Junction::AccountId32 {
+							// 														id,
+							// 														..
+							// 													} = x1
+							// 													{
+							// 														let msg_id = format!(
+							// 															"{}-{}",
+							// 															sent_at,
+							// 															please_hash(
+							// 																&hex::encode(id)
+							// 															)
+							// 														);
+							// 														println!(
+							// 															"RECEIVE HASH v2 {}",
+							// 															msg_id
+							// 														);
+							// 														end_link
+
+							// .push((msg_id.clone(), LinkType::ReserveTransfer));
+							// start_link.push((msg_id, LinkType::ReserveTransferMintDerivative)); 																	//
+							// for reserve assets 														// received.
+							// 													};
+							// 												} else {
+							// 													panic!("unknonwn")
+							// 												}
+							// 											}
+							// 										}
+							// 	},
+							// }
+							// } else {
+							// 	println!("could not decode msg: {}", msg);
+							// }
+							// 			}
+						}
+					}
+				}
+			},
+			("XcmPallet", "limited_teleport_assets") => {
+		
+				// 	let mut flat0 = HashMap::new();
+				// 	flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
+				// 	// println!("FLATTERN {:#?}", flat0);
+				// 	let mut flat1 = HashMap::new();
+				// 	flattern(&ext.call_data.arguments[1].value, "", &mut flat1);
+
+				// 	if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+				// 		let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+				// 		// let dest: NonZeroU32 = dest.parse().unwrap();
+
+				// 		if let Some(to) = to {
+				// 			let msg_id = format!("{}-{}", block_number, please_hash(to));
+				// 			// println!("SEND MSG v0 hash {}", msg_id);
+				// 			start_link.push((msg_id, LinkType::Teleport));
+				// 		}
+				// 	// println!("first time seen");
+				// 	// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
+				// 	} else if let Some(_dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
+				// 		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
+				// 		// let dest: NonZeroU32 = dest.parse().unwrap();
+
+				// 		if let Some(to) = to {
+				// 			let msg_id = format!("{}-{}", block_number, please_hash(to));
+				// 			// println!("SEND MSG v0 hash {}", msg_id);
+				// 			start_link.push((msg_id, LinkType::Teleport));
+				// 		}
+				// 	// println!("first time seen");
+				// 	// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
+				// 	} else if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+				// 		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+				// 		// let dest: NonZeroU32 = dest.parse().unwrap();
+
+				// 		if let Some(to) = to {
+				// 			let msg_id = format!("{}-{}", block_number, please_hash(to));
+				// 			// println!("SEND MSG v0 hash {}", msg_id);
+				// 			start_link.push((msg_id, LinkType::Teleport));
+				// 		}
+				// 		// println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
+				// 	}
+
+				// 	// println!("FLATTERN {:#?}", flat1);
+				// 	// println!("BOB");
+				// 	//          print_val(&ext.call_data.arguments[0].value);
+				// 	//          println!("BOB");
+				// 	//         print_val(&ext.call_data.arguments[1].value);
+			},
+			("XcmPallet", "reserve_transfer_assets") => {
+				check_reserve_asset(&payload, &extrinsic_url, &mut start_link).await;
+			},
+			(_, variant) => {
+				if variant.contains("batch") {
+					log!("found batch {:?}", payload);
+					if let Some(args) = payload.get("calls") {
+						for (_, instruction) in args {
+							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) = instruction.only3() 
+							{
+								log!("found batch instructionC {} {} {:?}", inner_pallet, inner_variant, instruction);
+									children.push(DataEntity::Extrinsic {
+										args: vec![format!("{}", instruction)],
+										contains: vec![],
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											raw: ex_slice.to_vec(),//TODO reference not own.
+											pallet: inner_pallet.to_string(),
+											variant: inner_variant.to_string(),
+											doturl: extrinsic_url.clone(),
+											..Details::default()
+										},
+									});
+
+									// TODO: generalise to recurse.
+									if inner_pallet == "XcmPallet" && inner_variant == "reserve_transfer_assets"
+									{
+										check_reserve_asset(
+											&extrinsic_payload,
+											&extrinsic_url,
+											&mut start_link,
+										)
+										.await;
+									}
+							}
+						}
+					}
+				}
+			}
 		}
-	}
+		
+		(pallet, variant)
+	} else {
+		panic!("could not find call_data.pallet_name in {:#?}", &ext);
+	};
+
+	// log!("found {pallet} / {variant}");
+
+
+	// let mut args: Vec<_> = ext
+	// 	.call_data
+	// 	.arguments
+	// 	.iter()
+	// 	.map(|arg| format!("{:?}", arg).chars().take(500).collect::<String>())
+	// 	.collect();
 
 	// Maybe we can rely on the common type system for XCM versions as it has to be quite
 	// standard...
-
-	let mut children = vec![];
-	// println!("checking batch");
 
 	/*
 	Value { variant v1
@@ -597,467 +1010,30 @@ async fn process_extrisic<'a>(
 	context: TypeId(113) },), context: TypeId(112) } }, context: TypeId(111) },), context: TypeId(144) }
 
 	*/
-
-	// Seek out and expand Ump / UpwardMessageRecieved;
-	// if pallet == "ParaInherent" && variant == "enter" {
-	//     let mut results = HashMap::new();
-	//     flattern(&ext.call_data.arguments[0].value, "",&mut results);
-	//     let _ = results.drain_filter(|el, _| el.starts_with(".bitfields"));
-	//     let _ = results.drain_filter(|el, _| el.starts_with(".backed_candidates"));
-	//     let _ = results.drain_filter(|el, _| el.starts_with(".parent_"));
-
-	//     println!("FLATTERN UMP {:#?}", results);
+	
+	// let mut results = HashMap::new();
+	// for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
+	// 	flattern(&arg.value, &arg_index.to_string(), &mut results);
 	// }
-	// Seek out and expand Dmp / DownwardMessageRecieved;
-	if pallet == "ParachainSystem" && variant == "set_validation_data" {
-		match &ext.call_data.arguments[0].value {
-			ValueDef::Composite(Composite::Named(named)) => {
-				for (name, val) in named {
-					match name.as_str() {
-						"upward_messages" => {
-							println!("found upward msgs (first time)");
-							print_val(&val.value);
-						},
-						"horizontal_messages" => {
-							if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-								for val in vals {
-									// channels
-									if let ValueDef::Composite(Composite::Unnamed(vals)) =
-										&val.value
-									{
-										for val in vals {
-											// single channel
-											if let ValueDef::Composite(Composite::Unnamed(vals)) =
-												&val.value
-											{
-												for val in vals {
-													// Should be a msg
-													//  for val in vals {
-													//msgs
-													if let ValueDef::Composite(
-														Composite::Unnamed(vals),
-													) = &val.value
-													{
-														if vals.len() > 0 {
-															for m in vals {
-																if let ValueDef::Primitive(
-																	Primitive::U32(_from_para_id),
-																) = &m.value
-																{
-																	// println!("from {}",
-																	// from_para_id);
-																}
-
-																if vals.len() > 1 {
-																	let mut results =
-																		HashMap::new();
-																	flattern(
-																		&val.value,
-																		"",
-																		&mut results,
-																	);
-																	println!(
-																		"INNER {:#?}",
-																		results
-																	);
-																	//Could be that these are not
-																	// yet in the wild
-																	std::process::exit(1);
-																}
-															}
-														}
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						},
-						"downward_messages" => {
-							if let ValueDef::Composite(Composite::Unnamed(vals)) = &val.value {
-								for val in vals {
-									let mut results = HashMap::new();
-									flattern(&val.value, "", &mut results);
-									println!("FLATTERN {:#?}", results);
-									// also .sent_at
-									if let Some(msg) = results.get(".msg") {
-										if let Some(sent_at) = results.get(".sent_at") {
-											let bytes = hex::decode(msg).unwrap();
-											if let Ok(ver_msg) = <VersionedXcm as Decode>::decode(
-												&mut bytes.as_slice(),
-											) {
-												match ver_msg {
-													VersionedXcm::V0(msg) => {
-														// Only one xcm instruction in a v1 message.
-														let instruction = format!("{:?}", &msg);
-														println!("instruction {:?}", &instruction);
-														children.push(DataEntity::Extrinsic {
-															// id: (block_number,
-															// extrinsic_urlbextrinsic_index),
-															args: vec![instruction.clone()],
-															contains: vec![],
-															raw: vec![], //TODO: should be simples
-															start_link: vec![],
-															end_link: vec![],
-															details: Details {
-																pallet: "Instruction".to_string(),
-																variant: instruction
-																	.split_once(' ')
-																	.unwrap()
-																	.0
-																	.to_string(),
-																doturl: extrinsic_url.clone(),
-																..Details::default()
-															},
-														});
-														let inst = msg;
-														use crate::polkadot::runtime_types::xcm::v0::Xcm::TransferReserveAsset;
-                                                                use crate::polkadot::runtime_types::xcm::v0::multi_location::MultiLocation;
-                                                                use crate::polkadot::runtime_types::xcm::v0::junction::Junction;
-														if let TransferReserveAsset {
-															dest, ..
-														} = inst
-														{
-															if let MultiLocation::X1(x1) = &dest {
-																//todo assert parent
-																if let Junction::AccountId32 {
-																	id,
-																	..
-																} = x1
-																{
-																	let msg_id = format!(
-																		"{}-{}",
-																		sent_at,
-																		please_hash(&hex::encode(
-																			id
-																		))
-																	);
-																	println!(
-																		"RECIEVE HASH v0 {}",
-																		msg_id
-																	);
-																	end_link.push((
-																		msg_id.clone(),
-																		LinkType::ReserveTransfer,
-																	));
-																	start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
-																	// for reserve assets received.
-																};
-															} else {
-																panic!("unknonwn")
-															}
-														}
-													},
-													VersionedXcm::V1(msg) => {
-														// Only one xcm instruction in a v1 message.
-														let instruction = format!("{:?}", &msg);
-														println!("instruction {:?}", &instruction);
-														children.push(DataEntity::Extrinsic {
-															// id: (block_number, extrinsic_index),
-															args: vec![instruction.clone()],
-															contains: vec![],
-															raw: vec![], //TODO: should be simples
-															start_link: vec![],
-															end_link: vec![],
-															details: Details {
-																pallet: "Instruction".to_string(),
-																variant: instruction
-																	.split_once(' ')
-																	.unwrap()
-																	.0
-																	.to_string(),
-																doturl: extrinsic_url.clone(),
-																..Details::default()
-															},
-														});
-														let inst = msg;
-														use crate::polkadot::runtime_types::xcm::v1::Xcm::TransferReserveAsset;
-                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
-                                                                use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
-                                                                use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
-														if let TransferReserveAsset {
-															dest, ..
-														} = inst
-														{
-															let MultiLocation { interior, .. } =
-																&dest;
-															//todo assert parent
-															if let Junctions::X1(x1) = interior {
-																if let Junction::AccountId32 {
-																	id,
-																	..
-																} = x1
-																{
-																	let msg_id = format!(
-																		"{}-{}",
-																		sent_at,
-																		please_hash(&hex::encode(
-																			id
-																		))
-																	);
-																	println!(
-																		"RECIEVE HASH v1 {}",
-																		msg_id
-																	);
-																	end_link.push((
-																		msg_id.clone(),
-																		LinkType::ReserveTransfer,
-																	));
-																	start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
-																	// for reserve assets received.
-																};
-															} else {
-																panic!("unknonwn")
-															}
-														}
-													},
-													VersionedXcm::V2(msg) => {
-														for instruction in &msg.0 {
-															let instruction =
-																format!("{:?}", instruction);
-															println!(
-																"instruction {:?}",
-																&instruction
-															);
-															children.push(DataEntity::Extrinsic {
-																args: vec![instruction.clone()],
-																contains: vec![],
-																raw: vec![], /* TODO: should be
-																              * simples */
-																start_link: vec![],
-																end_link: vec![],
-																details: Details {
-																	pallet: "Instruction"
-																		.to_string(),
-																	variant: instruction
-																		.split_once(' ')
-																		.unwrap_or((
-																			&instruction,
-																			"",
-																		))
-																		.0
-																		.to_string(),
-																	doturl: extrinsic_url.clone(),
-																	..Details::default()
-																},
-															});
-														}
-														for inst in msg.0 {
-															//TODO: should only be importing from
-															// one version probably.
-															use crate::polkadot::runtime_types::xcm::v2::Instruction::DepositAsset;
-                                                                    use crate::polkadot::runtime_types::xcm::v1::multilocation::MultiLocation;
-                                                                    use crate::polkadot::runtime_types::xcm::v1::multilocation::Junctions;
-                                                                    use crate::polkadot::runtime_types::xcm::v1::junction::Junction;
-															if let DepositAsset {
-																beneficiary,
-																..
-															} = inst
-															{
-																let MultiLocation {
-																	interior, ..
-																} = &beneficiary;
-																//todo assert parent
-																if let Junctions::X1(x1) = interior
-																{
-																	if let Junction::AccountId32 {
-																		id,
-																		..
-																	} = x1
-																	{
-																		let msg_id = format!(
-																			"{}-{}",
-																			sent_at,
-																			please_hash(
-																				&hex::encode(id)
-																			)
-																		);
-																		println!(
-																			"RECIEVE HASH v2 {}",
-																			msg_id
-																		);
-																		end_link
-                                                                            .push((msg_id.clone(), LinkType::ReserveTransfer));
-																		start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
-																		// for reserve assets
-																		// received.
-																	};
-																} else {
-																	panic!("unknonwn")
-																}
-															}
-														}
-													},
-												}
-											} else {
-												println!("could not decode msg: {}", msg);
-											}
-										}
-										// println!("{:#?}", event);
-									}
-								}
-							}
-						},
-						_ => {},
-					}
-				}
-			},
-			_ => {},
-		}
-	}
-
-	if pallet == "XcmPallet" && variant == "limited_teleport_assets" {
-		let mut flat0 = HashMap::new();
-		flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
-		// println!("FLATTERN {:#?}", flat0);
-		let mut flat1 = HashMap::new();
-		flattern(&ext.call_data.arguments[1].value, "", &mut flat1);
-
-		if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
-			let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
-
-			if let Some(to) = to {
-				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				// println!("SEND MSG v0 hash {}", msg_id);
-				start_link.push((msg_id, LinkType::Teleport));
-			}
-		// println!("first time seeen");
-		// println!("v2 limited_teleport_assets from {:?} to {}", para_id, dest);
-		} else if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
-			let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
-
-			if let Some(to) = to {
-				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				// println!("SEND MSG v0 hash {}", msg_id);
-				start_link.push((msg_id, LinkType::Teleport));
-			}
-		// println!("first time seeen");
-		// println!("v1 limited_teleport_assets from {:?} to {}", para_id, dest);
-		} else if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
-			let to = flat1.get(".V0.0.X1.0.AccountId32.id");
-			let dest: NonZeroU32 = dest.parse().unwrap();
-
-			if let Some(to) = to {
-				let msg_id = format!("{}-{}", block_number, please_hash(to));
-				// println!("SEND MSG v0 hash {}", msg_id);
-				start_link.push((msg_id, LinkType::Teleport));
-			}
-			// println!("v0 limited_teleport_assets from {:?} to {}", para_id, dest);
-		}
-
-		// println!("FLATTERN {:#?}", flat1);
-		// println!("BOB");
-		//          print_val(&ext.call_data.arguments[0].value);
-		//          println!("BOB");
-		//         print_val(&ext.call_data.arguments[1].value);
-	}
-
-	// Anything that looks batch like we will assume is a batch
-	if pallet == "XcmPallet" && variant == "reserve_transfer_assets" {
-		check_reserve_asset(&ext.call_data.arguments, &extrinsic_url, &mut start_link).await;
-	}
-	if variant.contains("batch") {
-		for arg in &ext.call_data.arguments {
-			//just first arg
-			match &arg.value {
-				ValueDef::Composite(Composite::Unnamed(chars_vals)) => {
-					for v in chars_vals {
-						match &v.value {
-							ValueDef::Variant(Variant {
-								ref name,
-								values: Composite::Unnamed(chars_vals),
-							}) => {
-								let inner_pallet = name;
-
-								for v in chars_vals {
-									match &v.value {
-										ValueDef::Variant(Variant { name, values }) => {
-											// println!("{pallet} {variant} has inside a
-											// {inner_pallet} {name}");
-											children.push(DataEntity::Extrinsic {
-												// id: (block_number, extrinsic_index),
-												args: vec![format!("{:?}", values)],
-												contains: vec![],
-												raw: vec![], //TODO: should be simples
-												start_link: vec![],
-												end_link: vec![],
-												details: Details {
-													pallet: inner_pallet.to_string(),
-													variant: name.clone(),
-													doturl: extrinsic_url.clone(),
-													..Details::default()
-												},
-											});
-
-											if inner_pallet == "XcmPallet" &&
-												name == "reserve_transfer_assets"
-											{
-												match values {
-													Composite::Named(named) => {
-														let vec: Vec<Value<TypeId>> = named
-															.iter()
-															.map(|(_n, v)| v.clone())
-															.collect();
-														check_reserve_asset(
-															&vec,
-															&extrinsic_url,
-															&mut start_link,
-														)
-														.await;
-													},
-													Composite::Unnamed(_named) => {
-														panic!("unexpected");
-													},
-												}
-											}
-										},
-										_ => {
-											println!("miss yet close");
-										},
-									}
-								}
-							},
-							_ => {
-								// println!("inner miss");
-								// print_val(&v.value);
-							},
-						}
-					}
-				},
-
-				_ => {
-					// println!("miss");
-				},
-			}
-		}
-	}
-
-	let mut results = HashMap::new();
-	for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
-		flattern(&arg.value, &arg_index.to_string(), &mut results);
-	}
 	// println!("FLATTERN UMP {:#?}", results);
 	// args.insert(0, format!("{results:#?}"));
 
 	Some(DataEntity::Extrinsic {
 		// id: (block_number, extrinsic_url.extrinsic.unwrap()),
-		args,
+		args: vec![],
 		contains: children,
-		raw: ex_slice,
 		start_link,
 		end_link,
 		details: Details {
-			hover: "".to_string(),
+			// hover: "".to_string(),
 			doturl: extrinsic_url,
-			flattern: format!("{results:#?}"),
+			flattern: "".to_string(), // format!("{results:#?}"),
 			url: url.to_string(),
 			parent: None,
 			success: crate::ui::details::Success::Happy,
-			pallet,
-			variant,
+			pallet: pallet.to_string(),
+			variant: variant.to_string(),
+			raw: ex_slice.to_vec(),
 		},
 	})
 
@@ -1065,66 +1041,135 @@ async fn process_extrisic<'a>(
 	// extrinsic");
 }
 
-use desub_current::TypeId;
-async fn check_reserve_asset<'a, 'b>(
-	args: &Vec<Value<TypeId>>,
+async fn check_reserve_asset<'scale, 'b>(
+	args: &scale_borrow::Value<'scale>,
 	extrinsic_url: &DotUrl,
-	start_link: &'b mut Vec<(String, LinkType)>,
-) {
-	let mut flat0 = HashMap::new();
-	flattern(&args[0].value, "", &mut flat0);
-	// println!("FLATTERN {:#?}", flat0);
-	let mut flat1 = HashMap::new();
-	flattern(&args[1].value, "", &mut flat1);
-
-	if let Some(dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
-		let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
-
-		println!("first time!");
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
-
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v2 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
+	start_link: &'b mut Vec<(String, LinkType)>) 
+{
+	if let Some(beneficiary) = args.find2("beneficiary", "V2") {
+		// println!("check reserve assetben {}", beneficiary);
+		if let Some(rest) = beneficiary.find2("0", "interior") {
+			if let Some(("X1","0", rest)) = rest.only2() {
+				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
+					// println!("GOT benefactor address is {:?}", *to);
+					if let Some(dest) = args.find2("dest", "V2") {
+						if let Some(rest) = dest.find2("0", "interior") {
+							if let Some(("X1","0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
+									println!("GOT PARA ID dest is {}", para_id);
+									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
+									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+									println!("FIRST TIME 2 SEND MSG v2 hash {}", msg_id);
+									start_link.push((msg_id, LinkType::ReserveTransfer));
+								}
+							}
+							// TODO: parent 1 - upwards
+						}
+					}					
+				}
+			}
 		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
-	if let Some(dest) = flat0.get(".V1.0.interior.X1.0.Parachain.0") {
-		let to = flat1.get(".V1.0.interior.X1.0.AccountId32.id");
 
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
-
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v1 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
+	if let Some(beneficiary) = args.find2("beneficiary", "V1") {
+		// println!("check reserve assetben {}", beneficiary);
+		if let Some(rest) = beneficiary.find2("0", "interior") {
+			if let Some(("X1","0", rest)) = rest.only2() {
+				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
+					// println!("GOT benefactor address is {:?}", *to);
+					if let Some(dest) = args.find2("dest", "V1") {
+						if let Some(rest) = dest.find2("0", "interior") {
+							if let Some(("X1","0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
+									println!("GOT PARA ID dest is {}", para_id);
+									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
+									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+									println!("SEND MSG v1 hash {}", msg_id);
+									start_link.push((msg_id, LinkType::ReserveTransfer));
+								}
+							}
+							// TODO: parent 1 - upwards
+						}
+					}					
+				}
+			}
 		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
-	if let Some(dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
-		let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 
-		//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-		let dest: NonZeroU32 = dest.parse().unwrap();
-
-		if let Some(to) = to {
-			let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-			// println!("SEND MSG v0 hash {}", msg_id);
-			start_link.push((msg_id, LinkType::ReserveTransfer));
+	if let Some(beneficiary) = args.find2("beneficiary", "V0") {
+		// println!("check reserve assetben {}", beneficiary);
+		if let Some(rest) = beneficiary.find("0") {
+			if let Some(("X1","0", rest)) = rest.only2() {
+				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
+					// println!("GOT benefactor address is {:?}", *to);
+					if let Some(dest) = args.find2("dest", "V0") {
+						if let Some(rest) = dest.find("0") {
+							if let Some(("X1","0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
+									println!("GOT PARA ID dest is {}", para_id);
+									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
+									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+									println!("SEND MSG v0 hash {}", msg_id);
+									start_link.push((msg_id, LinkType::ReserveTransfer));
+								}
+							}
+							// TODO: parent 1 - upwards
+						}
+					}					
+				}
+			}
 		}
-		// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
 	}
+
+	// if let Some(assets) = args.find2("assets", "V1") {
+	// 	println!("check reserve asset assets {}", assets);
+	// }
+
+
+// let mut flat0 = HashMap::new();
+// flattern(&args[0].value, "", &mut flat0);
+// // println!("FLATTERN {:#?}", flat0);
+// let mut flat1 = HashMap::new();
+// flattern(&args[1].value, "", &mut flat1);
+
+// if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+// 	let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+
+// 	println!("first time!");
+// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+// 	// let dest: NonZeroU32 = dest.parse().unwrap();
+
+// 	if let Some(to) = to {
+// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+// 		// println!("SEND MSG v2 hash {}", msg_id);
+// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+// 	}
+// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+// }
+
+// if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+// 	let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+
+// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+// 	// let dest: NonZeroU32 = dest.parse().unwrap();
+
+// 	if let Some(to) = to {
+// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+// 		// println!("SEND MSG v0 hash {}", msg_id);
+// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+// 	}
+// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+// }
 }
 
+#[derive(Deserialize, Serialize)]
 pub enum DataUpdate {
 	NewBlock(PolkaBlock),
 	// Chain info and chain name.
 	NewChain(ChainInfo),
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct PolkaBlock {
 	pub data_epoc: u32,
 	pub timestamp: Option<i64>,
@@ -1139,9 +1184,9 @@ pub struct PolkaBlock {
 async fn get_events_for_block(
 	source: &mut impl Source,
 	blockhash: H256,
-	sender: &Option<HashMap<NonZeroU32, crossbeam_channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
-	metad: &Metadata,
+	metad: &frame_metadata::RuntimeMetadataPrefixed,
 	timestamp: Option<i64>,
 ) -> Result<(Vec<DataEvent>, Vec<(Vec<u8>, LinkType)>), Box<dyn std::error::Error>> {
 	let mut start_links: Vec<(Vec<u8>, LinkType)> = vec![];
@@ -1149,248 +1194,163 @@ async fn get_events_for_block(
 
 	let blocknum = block_url.block_number.unwrap();
 
-	let storage = decoder::decode_storage(&metad);
+	// let storage = decoder::decode_events(&metad, );
 	let events_key = "26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
 	let storage_key = hex::decode(events_key).unwrap();
-	let events_entry = storage
-		.decode_key(&metad, &mut storage_key.as_slice())
-		.expect("can decode storage");
+	// let events_entry = storage
+	// 	.decode_key(&metad, &mut storage_key.as_slice())
+	// 	.expect("can decode storage");
 
-	let call = source
-		.fetch_storage(subxt::sp_core::storage::StorageKey(storage_key.clone()), Some(blockhash))
-		.await?;
-
-	let bytes = if let Some(subxt::sp_core::storage::StorageData(events_raw)) = call {
-		Some(events_raw)
-	} else {
-		None
-	};
+	let bytes = source
+		.fetch_storage(&storage_key[..], Some(blockhash))
+		.await
+		.map_err(|_| "oops num 332")?;
 
 	if let Some(events_raw) = bytes {
-		if let Ok(val) =
-			decoder::decode_value_by_id(&metad, &events_entry.ty, &mut events_raw.as_slice())
-		{
-			if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
-				let mut inclusions = vec![];
-				let mut ext_count_map = HashMap::new();
-				for event in events.iter() {
-					let start_link = vec![];
-					// let end_link = vec![];
-					let mut details = Details::default();
-					details.url = source.url().to_string();
-					details.doturl = DotUrl { ..block_url.clone() };
+		if let Ok(events) = polkadyn::decode_events(metad, &events_raw[..]) {
+			// if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
+			let mut inclusions = vec![];
+			let mut ext_count_map = HashMap::new();
+			let events: Vec<_> = events
+				.iter()
+				.map(|(phase, event_val)| {
+					(phase, scale_value_to_borrowed::convert(event_val, true))
+				})
+				.collect();
+			for (phase, event) in events.iter() {
+				// let event = scale_value_to_borrowed::convert(&event2);
+				let start_link = vec![];
+				// let end_link = vec![];
+				let mut details = Details {
+					url: source.url().to_string(),
+					doturl: DotUrl { ..block_url.clone() },
+					..default()
+				};
 
-					// println!("start event");
-					// print_val(&event.value);
-
-					if let ValueDef::Composite(Composite::Named(ref pairs)) = event.value {
-						for (name, val) in pairs {
-							if name == "phase" {
-								// println!("phase start");
-								if let ValueDef::Variant(ref var) = val.value {
-									if var.name == "ApplyExtrinsic" {
-										//Has extrisic
-
-										if let Composite::Unnamed(ref vals) = var.values {
-											for val in vals {
-												if let ValueDef::Primitive(Primitive::U32(v)) =
-													val.value
-												{
-													details.parent = Some(v);
-													let count = ext_count_map.entry(v).or_insert(0);
-													*count += 1;
-													details.doturl.extrinsic = Some(v);
-													details.doturl.event = Some(*count);
-												}
-											}
-										}
-										if details.parent.is_none() {
-											// system event. increment the system event count:
-											let count = ext_count_map.entry(u32::MAX).or_insert(0);
-											*count += 1;
-											details.doturl.extrinsic = None;
-											details.doturl.event = Some(*count);
-										}
-									}
-								}
-							} else if name == "event" {
-								if let ValueDef::Variant(ref var) = val.value {
-									details.pallet = var.name.clone();
-									if let Composite::Unnamed(pairs) = &var.values {
-										for val in pairs.iter() {
-											// println!("NANEN unnamed start");
-											if let ValueDef::Variant(ref variant) = &val.value {
-												details.variant = variant.name.clone();
-												//  println!("event data!!!!!! variant = {}",
-												// &details.variant);
-
-												if details.pallet == "ParaInclusion" &&
-													details.variant == "CandidateIncluded"
-												{
-													if let Composite::Unnamed(vals) =
-														&variant.values
-													{
-														for val in vals {
-															if let ValueDef::Composite(
-																Composite::Named(ref named),
-															) = &val.value
-															{
-																for (name, val) in named {
-																	if name == "descriptor" {
-																		if let ValueDef::Composite(
-																			Composite::Named(named),
-																		) = &val.value
-																		{
-																			let mut para_head =
-																				None;
-																			let mut para_id = None;
-																			for (name, val) in named
-																			{
-																				if name ==
-																					"para_head"
-																				{
-																					let mut para_head_vec : Vec<u8>= vec![];
-																					if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &val.value {
-                                                                                        for n in unnamed {
-                                                                                            if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &n.value {
-                                                                                                for m in unnamed {
-                                                                                                    if let ValueDef::Primitive(Primitive::U8(byte)) = &m.value{
-                                                                                                        para_head_vec.push(*byte);
-                                                                                                        // println!("{}", byte);
-                                                                                                    }
-                                                                                                    // print_val(&m.value);
-                                                                                                }
-                                                                                            }
-                                                                                        }
-                                                                                    }
-																					para_head = Some(para_head_vec);
-																					// println!("para_head 0x{}", hex::encode(&para_head.as_slice()));
-																				}
-																				if name == "para_id"
-																				{
-																					if let ValueDef::Composite(Composite::Unnamed(unnamed)) = &val.value {
-                                                                                        for m in unnamed {
-                                                                                            if let ValueDef::Primitive(Primitive::U32(parachain_id)) = &m.value {
-                                                                                                // println!("para id {}", para_id);
-                                                                                                para_id = Some(NonZeroU32::try_from(*parachain_id).unwrap());
-                                                                                            }
-                                                                                        }
-                                                                                    }
-																				}
-
-																				// println!("{}",
-																				// &name);
-																			}
-																			if let (
-																				Some(para_id),
-																				Some(hash),
-																			) = (para_id, para_head)
-																			{
-																				inclusions.push((
-																					para_id, hash,
-																				));
-																			}
-																			// println!("ggogogoogogogogog");
-																		}
-																	}
-																}
-															}
-														}
-													}
-												}
-											}
-											//
-										}
-									}
-								}
-							} else {
-								// println!("found {}", name);
-								// print_val(&val.value);
-							}
-							// details.pallet = ev.pallet.clone();
-							// details.variant = ev.variant.clone();
-							// if let Phase::ApplyExtrinsic(ext) = ev.phase {
-							//     details.parent = Some(ext);
-							// }
-
-							//  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
-							//                                 // use
-							// crate::polkadot::runtime_types::xcm::v2::traits::Error;
-							// use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO
-							// version                                 let result = <Outcome as
-							// Decode>::decode(&mut ev.data.as_slice());
-							// if let Ok(outcome) = &result {
-							// match outcome {
-							// Outcome::Complete(_) => details.success = Success::Happy,
-							// Outcome::Incomplete(_, _) => details.success = Success::Worried,
-							//                                         Outcome::Error(_) =>
-							// details.success = Success::Sad,                                     }
-							//                                 }
-							//                                 details.flattern = format!("{:#?}",
-							// result);                             }
-							// if details.pallet == "XcmPallet"
-							//     && details.variant == "ReserveAssetDeposited"
-							// {
-							//     println!("got here rnrtnrtrtnrt");
-							//     println!("{:#?}", details);
-							// }
-							//     if let
-							// polkadot::Event::Ump(polkadot::runtime_types::
-							// polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref
-							// msg, ..)) = event { //.pallet == "Ump" && ev.variant ==
-							// "ExecutedUpward" {     println!("{:#?}", event);
-
-							//     // Hypothesis: there's no sent_at because it would be the sent at
-							// of the individual chain.     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
-							//     // TL/DR: we have to wait before we can match up things going
-							// upwards...
-
-							//     // blockhash of the recieving block would be incorrect.
-							//     let received_hash = format!("{}",hex::encode(msg));
-							//     println!("recieved UMP hash {}", &received_hash);
-							//     end_link.push(received_hash);
-							//     // // msg is a msg id! not decodable - match against hash of
-							// original     // if let Ok(ver_msg) = <VersionedXcm as
-							// Decode>::decode(&mut msg.as_slice()) {     //
-							// println!("decodearama {:#?}!!!!", ver_msg);     // } else {
-							//     //     println!("booo didn't decode!!!! {}",
-							// hex::encode(msg.as_slice()));     // }
-							// }
-						}
-					}
-					// println!("end event");
-					data_events.push(DataEvent {
-						// raw: ev_raw.unwrap(),
-						start_link,
-						// end_link,
-						details,
-					})
+				if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
+					details.parent = Some(*extrinsic_num as u32);
+					let count = ext_count_map.entry(extrinsic_num).or_insert(0);
+					*count += 1;
+					details.doturl.extrinsic = Some(*extrinsic_num);
+					details.doturl.event = Some(*count);
+				} else {
+					// system event. increment the system event count:
+					let count = ext_count_map.entry(&u32::MAX).or_insert(0);
+					*count += 1;
+					details.doturl.extrinsic = None;
+					details.doturl.event = Some(*count);
 				}
 
-				if !inclusions.is_empty() {
-					// For live mode we listen to all parachains for blocks so sender will be none.
-					for (_, hash) in &inclusions {
-						start_links.push((hash.as_slice().to_vec(), LinkType::ParaInclusion));
+				let (pallet, variant, contents) =
+					if let Some((pallet, "0", variant, contents)) = event.only3() {
+						(pallet, variant, contents)
+					} else {
+						panic!("could not find call_data.pallet_name in {:#?}", &event)
+					};
+
+				details.pallet = pallet.to_string();
+				details.variant = variant.to_string();
+
+				if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
+					if let Some(inner) = contents.find2("0", "descriptor") {
+						if let (
+							Some(scale_borrow::Value::U64(parachain_id)),
+							Some(scale_borrow::Value::ScaleOwned(para_head)),
+						) = (inner.find2("para_id", "0"), inner.find2("para_head", "0"))
+						{
+							let para_id = NonZeroU32::try_from(*parachain_id as u32).unwrap();
+							inclusions.push((para_id, para_head.as_slice()));
+						}
 					}
-					if let Some(sender) = sender.as_ref() {
-						for (para_id, hash) in inclusions {
-							let mailbox = sender.get(&para_id);
-							if let Some(mailbox) = mailbox {
-								let hash = H256::from_slice(hash.as_slice());
-								if let Err(err) = mailbox.send((blocknum, timestamp.unwrap(), hash))
-								{
-									println!(
-										"block hash failed to send at {} error: {}",
-										blocknum, err
-									);
-								}
+				} else {
+					// println!("found {}", name);
+					// print_val(&val.value);
+				}
+				// details.pallet = ev.pallet.clone();
+				// details.variant = ev.variant.clone();
+				// if let Phase::ApplyExtrinsic(ext) = ev.phase {
+				//     details.parent = Some(ext);
+				// }
+
+				//  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
+				//                                 // use
+				// crate::polkadot::runtime_types::xcm::v2::traits::Error;
+				// use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO
+				// version                                 let result = <Outcome as
+				// Decode>::decode(&mut ev.data.as_slice());
+				// if let Ok(outcome) = &result {
+				// match outcome {
+				// Outcome::Complete(_) => details.success = Success::Happy,
+				// Outcome::Incomplete(_, _) => details.success = Success::Worried,
+				//                                         Outcome::Error(_) =>
+				// details.success = Success::Sad,                                     }
+				//                                 }
+				//                                 details.flattern = format!("{:#?}",
+				// result);                             }
+				// if details.pallet == "XcmPallet"
+				//     && details.variant == "ReserveAssetDeposited"
+				// {
+				//     println!("got here rnrtnrtrtnrt");
+				//     println!("{:#?}", details);
+				// }
+				//     if let
+				// polkadot::Event::Ump(polkadot::runtime_types::
+				// polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref
+				// msg, ..)) = event { //.pallet == "Ump" && ev.variant ==
+				// "ExecutedUpward" {     println!("{:#?}", event);
+
+				//     // Hypothesis: there's no sent_at because it would be the sent at
+				// of the individual chain.     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
+				//     // TL/DR: we have to wait before we can match up things going
+				// upwards...
+
+				//     // blockhash of the recieving block would be incorrect.
+				//     let received_hash = format!("{}",hex::encode(msg));
+				//     println!("recieved UMP hash {}", &received_hash);
+				//     end_link.push(received_hash);
+				//     // // msg is a msg id! not decodable - match against hash of
+				// original     // if let Ok(ver_msg) = <VersionedXcm as
+				// Decode>::decode(&mut msg.as_slice()) {     //
+				// println!("decodearama {:#?}!!!!", ver_msg);     // } else {
+				//     //     println!("booo didn't decode!!!! {}",
+				// hex::encode(msg.as_slice()));     // }
+				// }
+
+				// println!("end event");
+				data_events.push(DataEvent {
+					// raw: ev_raw.unwrap(),
+					start_link,
+					// end_link,
+					details,
+				})
+			}
+
+			if !inclusions.is_empty() {
+				// For live mode we listen to all parachains for blocks so sender will be none.
+				for (_, hash) in &inclusions {
+					let hash: &[u8] = hash;
+					start_links.push((hash.to_vec(), LinkType::ParaInclusion));
+				}
+				if let Some(sender) = sender.as_ref() {
+					for (para_id, hash) in inclusions {
+						let mailbox = sender.get(&para_id);
+						if let Some(mailbox) = mailbox {
+							let hash = H256::from_slice(hash);
+							if let Err(err) =
+								mailbox.send((blocknum, timestamp.unwrap(), hash)).await
+							{
+								println!(
+									"block hash failed to send at {} error: {}",
+									blocknum, err
+								);
 							}
 						}
 					}
 				}
 			}
+		// }
 		} else {
-			println!("can't decode events {} / {}", &source.url(), blocknum);
+			// println!("can't decode events {} / {}", &source.url(), blocknum);
 		};
 	} else {
 		warn!("could not find events {}", &blocknum);
@@ -1459,8 +1419,8 @@ mod tests {
 	//         }
 	//     }
 	// }
-
-	#[test]
+	/*
+	#[test]/*  */
 	fn decode_a_ump_message() {
 		let msg = "60ba677909cd50310087509462d25c85010c8ea95d61f2351b42f6b54463f5cf";
 		let bytes = hex::decode(msg).unwrap();
@@ -1477,9 +1437,9 @@ mod tests {
 		);
 
 		println!("{:?}", result);
-	}
+	} */
 
-	#[test]
+	/* 	#[test]
 	fn decode_xcm_cant_transact_error() {
 		use crate::polkadot::runtime_types::xcm::v2::traits::{Error, Outcome};
 		let msg = vec![1u8, 0, 202, 154, 59, 0, 0, 0, 0, 9];
@@ -1490,14 +1450,14 @@ mod tests {
 			//   println!("err msg: {}", err_msg);
 		}
 		println!("{:?}", result);
-	}
+	} */
 
 	//
-
+	/*
 	#[test]
 	fn decode_events() {
 		let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-		let metad = async_std::task::block_on(get_desub_metadata(
+		let metad = async_std::task::block_on(get_metadata(
 			"wss://statemint-rpc.polkadot.io:443",
 			&mut source,
 			None,
@@ -1527,12 +1487,12 @@ mod tests {
 		//     //   println!("err msg: {}", err_msg);
 		// }
 		println!("{:#?}", val);
-	}
+	} */
 
 	// #[test]
 	// fn decode_events_polkadot_10_000_001() {
 	//     let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-	//     let metad = async_std::task::block_on(get_desub_metadata(
+	//     let metad = async_std::task::block_on(get_metadata(
 	//         "wss://rpc.polkadot.io:443",
 	//         &mut source,
 	//         None,
@@ -1565,11 +1525,11 @@ mod tests {
 	//     // }
 	//     // println!("{:#?}", val);
 	// }
-
+	/*
 	#[test]
 	fn decode_events_kusama_10_000_000() {
 		let mut source = RawDataSource::new("wss://kusama-rpc.polkadot.io:443");
-		let metad = async_std::task::block_on(get_desub_metadata(
+		let metad = async_std::task::block_on(get_metadata(
 			"wss://kusama-rpc.polkadot.io:443",
 			&mut source,
 			None,
@@ -1577,7 +1537,7 @@ mod tests {
 		.unwrap();
 
 		let encoded_events =
-            "4000000000000000f8c880090000000002000000010000003501e8030000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed87918844329d9d03239fcabec65712c2d49eaab86c6e99bdd228e7abc90f2b5223fe441159fbb85ae749506da26bb91a2a1ffd5a06e9e22be5bd0925ae68c2ac0bbf6265b6038ab854eaa4c8067f318575870d14a1692ade681ddffd9e6f37abf1ec11850cd1fc4ae08b277eae64be8d85d2165be01b04505a72e6be823f1b24df628ea792a73b0c4bdfc952b5d7b05b9f48b63a6ffd6e350821893f285f971ba94a0e73786251cdc7534c2ee471058f48673b9d934c33b4f20259dda40e8c09bbeeeb824ef7473442e90cb811e48c83a18c5c230e2c0da4a1ee565e0c1e758cc62bfac8671aa5730f5f72e4b17a9fcb4ff7dbfa006f68e01f280873eeedaaea9d325636d298faf2cf23958355804c94691a610d792f5c518b1f08fd78fc95fa5d202d21e90246c627785b5f9555633b5015d54a823def397ea3f6ef7033f24b4053b15aec1e5eea4300c973cb3e159225a21e3dc266b857f6f8c82e85d4fd5df91bfe6baaa354cceb7ce4da5629ee687ddc8d3906e981c901d56c5e8715edae94bee4e5c35af63645e10806617572612084b720080000000005617572610101849a2f00f099c903fd1b776553d57ca1be3a02ddf44546b6bd4f3924b41b1e3e08c3d6c3ef5ee2c44466708b98096fca2af94d57d70d03b6d8131ea7e6832b8f00000000030000000000010000003501d4070000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed8791884442ed128f3070d8c0f4efa2cdb1d676ceb4705f8c6bc6a3b71a6f1b0afdbc100086b57c8ab049fa13e2d6983afae568923575a336a70f87c05c544d35618d455e188ba822f58033031686f1943ce828b692228f18e48376df0a5dfb344e68184dcd6528cfd9e1104fcf8aec144e25bf1c0b8b790626717f998fd7b46124525d0f367c58adefda1299cc62c2ff06a9a7fcb1db3144192b161a55205f9e808ea902e2ae9f836e73650aaa5ac6c9bc505ad4778a38673545bcaa159b918c8acd138b7d448ffb20374dbb6301a1029ab8ab1504b12c449d00d0ace2b10659de1dcead35159d29f1bc7ca22f86300da98e02d8b101cc2714b4e6681616aa5e53c51ebbb239c7b99e6c929c0170442d1c29df94da60a8debf90af7a9d2777be0abe9d24e902f8be335bab1a6288460d7368f54f15df926a9e474a5a3a13dea9824c49e54db4da7f2a009de56bb25fe8e12a18771592b8eaa6b524fa494922dded016723f93fbe82645e88e3563ea816a0f97859cc73b31083e7f2ff1ef911e7049773eb355a4756e25e0806617572612084b72008000000000561757261010130436cb29d3fd4ddd996b078f23e28698f983609a60bc51b19333b96d235896c9c2e274eacbec55463476c8efb51261b5073871051db165e1e8ad5761aede78f0300000006000000000001000000350125080000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed8791884462e2563cabc32bfb099d3d296f99b431b18b74456ec785c65dafe2be800e3f421c9760f2a40d129d0de6ead24a40feed91b3bdd789ffe1fae76dd7a550bdc6041783bc5fecbce3fe1d823e89ad76640af60681b9eaf0539869eea5535de8ed03d87a6334d5b5140c176ea0acf80ecc5d82686924886aa8cc1de55ea8b5ceda7f84e5935b347bde0d4824b8dfeb95cbba94234fdf19e40bd09b8adae361de842cd4d368f11aad8f76598a8af0c9f870ffcd1d9f4381ef714c3b519eced963c287de323dba5a720417911226164623153c1bbdd3f33916b9be07364376eefb76c491d949884c9bc067a7cfcd2ee808e89625035c5b1092ac483340957277bfaa4b6300ad5264de6e4d4e35a6cf24332a87be8f4f9dd7ebb34f5cf317ea583c4358e902cc3db54bdd3e0da6c288f43f02dbd808a29eeb10acc9b469e4dfacfe3060c9b0a6300b001d7d784e48bdcdea1ced937f7d2565c08492cb5519d4c46399843052474798c1d943a0c9693898c92ab55625cb3f889f26e6b8ed47272ed76cc3f2521c7f21cd0806617572612084b72008000000000561757261010160d4877ac5087983c1e2d7048a42622ca727835b2ae123cad93b192b0b4db6126cb8db5ed6efe8e22d5de6d8244c30bb177b34b6fefc9d7a99671e28452e668e070000000a000000000001000000350126080000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed879188442e5a70c523364f4187e3873e9b494552975192f2d6570f332ba0b819ff128062412fb9b1343ebd65da1dbbad0f28fa74f3138eb1f5ac42dc4b087bf6aae9c0f1c10428db12c688784d12425e257f1436f1a13e12b0fac7e09c2ef782884fdae288a70a0827669d8c4c1e153f9699157c249c91fd171288c1c82c343e2e5329052a2cbd6da16d035fedcf8286363b5cfff146ac95534b1eb9df515757ff41473f899ad3f78b12ad415a2fb3b0af28eed976ef75bf910c63891918463ed196af83daf67887703f0d72a942f0666c82a6ef8df9f3419a7c7fbd9c021c76deaa98431d842461610b3b08c6ca9cf6a102719e6e67c672f449fb8ffb3ce6e0af3236b045cba2d8e3f0bc713d27a97b6868ec464e32b9e1ce40729f08a242a8c0749e46e9025dbc8c945c125682246a5a3a4dc4f5db1071bacbead573fcb36e20406d5e95e926e31600ccb6952f6b8451707882e07dbfce85a875e7204744c1f9baee14cf272ffff392c5967d1da53c318c529c319fef924106be7b9a8ed6aafd2d96c9c133fefc63aa0806617572612084b7200800000000056175726101019486d01932086dd193762964375e7bd944eda068c51369fd930b79e8e0437d209f4238bd0431b3cb61be4ba663bbbda1a53730f13001027ff2adc811f3a35885080000000b0000000000010000003500d007000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb3c45e3f3817cff0461c43385de165f5eb18b6cdc9147bf2eef3f4ce99afc7485ed943f09bde7d796ebcf315308e21ecb1f2c61f977f8a92e0dbc0105c6f963dd95d6ed9829561c39d688447413ef6c0372df019ad69f75f58402eabc60d646224109eff7ea1f7a869883d14c2ae823ee289393aa2b9358f7d8ee760f316c0196d24a0dda1d29558bc5331036721a5111826c6efd04104fefb61d3eec27bf74d2f6bcef1abe2b44bbcfb29552d3009901f05238adbb7abf10ecc1e354ae1e70584ff42916291fe587927d39279e75552858ea30f183aed9d840848f16ed3d537ccce864af51bd0b781efb619d2d7f5c360dc72c15ea0be3646823c62166fe6fa9f3bcbfe68574af4d8876eb0a4e75c6b3a1d15222da3ff78aa069e3da0ffd5eb1ce902a133a650f06bb019427e57dfba29d2bf510c26d473a5ebc8ad31acfced1eb1ce6ae236001a2fd43761f8e9de2527af8ce4404fbfe612819e7d2b6c73e6dcc287c9d30ba180b7a1125b2b6818f64c9c6f350fade37ff515db3ade66540351bb0051c9075d0806617572612084b7200800000000056175726101018800ee6efd5a9834a93f60e9ce7c124107994f6a2b23f7cd870d1a89e2d9720f41b5dd276dff91cc15fa06050ec0195c1ae4c09f925659171706863940bd3f83010000000500000000000100000035002408000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb3a45fe489f08876dd93330850f2a34dc246de42c5ba0efd0b51d890ef72775739cd1d18b75d97821c2192669a1b1cd9fb4caeefeb2498d2b53a8620e96fa1a24cbc67f2ee28aa00117d3ec90f88baa6f56663574212bd7c08015ad28733f397e7e4f3321c654a88f24a51219ea984e907122ab162dbcce2bb6a977c3f74f74bf7306320a43f4d10de4a00a454aee0918ed1619acf1101af3066972e74823eb458e0982a6a8397b8cf7685ad308ced6adfd1fa49216211ba7425e8e018a179ca81ffdc72f87fc34c40a529809c399cf99fedd996370cc772b5c51595e0fb2f7dd369248ec4a86bacbc60bc4d65df89ce7dedc436fa8a3a1934ee96f74de1af145d80e7b186c7085b0e369ede9d73686ea83a19a3a25005d9c11f9e4a9351df040fe90224132a3b1246d7efc37e373f66a85ece7cd369efac6aebda6dc7a13eb6089a8862bd1400725d7a343e29444c67f393be4212a8df930a5a7c223837f4f867e487005c88df943ab103cbef0125518e5049dc8926ea696778464a8c6b59728ca1e394af36240806617572612084b720080000000005617572610101a46b0efcd4328030c0bb20ef440e2f63364522ce5a3eb676de601115ead40345cf840fd60da25446d1b0bc87f1a96cd9464a9d520db4d8605d36e3fb08254286060000000a00000000000100000035002808000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb30098a000c36260ebbcb781b8d131ed52358675f23ec929de5f050ecf0c5c9d0aa6e713246e85a5b1d6c51a674062a1a2a0cc75bbb13d25f1cda026e9b4b701edf8d7147305b71558bca2781b5598be832de0a149b9dc304487e0361079b21a9cb5d04f6939b13e7e6c0e73b2a2b0ae9d1301144015a40fa2417007df2b482d6f9a91a41bb6dd39e62666786ed316962b94b45d867ff3e8b55322109f0525e259d67cdc0464aa52aa728fd21f34c9563d527b2e3a911dde4c5c84746ae7ac9c8f8fcdd64c63856787d8d4cc66cb1c49ab1c94491eac066330b82a433db65617643cd446c9a1bd71d0ce47495a92d001a3047b17ea1afafade18e5892db4ebce4748f5790be22f893695b5f019a1ca9cd016a88ad8423e15e302a77a7433cc8010e9020d9e2b85621d5809954468660eef7dafb0a3e11770ff21b1f6572a279b1de2108a100f005ed61ac8275af9f9381c71dc986b9f87c1af2d9f1bd8ecddd55d4a3eb078a0dff9bbaf689cdbfd11dbdf1fb15f1b005fb946571c7e2be758f7bc1246eda551d10806617572612084b720080000000005617572610101aecac16fb06ad772b90075039210f99b80259a51a868541b17ebac4c418450068df560e35e8f219c54a3ec819af49f25b75a09defe27990fe0e62e5676894089090000000d00000000000100000000006046eb0e00000000020000000200000004086fd30ccc612a93f7c1cb592ab90b31984e3280230eb67c19aeb84ca7b34715192f891e0300000000000000000000000000000200000004026fd30ccc612a93f7c1cb592ab90b31984e3280230eb67c19aeb84ca7b3471519e5837ba18c94d76d165780873a85da12cd4c7e0715bd9c64370ede7b706041fc00b0ed347f0d0000000000000000000000000200000004076d6f646c70792f7472737279000000000000000000000000000000000000000025d47e02000000000000000000000000000002000000120625d47e02000000000000000000000000000002000000040708e34cd66129e197697554aa67af8b35d1daf4f6ed431afa2701bcbc320fe2070ab59f00000000000000000000000000000002000000040708e34cd66129e197697554aa67af8b35d1daf4f6ed431afa2701bcbc320fe2070ab59f0000000000000000000000000000000200000000006812490a00000000000000";
+			"4000000000000000f8c880090000000002000000010000003501e8030000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed87918844329d9d03239fcabec65712c2d49eaab86c6e99bdd228e7abc90f2b5223fe441159fbb85ae749506da26bb91a2a1ffd5a06e9e22be5bd0925ae68c2ac0bbf6265b6038ab854eaa4c8067f318575870d14a1692ade681ddffd9e6f37abf1ec11850cd1fc4ae08b277eae64be8d85d2165be01b04505a72e6be823f1b24df628ea792a73b0c4bdfc952b5d7b05b9f48b63a6ffd6e350821893f285f971ba94a0e73786251cdc7534c2ee471058f48673b9d934c33b4f20259dda40e8c09bbeeeb824ef7473442e90cb811e48c83a18c5c230e2c0da4a1ee565e0c1e758cc62bfac8671aa5730f5f72e4b17a9fcb4ff7dbfa006f68e01f280873eeedaaea9d325636d298faf2cf23958355804c94691a610d792f5c518b1f08fd78fc95fa5d202d21e90246c627785b5f9555633b5015d54a823def397ea3f6ef7033f24b4053b15aec1e5eea4300c973cb3e159225a21e3dc266b857f6f8c82e85d4fd5df91bfe6baaa354cceb7ce4da5629ee687ddc8d3906e981c901d56c5e8715edae94bee4e5c35af63645e10806617572612084b720080000000005617572610101849a2f00f099c903fd1b776553d57ca1be3a02ddf44546b6bd4f3924b41b1e3e08c3d6c3ef5ee2c44466708b98096fca2af94d57d70d03b6d8131ea7e6832b8f00000000030000000000010000003501d4070000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed8791884442ed128f3070d8c0f4efa2cdb1d676ceb4705f8c6bc6a3b71a6f1b0afdbc100086b57c8ab049fa13e2d6983afae568923575a336a70f87c05c544d35618d455e188ba822f58033031686f1943ce828b692228f18e48376df0a5dfb344e68184dcd6528cfd9e1104fcf8aec144e25bf1c0b8b790626717f998fd7b46124525d0f367c58adefda1299cc62c2ff06a9a7fcb1db3144192b161a55205f9e808ea902e2ae9f836e73650aaa5ac6c9bc505ad4778a38673545bcaa159b918c8acd138b7d448ffb20374dbb6301a1029ab8ab1504b12c449d00d0ace2b10659de1dcead35159d29f1bc7ca22f86300da98e02d8b101cc2714b4e6681616aa5e53c51ebbb239c7b99e6c929c0170442d1c29df94da60a8debf90af7a9d2777be0abe9d24e902f8be335bab1a6288460d7368f54f15df926a9e474a5a3a13dea9824c49e54db4da7f2a009de56bb25fe8e12a18771592b8eaa6b524fa494922dded016723f93fbe82645e88e3563ea816a0f97859cc73b31083e7f2ff1ef911e7049773eb355a4756e25e0806617572612084b72008000000000561757261010130436cb29d3fd4ddd996b078f23e28698f983609a60bc51b19333b96d235896c9c2e274eacbec55463476c8efb51261b5073871051db165e1e8ad5761aede78f0300000006000000000001000000350125080000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed8791884462e2563cabc32bfb099d3d296f99b431b18b74456ec785c65dafe2be800e3f421c9760f2a40d129d0de6ead24a40feed91b3bdd789ffe1fae76dd7a550bdc6041783bc5fecbce3fe1d823e89ad76640af60681b9eaf0539869eea5535de8ed03d87a6334d5b5140c176ea0acf80ecc5d82686924886aa8cc1de55ea8b5ceda7f84e5935b347bde0d4824b8dfeb95cbba94234fdf19e40bd09b8adae361de842cd4d368f11aad8f76598a8af0c9f870ffcd1d9f4381ef714c3b519eced963c287de323dba5a720417911226164623153c1bbdd3f33916b9be07364376eefb76c491d949884c9bc067a7cfcd2ee808e89625035c5b1092ac483340957277bfaa4b6300ad5264de6e4d4e35a6cf24332a87be8f4f9dd7ebb34f5cf317ea583c4358e902cc3db54bdd3e0da6c288f43f02dbd808a29eeb10acc9b469e4dfacfe3060c9b0a6300b001d7d784e48bdcdea1ced937f7d2565c08492cb5519d4c46399843052474798c1d943a0c9693898c92ab55625cb3f889f26e6b8ed47272ed76cc3f2521c7f21cd0806617572612084b72008000000000561757261010160d4877ac5087983c1e2d7048a42622ca727835b2ae123cad93b192b0b4db6126cb8db5ed6efe8e22d5de6d8244c30bb177b34b6fefc9d7a99671e28452e668e070000000a000000000001000000350126080000970a67f13c63f060eb87777c4b68a4493931715530f8d9f69f6ff0ed879188442e5a70c523364f4187e3873e9b494552975192f2d6570f332ba0b819ff128062412fb9b1343ebd65da1dbbad0f28fa74f3138eb1f5ac42dc4b087bf6aae9c0f1c10428db12c688784d12425e257f1436f1a13e12b0fac7e09c2ef782884fdae288a70a0827669d8c4c1e153f9699157c249c91fd171288c1c82c343e2e5329052a2cbd6da16d035fedcf8286363b5cfff146ac95534b1eb9df515757ff41473f899ad3f78b12ad415a2fb3b0af28eed976ef75bf910c63891918463ed196af83daf67887703f0d72a942f0666c82a6ef8df9f3419a7c7fbd9c021c76deaa98431d842461610b3b08c6ca9cf6a102719e6e67c672f449fb8ffb3ce6e0af3236b045cba2d8e3f0bc713d27a97b6868ec464e32b9e1ce40729f08a242a8c0749e46e9025dbc8c945c125682246a5a3a4dc4f5db1071bacbead573fcb36e20406d5e95e926e31600ccb6952f6b8451707882e07dbfce85a875e7204744c1f9baee14cf272ffff392c5967d1da53c318c529c319fef924106be7b9a8ed6aafd2d96c9c133fefc63aa0806617572612084b7200800000000056175726101019486d01932086dd193762964375e7bd944eda068c51369fd930b79e8e0437d209f4238bd0431b3cb61be4ba663bbbda1a53730f13001027ff2adc811f3a35885080000000b0000000000010000003500d007000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb3c45e3f3817cff0461c43385de165f5eb18b6cdc9147bf2eef3f4ce99afc7485ed943f09bde7d796ebcf315308e21ecb1f2c61f977f8a92e0dbc0105c6f963dd95d6ed9829561c39d688447413ef6c0372df019ad69f75f58402eabc60d646224109eff7ea1f7a869883d14c2ae823ee289393aa2b9358f7d8ee760f316c0196d24a0dda1d29558bc5331036721a5111826c6efd04104fefb61d3eec27bf74d2f6bcef1abe2b44bbcfb29552d3009901f05238adbb7abf10ecc1e354ae1e70584ff42916291fe587927d39279e75552858ea30f183aed9d840848f16ed3d537ccce864af51bd0b781efb619d2d7f5c360dc72c15ea0be3646823c62166fe6fa9f3bcbfe68574af4d8876eb0a4e75c6b3a1d15222da3ff78aa069e3da0ffd5eb1ce902a133a650f06bb019427e57dfba29d2bf510c26d473a5ebc8ad31acfced1eb1ce6ae236001a2fd43761f8e9de2527af8ce4404fbfe612819e7d2b6c73e6dcc287c9d30ba180b7a1125b2b6818f64c9c6f350fade37ff515db3ade66540351bb0051c9075d0806617572612084b7200800000000056175726101018800ee6efd5a9834a93f60e9ce7c124107994f6a2b23f7cd870d1a89e2d9720f41b5dd276dff91cc15fa06050ec0195c1ae4c09f925659171706863940bd3f83010000000500000000000100000035002408000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb3a45fe489f08876dd93330850f2a34dc246de42c5ba0efd0b51d890ef72775739cd1d18b75d97821c2192669a1b1cd9fb4caeefeb2498d2b53a8620e96fa1a24cbc67f2ee28aa00117d3ec90f88baa6f56663574212bd7c08015ad28733f397e7e4f3321c654a88f24a51219ea984e907122ab162dbcce2bb6a977c3f74f74bf7306320a43f4d10de4a00a454aee0918ed1619acf1101af3066972e74823eb458e0982a6a8397b8cf7685ad308ced6adfd1fa49216211ba7425e8e018a179ca81ffdc72f87fc34c40a529809c399cf99fedd996370cc772b5c51595e0fb2f7dd369248ec4a86bacbc60bc4d65df89ce7dedc436fa8a3a1934ee96f74de1af145d80e7b186c7085b0e369ede9d73686ea83a19a3a25005d9c11f9e4a9351df040fe90224132a3b1246d7efc37e373f66a85ece7cd369efac6aebda6dc7a13eb6089a8862bd1400725d7a343e29444c67f393be4212a8df930a5a7c223837f4f867e487005c88df943ab103cbef0125518e5049dc8926ea696778464a8c6b59728ca1e394af36240806617572612084b720080000000005617572610101a46b0efcd4328030c0bb20ef440e2f63364522ce5a3eb676de601115ead40345cf840fd60da25446d1b0bc87f1a96cd9464a9d520db4d8605d36e3fb08254286060000000a00000000000100000035002808000052396b4d81153bcab7f383bf870c3d271b19e35fc834fa7f89fc0baf19823eb30098a000c36260ebbcb781b8d131ed52358675f23ec929de5f050ecf0c5c9d0aa6e713246e85a5b1d6c51a674062a1a2a0cc75bbb13d25f1cda026e9b4b701edf8d7147305b71558bca2781b5598be832de0a149b9dc304487e0361079b21a9cb5d04f6939b13e7e6c0e73b2a2b0ae9d1301144015a40fa2417007df2b482d6f9a91a41bb6dd39e62666786ed316962b94b45d867ff3e8b55322109f0525e259d67cdc0464aa52aa728fd21f34c9563d527b2e3a911dde4c5c84746ae7ac9c8f8fcdd64c63856787d8d4cc66cb1c49ab1c94491eac066330b82a433db65617643cd446c9a1bd71d0ce47495a92d001a3047b17ea1afafade18e5892db4ebce4748f5790be22f893695b5f019a1ca9cd016a88ad8423e15e302a77a7433cc8010e9020d9e2b85621d5809954468660eef7dafb0a3e11770ff21b1f6572a279b1de2108a100f005ed61ac8275af9f9381c71dc986b9f87c1af2d9f1bd8ecddd55d4a3eb078a0dff9bbaf689cdbfd11dbdf1fb15f1b005fb946571c7e2be758f7bc1246eda551d10806617572612084b720080000000005617572610101aecac16fb06ad772b90075039210f99b80259a51a868541b17ebac4c418450068df560e35e8f219c54a3ec819af49f25b75a09defe27990fe0e62e5676894089090000000d00000000000100000000006046eb0e00000000020000000200000004086fd30ccc612a93f7c1cb592ab90b31984e3280230eb67c19aeb84ca7b34715192f891e0300000000000000000000000000000200000004026fd30ccc612a93f7c1cb592ab90b31984e3280230eb67c19aeb84ca7b3471519e5837ba18c94d76d165780873a85da12cd4c7e0715bd9c64370ede7b706041fc00b0ed347f0d0000000000000000000000000200000004076d6f646c70792f7472737279000000000000000000000000000000000000000025d47e02000000000000000000000000000002000000120625d47e02000000000000000000000000000002000000040708e34cd66129e197697554aa67af8b35d1daf4f6ed431afa2701bcbc320fe2070ab59f00000000000000000000000000000002000000040708e34cd66129e197697554aa67af8b35d1daf4f6ed431afa2701bcbc320fe2070ab59f0000000000000000000000000000000200000000006812490a00000000000000";
 
 		println!("hex{}", encoded_events.len());
 		let bin = hex::decode(encoded_events).unwrap();
@@ -1600,13 +1560,13 @@ mod tests {
 		//     //   println!("err msg: {}", err_msg);
 		// }
 		// println!("{:#?}", val);
-	}
+	} */
 
 	#[test]
 	fn polkadot_millionth_block_hash() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
+		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
@@ -1616,12 +1576,12 @@ mod tests {
 	fn polkadot_millionth_block_3_extrinsics() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1000_000)).unwrap();
+		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
 	}
-
+	/*
 	#[test]
 	fn get_extrinsics_test() {
 		let url = "wss://rpc.polkadot.io:443";
@@ -1630,7 +1590,7 @@ mod tests {
 
 		let block = block_on(get_extrinsics(&mut source, blockhash)).unwrap().unwrap();
 
-		let metad = block_on(get_desub_metadata(&url, &mut source, None)).unwrap();
+		let metad = block_on(get_metadata(&url, &mut source, None)).unwrap();
 		if let Ok(extrinsic) =
 			decoder::decode_unwrapped_extrinsic(&metad, &mut block.extrinsics[0].as_slice())
 		{
@@ -1640,5 +1600,5 @@ mod tests {
 		}
 
 		assert_eq!(3, block.extrinsics.len());
-	}
+	} */
 }

@@ -3,12 +3,13 @@ use super::DotUrl;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use bevy_ecs::prelude::Component;
 use bevy_egui::EguiSettings;
+use serde::{Deserialize, Serialize};
 // use bevy_inspector_egui::{
 // 	options::{NumberAttributes, StringAttributes},
 // 	Context, Inspectable,
 // };
 
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Success {
 	#[default]
 	Happy,
@@ -16,18 +17,20 @@ pub enum Success {
 	Sad,
 }
 
-#[derive(Component, Default, Clone, Debug)]
-pub struct Details {
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
+pub struct Details//<'scale> - would require details being stored somewhere with ids.
+{
 	pub pallet: String,
 	pub doturl: DotUrl,
 	pub parent: Option<u32>,
 	pub variant: String,
 	pub success: Success,
-	pub hover: String,
+	// pub hover: String,
 	pub flattern: String,
 	// #[inspectable(label = "Url:")]
 	pub url: String,
-	// pub raw: Vec<u8>
+	// pub chain_name: String,
+	pub raw: Vec<u8>
 }
 
 // use egui::Grid;

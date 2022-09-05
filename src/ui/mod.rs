@@ -1,13 +1,18 @@
+use bevy::diagnostic::Diagnostics;
+
 pub mod details;
 pub mod doturl;
 pub mod toggle;
-use crate::{Anchor, Env, Inspector, Viewport};
+//  use egui::ImageData;
+use crate::{Anchor, Env, Inspector, Viewport, log};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
+use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+use egui::ComboBox;
 // use egui::ComboBox;
 use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
@@ -15,8 +20,13 @@ use std::ops::DerefMut;
 pub struct OccupiedScreenSpace {
 	left: f32,
 	top: f32,
-	right: f32,
+	// right: f32,
 	bottom: f32,
+}
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
 pub struct OriginalCameraTransform(pub Transform);
@@ -27,7 +37,10 @@ pub fn ui_bars_system(
 	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
 	mut spec: ResMut<UrlBar>,
 	mut anchor: ResMut<Anchor>,
-	inspector: Res<Inspector>,
+	mut inspector: ResMut<Inspector>,
+	entities: Query<(&GlobalTransform, &Details)>,
+	mut destination: ResMut<Destination>,
+	diagnostics: Res<Diagnostics>,
 ) {
 	if inspector.selected.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -39,14 +52,62 @@ pub fn ui_bars_system(
 					ui.heading("Selected Details:");
 				});
 				ui.separator();
-				if let Some(selected) = &inspector.selected {
+
+				// if inspector.selected.is_some() {
+				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
+
+				// #[cfg(target_arch = "wasm32")]
+				// let maybe_bytes: Option<Vec<u8>> = None;
+				// let maybe_bytes = {
+				// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
+				// 	use wasm_bindgen::JsCast;
+				// 	use wasm_bindgen_futures::JsFuture;
+				// 	let window = web_sys::window().unwrap();
+				// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
+				// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
+				// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
+				// 	Some(js_sys::Uint8Array::new(&data).to_vec())
+				// };
+
+				// #[cfg(not(target_arch = "wasm32"))]
+				// let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
+
+				// if let Some(bytes) = maybe_bytes {
+				// 	let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
+				// 	let _texture: &egui::TextureHandle =
+				// 		inspector.texture.get_or_insert_with(|| {
+				// 			// Load the texture only once.
+				// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
+				// 		});
+				// }
+				// }
+use egui::Link;
+				if let Some(selected) = &inspector.selected {					
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					ui.add(egui::Hyperlink::from_label_and_url(
-						"open in polkadot.js",
-						&selected.url,
-					));
+					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so use open.				
+					if ui.add(Link::new("open in polkadot.js")).clicked() {
+						open::that(&selected.url).unwrap();
+					}
+					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
+					ui.label("RAW Scale:");
+					
+					if ui.button("📋").clicked() {
+						let s = hex::encode(&selected.raw);
+						log!("{}", &s);
+						ui.output().copied_text = s;//TODO not working...
+					};
+					ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+
+					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+						if let Some(hand) = inspector.texture.as_ref() {
+							let texture: &egui::TextureHandle = hand;
+
+							let l = 200.; // occupied_screen_space.left - 10.;
+							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+						}
+					});
 				}
 			})
 			.response
@@ -61,22 +122,28 @@ pub fn ui_bars_system(
 	//     .response
 	//     .rect
 	//     .width();
+
+	let mut fps = 0.;
+	for diag in diagnostics.iter() {
+		if diag.name == "fps" {
+			fps = diag.value().unwrap_or_default();
+			break
+		}
+	}
+
 	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
 		.resizable(false)
 		.show(egui_context.ctx_mut(), |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
-				// let combo =	ComboBox::from_label("Env")
-				// 	.selected_text(format!("{}", spec.env))
-				// 	.show_ui(
-				// 		ui,
-				// 		|ui| {
-				// 			ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
-				// 			ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
-				// 			ui.selectable_value(&mut spec.env, Env::Test, "westend");
-				// 			ui.selectable_value(&mut spec.env, Env::Local, "local");
-				// 		}
-				// 	);
+				let _combo = ComboBox::from_label("Env")
+					.selected_text(format!("{}", spec.env))
+					.show_ui(ui, |ui| {
+						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
+						// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
+						// ui.selectable_value(&mut spec.env, Env::Test, "test");
+						// ui.selectable_value(&mut spec.env, Env::Local, "local");
+					});
 
 				ui.add(
 					DatePicker::<std::ops::Range<NaiveDateTime>>::new(
@@ -87,7 +154,37 @@ pub fn ui_bars_system(
 				);
 
 				//TODO: location = alpha blend to 10% everything but XXXX
-				//ui.text_edit_singleline(&mut spec.location);
+				let response = ui.text_edit_singleline(&mut spec.find);
+				let mut found = 0;
+				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
+					if spec.find.len() <= 4 {
+						if let Ok(para_id) = spec.find.parse() {
+							for (loc, details) in entities.iter() {
+								if details.doturl.para_id == Some(para_id) &&
+									details.doturl.block_number.is_some()
+								{
+									destination.location = Some(loc.translation());
+									inspector.selected = Some(details.clone());
+									found += 1;
+								}
+							}
+						}
+					}
+					for (loc, details) in entities.iter() {
+						if spec.find.len() <= details.pallet.len() && spec.find.as_bytes().eq_ignore_ascii_case(&details.pallet.as_bytes()[..spec.find.len()])
+						// if details.pallet.contains(&spec.find) || details.variant.contains(&spec.find)
+						{
+							destination.location = Some(loc.translation());
+							inspector.selected = Some(details.clone());
+							found += 1;
+						}
+					}
+
+					println!("find {}", spec.find);
+				}
+				if !spec.find.is_empty() {
+					ui.heading(format!("found: {}", found));
+				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
 					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
 					ui.heading("Follow:");
@@ -107,14 +204,15 @@ pub fn ui_bars_system(
 					ui.heading(selected);
 				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
-					let timestamp =
-						super::x_to_timestamp(viewpoint_query.get_single().unwrap().translation.x);
+					let timestamp = super::x_to_timestamp(
+						viewpoint_query.get_single().unwrap().translation().x,
+					);
 					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-					ui.heading(format!("{}", newdate));
+					ui.heading(format!("{:03.0} fps. {}", fps, newdate));
 				});
 			});
 		})
@@ -169,21 +267,26 @@ pub struct UrlBar {
 	// Maybe this is a find?
 	pub location: String,
 	was_location: String,
+
+	pub find: String,
+
 	pub timestamp: NaiveDateTime,
 	was_timestamp: NaiveDateTime,
 	pub env: Env,
+	was_env: Env,
 }
 
 impl UrlBar {
 	pub fn new(location: String, timestamp: NaiveDateTime) -> Self {
 		let loc_clone = location.clone();
-		let time_clone = timestamp.clone();
 		Self {
 			location,
 			was_location: loc_clone,
+			find: String::new(),
 			timestamp,
-			was_timestamp: time_clone,
+			was_timestamp: timestamp,
 			env: Env::Prod,
+			was_env: Env::Prod,
 		}
 	}
 
@@ -195,12 +298,15 @@ impl UrlBar {
 	}
 
 	pub fn changed(&self) -> bool {
-		self.was_location != self.location || self.was_timestamp != self.timestamp
+		self.was_location != self.location ||
+			self.was_timestamp != self.timestamp ||
+			self.was_env != self.env
 	}
 
 	pub fn reset_changed(&mut self) {
 		self.was_location = self.location.clone();
-		self.was_timestamp = self.timestamp.clone();
+		self.was_timestamp = self.timestamp;
+		self.was_env = self.env.clone();
 	}
 }
 // use bevy_inspector_egui::{options::StringAttributes, Context};

@@ -1,22 +1,24 @@
 use crate::datasource::{raw_source::AgnosticBlock, Source};
 use async_trait::async_trait;
+use bevy::render::render_resource::std140::Std140;
 use futures::TryFutureExt;
 use primitive_types::H256;
 
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct CachedDataSource<S: Source> {
+	store: bevy_pkv::PkvStore,
 	underlying_source: S,
 	urlhash: u64,
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_arch="wasm32")]
 type WSBackend = polkapipe::ws_web::Backend;
 
-// macro_rules! log {
-//     // Note that this is using the `log` function imported above during
-//     // `bare_bones`
-//     ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
-// }
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
+}
 
 type BError = polkapipe::Error; //  Box<dyn std::error::Error>;
 
@@ -26,7 +28,8 @@ where
 {
 	pub fn new(underlying_source: S) -> Self {
 		let urlhash = super::please_hash(&underlying_source.url());
-		Self { underlying_source, urlhash }
+		Self { store: bevy_pkv::PkvStore::new("NoCompany", "DotsarmaWorld"), 
+		underlying_source, urlhash }
 	}
 }
 
@@ -37,7 +40,8 @@ macro_rules! memoise {
 
 		let filename = format!("{}/{}.{}", path, hex::encode($keybytes), $datatype);
 
-		if let Ok(contents) = std::fs::read(&filename) {
+		let res : Result<Vec<u8>,_>= $self.store.get(&filename);
+		if let Ok(contents) = res {
 			// println!("cache hit events!");
 			if contents.is_empty() {
 				Ok(None)
@@ -49,17 +53,18 @@ macro_rules! memoise {
 			let result = $fetch.await;
 			if let Ok(result) = result {
 				if let Some(bytes) = result {
-					std::fs::write(&filename, bytes.as_slice())
+					$self.store.set(&filename, &bytes)
 						.expect(&format!("Couldn't write event output to {}", filename));
 				// println!("cache storage wrote to {}", filename);
 				} else {
-					std::fs::write(&filename, vec![].as_slice())
+					$self.store.set(&filename, &Vec::<u8>::new())
 						.expect(&format!("Couldn't write event output to {}", filename));
 					// println!("cache storage wrote empty to {}", filename);
 				}
 
 				// Only let data read from cache so you know it's working.
-				let contents = std::fs::read(&filename).unwrap();
+				let res : Result<Vec<u8>,_>= $self.store.get(&filename);
+				let contents = res.unwrap();
 				if contents.is_empty() {
 					Ok(None)
 				} else {
@@ -78,7 +83,7 @@ impl<S> Source for CachedDataSource<S>
 where
 	S: Source,
 {
-	#[cfg(target_arch = "wasm32")]
+	#[cfg(target_arch="wasm32")]
 	async fn process_incoming_messages(&mut self) -> WSBackend {
 		// log!("cached process incoming run");
 		self.underlying_source.process_incoming_messages().await
@@ -92,7 +97,7 @@ where
 		memoise!(
 			"block_hash",
 			self,
-			block_number.to_le_bytes(),
+			block_number.as_bytes(),
 			self.underlying_source
 				.fetch_block_hash(block_number)
 				.map_ok(|res| res.map(|hash| hash.as_bytes().to_vec()))
@@ -154,6 +159,6 @@ where
 	}
 
 	fn url(&self) -> &str {
-		self.underlying_source.url()
+		&self.underlying_source.url()
 	}
 }

@@ -1,27 +1,42 @@
+<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8"/>
-    <style>
-      body {
-        background: linear-gradient(
-          135deg,
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+  <style>
+    body {
+      background: linear-gradient(135deg,
           white 0%,
           white 49%,
           black 49%,
           black 51%,
           white 51%,
-          white 100%
-        );
-        background-repeat: repeat;
-        background-size: 20px 20px;
-      }
-      canvas {
-        background-color: white;
-      }
-    </style>
-  </head>
-  <script type="module">
-    import init from './target/wasm.js'
-    init()
-  </script>
+          white 100%);
+      background-repeat: repeat;
+      background-size: 20px 20px;
+      margin: 0px;
+      display: flex;
+      overflow: hidden;
+    }
+
+    canvas {
+      background-color: white;
+    }
+  </style>
+  <link data-trunk rel="copy-dir" href="assets/branding/" />
+  <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-keep-debug="true" data-no-demangle="false"
+    data-bin="app" data-type="main" />
+  <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-keep-debug="true" data-no-demangle="false"
+    data-bin="worker" data-type="worker" />
+</head>
+<script type="module">
+  import init from './target/wasm.js'
+  init()
+</script>
+<!-- Current web restrictions require full screen mode to be initiated by the user so there's a button -->
+<button id="grabmouse"
+  onclick="document.addEventListener('pointerlockchange', (e) => {document.getElementById('bevycanvas').focus();});bevycanvas.requestPointerLock();">&#x26F6;</button>
+<canvas id="bevycanvas" tabindex="0" data-raw-handle="1" style="width: 100%; height: 100%;" alt="I am a window!"
+  cursor="auto" tabindex="1" oncontextmenu="return false;"></canvas>
 </html>

@@ -62,17 +62,18 @@ pub fn camera_recorder(time: Res<Time>, query_t: Query<&GlobalTransform, With<Vi
 		.open("record.csv")
 		.unwrap();
 
+	let (_scale, rot, translation) = query.to_scale_rotation_translation();
 	let _ = write!(
 		file,
 		"{},{},{},{},{},{},{},{}\r\n",
 		time.seconds_since_startup(),
-		query.translation.x,
-		query.translation.y,
-		query.translation.z,
-		query.rotation.x,
-		query.rotation.y,
-		query.rotation.z,
-		query.rotation.w
+		translation.x,
+		translation.y,
+		translation.z,
+		rot.x,
+		rot.y,
+		rot.z,
+		rot.w
 	);
 }
 

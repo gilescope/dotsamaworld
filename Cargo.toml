@@ -5,7 +5,7 @@ authors = []
 edition = "2021"
 repository = "https://github.com/gilescope/dotsamaworld"
 resolver = "2"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+default-run = "app"
 
 [features]
 default = ["normalmouse"]
@@ -15,69 +15,149 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
-sp-core = "*"
-
-async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
+primitive-types = {version="0.11", default-features = false, features=["serde_no_std"]} # alt serde_no_std 
+log = {version = "0.4.14", default-features = false }
+async-std = { version = "1.12.0", features = [
+    # "attributes",
+    # "tokio1",
+    # "async-channel",
+] }
 async-trait = "0.1"
+async-recursion = "*"
 
-futures = "0.3.13"
-jsonrpsee-types = "*"
-
-crossbeam-channel = "*"
-egui-datepicker = { git="https://github.com/HU90m/egui-datepicker.git", branch = "for-project-use", default-features = false }
-chrono= { version = "*", default-features = false }
-#wasm-bindgen-rayon = "1.0"
-#[target.'cfg(target_os = "linux")'.dependencies]
-
-winit = { version = "*", features = ["x11"] }
-bevy_flycam = { git="https://github.com/gilescope/bevy_flycam", optional = true, rev="d0075df931d4de3cbaca614cf24ecdb4d98f8756" }
-bevy_mod_picking = "0.6"
+# Not needed since rust 1.63
+lazy_static = "*"
+futures = {version = "0.3.13", defalult-features=false, features=[] } 
+# winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
-# bevy-inspector-egui-derive = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
-parity-scale-codec = { package = "parity-scale-codec", version = "2", default-features = false, features = ["derive", "full", "bit-vec"] }
-#bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
-bevy_atmosphere = "0.3"
-palette = "0.6"              # why: perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
-fastrand = "*"
-# bevy-inspector-egui = "0.10"
-serde_bytes = "0.11"
-serde_json = "*"
-#rayon = "*"
-bevy_spacemouse = { git= "https://github.com/gilescope/bevy_spacemouse.git", rev="c4240e44b4757293b4424e58836bf29f9c8e4476", optional = true }
-serde = "*"
-bevy_egui = "*"
-egui = "*"
-url = "*"
-color-eyre = {version = "0.5", default-features = false }
-bevy_polyline = "0.2"
-# bevy_hanabi = "0.2"
-frame-metadata = "*"
+parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
+    "derive",
+    "full",
+    "bit-vec",
+] }
+palette = { version = "0.6.1", features=["libm"], default-features = false } # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
+fastrand = {version="*",  default-features=false }
+#serde_bytes = "0.11"
+serde = {version="*",  default-features=false }
+serde_json = {version="*",  default-features=false }
+url = {version="*",  default-features=false }
+# async-tungstenite = "*"
+async-tls = {version="*",  default-features=false }
+color-eyre = { version = "0.5", default-features = false }
+dashmap = {version="*"}
+open = { git="https://github.com/gilescope/open-rs.git", rev="255025b420dbfec81d0c28e67055402e14295921" }
+#
+# substrate deps
+#
+
+# frame-metadata = "15.0.0"
+frame-metadata = { git = "https://github.com/integritee-network/frame-metadata.git", default-features = false, features = [
+    "v14",
+    "full_derive",
+] }
+
 scale-info = { version = "*", features = ["serde"] }
+scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32" }
+# scale-value = {path="/home/gilescope/git/scale-value" }
+scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
+    "bitvec", "display"
+], rev = "f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444" }
+scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features = [
+    "bitvec",
+], rev = "986d53abee3ba5f021e52cc096d09a0dc2f3db23" }
+# scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
+polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e560e88ee80ee070b05412b3d8c" }
+# polkadyn = { path = "/home/gilescope/git/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
-desub-current = { git = "https://github.com/paritytech/desub/" }
-# bevy_kira_audio = "*"
-# dolly = "0.3"
+# desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
+
+#
+# Bevy Dependencies
+#
+egui = {version="0.18", default-features=false }
+egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
+# egui extras has a date but not time chooser
+# egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
+# image = { version = "0.24", features = ["jpeg"] }
+
+# bevy_instancing = { git= "https://github.com/Shfty/bevy_instancing.git" }
+# bevy_instancing = { path = "/home/gilescope/git/bevy_instancing" }
+bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "e6b21f4fbb0eecb3a65c6b272235e2b50e268abe" }
+bevy_mod_picking = "0.8"
+# bevy-inspector-egui-derive = "*"
+#bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
+
+# will be published monday
+bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git" }
+# bevy-inspector-egui = "0.10"
+
+bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
+bevy_egui = {version="0.15", default-features=false}
+# bevy_pkv = "*"
+bevy_polyline = "0.3"
+# bevy_hanabi = "0.2"
+# bevy_kira_audio = "*"
+# dolly = "0.3"
+
+[target.'cfg(all(not(target_env = "msvc"),not(target_arch = "wasm32")))'.dependencies]
 tikv-jemallocator = "0.5"
+# rayon = "*"
 
-
+#
 # Dependencies for native only.
-# dynamic
+#
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
-subxt = { git = "https://github.com/paritytech/subxt.git", rev = "5c04b09c785c1b009ba6a0e18ab6bb5c516d6a71" }
-open = "1"
+chrono = { version = "*", default-features = false }
+bevy = { version = "0.8.1", default-features = false, features = [
+    "bevy_winit",
+    "render",
+    "jpeg",
+    "dynamic",
+] }
 
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["wss"]}
+# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
+#     "wss",
+# ] }
+async-tungstenite = { version = "0.15.0", default-features = true, features = [
+    "async-tls",
+    "async-std-runtime",
+] }
+
+#
 # Dependencies for WASM only.
+#
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-bevy = { version = "0.7", default-features = false, features = ["bevy_gltf", "bevy_winit", "render", "png", "jpeg"] }
-bevy_webgl2 = "*"
-getrandom = { version = "*", features = ["wasm-bindgen"] }
+# rexie is for indexeddb web caching
+# rexie = "0.4"
+# console_log = "*"
+console_error_panic_hook = "0.1"
+chrono = { version = "*", default-features = false, features = ["wasmbind"] }
+getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 #tracing-wasm = "*"
 wasm-bindgen = "*"
+ws_stream_wasm = "*"
+# wasm32 branch
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["ws-web"]}
+# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
+#     "ws-web",
+# ] }
+
+# wee_alloc = "0.4.5"
+gloo-worker = "0.2.1"
+wasm-bindgen-futures = "*"
+bevy_web_asset = "0.4"
+bevy_tasks = "0.8"
+bevy = { version = "0.8.1", default-features = false, features = [
+    "bevy_winit",
+    "render",
+    "jpeg",
+] }
+# bevy_webgl2 = "*"
+bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen.git" }
 
 # [patch.'https://github.com/bevyengine/bevy']
 # bevy = {git = "https://github.com/bevyengine/bevy//", rev="841755aaf23acfd55b375c37390daeb302c5b30b", default-features=false}
@@ -85,8 +165,8 @@ wasm-bindgen = "*"
 # [patch.'https://github.com/mrk-its/bevy_webgl2']
 # bevy_webgl2 = {git = "https://github.com/mrk-its/bevy_webgl2//", rev="035236b8d7ec52b8e9e20399662e89c73e4521f6", default-features=false}
 
-
-
+# [patch.crates-io]
+# http-types= {git="https://github.com/http-rs/http-types.git"}
 #console_error_panic_hook = { version = "0.1", optional = true }
 
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
@@ -95,27 +175,33 @@ wasm-bindgen = "*"
 
 
 #async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
-# [dependencies.web-sys]
-# version = "0.3"
-# features = [
-#     'console',
-#     'Document',
-#     'HtmlElement',
-#     'HtmlInputElement',
-#     'MessageEvent',
-#     'Window',
-#     'Worker',
-# ]
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3"
+features = [
+    'console',
+    'Document',
+    'HtmlElement',
+    'HtmlInputElement',
+    'MessageEvent',
+    'Window',
+    'Worker',
+    'WebGlRenderingContext',
+    'WebGlShader',
+    'KeyboardEvent',
+    'MouseEvent',
+]
 
 [profile.dev]
 opt-level = 1
 
 [profile.release]
-
-
-
-# lto = true
-# opt-level = 's'
+lto = true
+opt-level = 's'
+debuginfo = 0
+strip="debuginfo" # strip symbols brakes it findong the worker.
+codegen-units = 1
+panic="abort"
+incremental=false
 
 
 [profile.dev.package.backtrace]

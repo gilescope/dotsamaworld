@@ -95,7 +95,7 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 	if entry.details.success == Success::Worried {
 		return ExStyle {
 			// Trump Orange
-			color: Color::rgb(1., 0.6470588235, 0.),
+			color: Color::rgb(1., 0.647_058_84, 0.),
 		}
 	}
 
