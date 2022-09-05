@@ -22,7 +22,6 @@ use std::{
 pub struct ExtrinsicVec(pub Vec<u8>);
 
 mod time_predictor;
-mod utils;
 //mod cached_source_inc_web;
 
 // #[cfg(target_arch = "wasm32")]

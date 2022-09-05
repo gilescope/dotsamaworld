@@ -76,12 +76,6 @@ pub fn player_move_arrows(
 				}
 			}
 
-			// Don't change the Y axis.
-			// let forward = transform.forward();
-			// let right = transform.right();
-			// let forward = Vec3::new(forward.x, 0., forward.z);
-			// let right = Vec3::new(right.x, 0., right.z);
-
 			if keys.just_released(KeyCode::Tab) {
 				anchor.follow_chain = !anchor.follow_chain;
 			}
@@ -96,26 +90,6 @@ pub fn player_move_arrows(
 			}
 			for _key in keys.get_pressed() {
 				if window.is_focused() {
-					// match key {
-					//     // KeyCode::Up => velocity += forward,
-					//     // KeyCode::Down => velocity -= forward,
-					//     // KeyCode::Left => velocity -= right,
-					//     // KeyCode::Right => velocity += right,
-					//     // KeyCode::Space | KeyCode::Comma => {
-					//     //     if transform.local_y().y > 0. {
-					//     //         settings.speed += 0.5;
-					//     //     }
-					//     // }
-					//     // KeyCode::LShift | KeyCode::RShift | KeyCode::Period => {
-					//     //     if transform.local_y().y > 0. {
-					//     //         if settings.speed > 12. {
-					//     //             settings.speed -= 0.5;
-					//     //         }
-					//     //     }
-					//     // }
-
-					// _ => (),
-					// }
 					LAST_KEYSTROKE_TIME
 						.store(time.seconds_since_startup() as i32, Ordering::Relaxed);
 					break
