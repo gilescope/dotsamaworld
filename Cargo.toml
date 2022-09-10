@@ -15,8 +15,10 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
-primitive-types = {version="0.11", default-features = false, features=["serde_no_std"]} # alt serde_no_std 
-log = {version = "0.4.14", default-features = false }
+primitive-types = { version = "0.11", default-features = false, features = [
+    "serde_no_std",
+] } # alt serde_no_std 
+log = { version = "0.4.14", default-features = false }
 async-std = { version = "1.12.0", features = [
     # "attributes",
     # "tokio1",
@@ -27,7 +29,7 @@ async-recursion = "*"
 
 # Not needed since rust 1.63
 lazy_static = "*"
-futures = {version = "0.3.13", defalult-features=false, features=[] } 
+futures = { version = "0.3.13", defalult-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
@@ -36,17 +38,19 @@ parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", defaul
     "full",
     "bit-vec",
 ] }
-palette = { version = "0.6.1", features=["libm"], default-features = false } # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
-fastrand = {version="*",  default-features=false }
+palette = { version = "0.6.1", features = [
+    "libm",
+], default-features = false } # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
+fastrand = { version = "*", default-features = false }
 #serde_bytes = "0.11"
-serde = {version="*",  default-features=false }
-serde_json = {version="*",  default-features=false }
-url = {version="*",  default-features=false }
+serde = { version = "*", default-features = false }
+serde_json = { version = "*", default-features = false }
+url = { version = "*", default-features = false }
 # async-tungstenite = "*"
-async-tls = {version="*",  default-features=false }
+async-tls = { version = "*", default-features = false }
 color-eyre = { version = "0.5", default-features = false }
-dashmap = {version="*"}
-open = { git="https://github.com/gilescope/open-rs.git", rev="255025b420dbfec81d0c28e67055402e14295921" }
+dashmap = { version = "*" }
+open = { git = "https://github.com/gilescope/open-rs.git", rev = "255025b420dbfec81d0c28e67055402e14295921" }
 #
 # substrate deps
 #
@@ -61,13 +65,14 @@ scale-info = { version = "*", features = ["serde"] }
 scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32" }
 # scale-value = {path="/home/gilescope/git/scale-value" }
 scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
-    "bitvec", "display"
+    "bitvec",
+    "display",
 ], rev = "f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444" }
 scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features = [
     "bitvec",
 ], rev = "986d53abee3ba5f021e52cc096d09a0dc2f3db23" }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
-polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e560e88ee80ee070b05412b3d8c" }
+polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "1da872d87bfe3e560e88ee80ee070b05412b3d8c" }
 # polkadyn = { path = "/home/gilescope/git/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
@@ -77,7 +82,7 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev="1da872d87bfe3e5
 #
 # Bevy Dependencies
 #
-egui = {version="0.18", default-features=false }
+egui = { version = "0.18", default-features = false }
 egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
@@ -85,7 +90,8 @@ egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", br
 
 # bevy_instancing = { git= "https://github.com/Shfty/bevy_instancing.git" }
 # bevy_instancing = { path = "/home/gilescope/git/bevy_instancing" }
-bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "e6b21f4fbb0eecb3a65c6b272235e2b50e268abe" }
+bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
+# bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }
 bevy_mod_picking = "0.8"
 # bevy-inspector-egui-derive = "*"
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
@@ -95,7 +101,7 @@ bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git"
 # bevy-inspector-egui = "0.10"
 
 bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
-bevy_egui = {version="0.15", default-features=false}
+bevy_egui = { version = "0.15", default-features = false }
 # bevy_pkv = "*"
 bevy_polyline = "0.3"
 # bevy_hanabi = "0.2"
@@ -198,10 +204,10 @@ opt-level = 1
 lto = true
 opt-level = 's'
 debuginfo = 0
-strip="debuginfo" # strip symbols brakes it findong the worker.
+strip = "debuginfo" # strip symbols brakes it findong the worker.
 codegen-units = 1
-panic="abort"
-incremental=false
+panic = "abort"
+incremental = false
 
 
 [profile.dev.package.backtrace]

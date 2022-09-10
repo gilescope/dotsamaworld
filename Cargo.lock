@@ -649,7 +649,7 @@ dependencies = [
 [[package]]
 name = "bevy_flycam"
 version = "0.8.1"
-source = "git+https://github.com/gilescope/bevy_flycam?rev=e6b21f4fbb0eecb3a65c6b272235e2b50e268abe#e6b21f4fbb0eecb3a65c6b272235e2b50e268abe"
+source = "git+https://github.com/gilescope/bevy_flycam?rev=6d0adbc6884f8becfed7cd943c1acc85f8743824#6d0adbc6884f8becfed7cd943c1acc85f8743824"
 dependencies = [
  "bevy",
  "gloo-events",
