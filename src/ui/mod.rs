@@ -48,10 +48,11 @@ pub fn ui_bars_system(
 			.show(egui_context.ctx_mut(), |ui| {
 				// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 
-				ui.horizontal(|ui| {
-					ui.heading("Selected Details:");
-				});
-				ui.separator();
+				// ui.horizontal(|ui| {
+				// 	// ui.heading("Selected:");
+				// });
+				// ui.separator();
+				
 
 				// if inspector.selected.is_some() {
 				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
@@ -89,6 +90,12 @@ use egui::Link;
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so use open.				
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						open::that(&selected.url).unwrap();
+					}
+					if let Some(val) = &selected.value {
+						// ui.add(|ui| Tree(val.clone()));
+						ui.collapsing("value", 	|ui| funk(ui, val));
+//             .default_open(depth < 1)
+						ui.label(&val.to_string());
 					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
 					ui.label("RAW Scale:");
@@ -219,6 +226,46 @@ use egui::Link;
 		.response
 		.rect
 		.height();
+}
+
+
+fn funk<'r>(ui: &'r mut Ui, val: &scale_value::Value) -> () {
+	match &val.value {
+		scale_value::ValueDef::Composite(comp) => {
+			funk_comp(ui, comp);
+		}
+		scale_value::ValueDef::Primitive(p) => {
+			ui.label(p.to_string());
+		}
+		scale_value::ValueDef::BitSequence(seq) => 
+		{
+			ui.label(seq.to_string());
+		}
+		scale_value::ValueDef::Variant(scale_value::Variant{name, values}) => {
+			ui.collapsing(name, |ui|{
+				funk_comp(ui, values);
+			});
+		}
+	}
+}
+
+fn funk_comp<'r>(ui: &'r mut Ui, val: &scale_value::Composite<()>) -> () {
+	match val {
+		scale_value::Composite::Named(pairs) => {
+			for (k, v) in pairs {
+				ui.collapsing(k, |ui|{
+					funk(ui, v);
+				});
+			}
+		}
+		scale_value::Composite::Unnamed(items) => {
+			for (k, v) in items.iter().enumerate() {
+				ui.collapsing(k.to_string(), |ui|{
+					funk(ui, v);
+				});
+			}
+		}
+	}
 }
 
 // TODO: Something like this would probably stop us rendering

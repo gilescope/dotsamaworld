@@ -30,7 +30,8 @@ pub struct Details//<'scale> - would require details being stored somewhere with
 	// #[inspectable(label = "Url:")]
 	pub url: String,
 	// pub chain_name: String,
-	pub raw: Vec<u8>
+	pub raw: Vec<u8>,
+	pub value: Option<scale_value::Value>
 }
 
 // use egui::Grid;

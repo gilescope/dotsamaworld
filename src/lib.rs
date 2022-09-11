@@ -813,6 +813,14 @@ impl DataEntity {
 			Self::Extrinsic { details, .. } => details,
 		}
 	}
+
+	pub fn details_mut(&mut self) -> &mut Details {
+		match self {
+			Self::Event(DataEvent { details, .. }) => details,
+			Self::Extrinsic { details, .. } => details,
+		}
+	}
+
 	pub fn pallet(&self) -> &str {
 		match self {
 			Self::Event(DataEvent { details, .. }) => details.pallet.as_ref(),
@@ -1340,21 +1348,23 @@ fn add_blocks(
 				});
 
 				bun.insert_bundle(PickableBundle::default())
-					.insert(Details {
-						// hover: format_entity(block),
-						// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
-						doturl: block.dot().clone(),
-						flattern: block.details().flattern.clone(),
-						url: format!(
-							"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
-							&encoded, &call_data
-						),
-						parent: None,
-						success: ui::details::Success::Happy,
-						pallet: block.pallet().to_string(),
-						variant: block.variant().to_string(),
-						raw: block.as_bytes().to_vec()
-					})
+			        .insert(block.details().clone())
+					// .insert(Details {
+					// 	// hover: format_entity(block),
+					// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+					// 	doturl: block.dot().clone(),
+					// 	flattern: block.details().flattern.clone(),
+					// 	url: format!(
+					// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
+					// 		&encoded, &call_data
+					// 	),
+					// 	parent: None,
+					// 	success: ui::details::Success::Happy,
+					// 	pallet: block.pallet().to_string(),
+					// 	variant: block.variant().to_string(),
+					// 	raw: block.as_bytes().to_vec(),
+					// 	value: block.details().value
+					// })
 					.insert(ClearMe)
 					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
 					.insert(Name::new("Extrinsic"))
