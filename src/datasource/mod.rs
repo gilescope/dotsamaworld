@@ -1,5 +1,6 @@
 use self::raw_source::AgnosticBlock;
 use core::future::Future;
+// use core::slice::SlicePattern;
 // use super::polkadot;
 use crate::{
 	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
@@ -1217,116 +1218,119 @@ async fn get_events_for_block(
 			let events: Vec<_> = events
 				.iter()
 				.map(|(phase, event_val)| {
-					(phase, scale_value_to_borrowed::convert(event_val, true))
-				})
-				.collect();
-			for (phase, event) in events.iter() {
-				// let event = scale_value_to_borrowed::convert(&event2);
-				let start_link = vec![];
-				// let end_link = vec![];
-				let mut details = Details {
-					url: source.url().to_string(),
-					doturl: DotUrl { ..block_url.clone() },
-					..default()
-				};
+					let event = scale_value_to_borrowed::convert(event_val, true);
 
-				if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
-					details.parent = Some(*extrinsic_num as u32);
-					let count = ext_count_map.entry(extrinsic_num).or_insert(0);
-					*count += 1;
-					details.doturl.extrinsic = Some(*extrinsic_num);
-					details.doturl.event = Some(*count);
-				} else {
-					// system event. increment the system event count:
-					let count = ext_count_map.entry(&u32::MAX).or_insert(0);
-					*count += 1;
-					details.doturl.extrinsic = None;
-					details.doturl.event = Some(*count);
-				}
-
-				let (pallet, variant, contents) =
-					if let Some((pallet, "0", variant, contents)) = event.only3() {
-						(pallet, variant, contents)
-					} else {
-						panic!("could not find call_data.pallet_name in {:#?}", &event)
+					// let event = scale_value_to_borrowed::convert(&event2);
+					let start_link = vec![];
+					// let end_link = vec![];
+					let mut details = Details {
+						url: source.url().to_string(),
+						doturl: DotUrl { ..block_url.clone() },
+						value: Some(event_val.clone()),
+						..default()
 					};
 
-				details.pallet = pallet.to_string();
-				details.variant = variant.to_string();
-
-				if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
-					if let Some(inner) = contents.find2("0", "descriptor") {
-						if let (
-							Some(scale_borrow::Value::U64(parachain_id)),
-							Some(scale_borrow::Value::ScaleOwned(para_head)),
-						) = (inner.find2("para_id", "0"), inner.find2("para_head", "0"))
-						{
-							let para_id = NonZeroU32::try_from(*parachain_id as u32).unwrap();
-							inclusions.push((para_id, para_head.as_slice()));
-						}
+					if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
+						details.parent = Some(*extrinsic_num as u32);
+						let count = ext_count_map.entry(extrinsic_num).or_insert(0);
+						*count += 1;
+						details.doturl.extrinsic = Some(*extrinsic_num);
+						details.doturl.event = Some(*count);
+					} else {
+						// system event. increment the system event count:
+						let count = ext_count_map.entry(&u32::MAX).or_insert(0);
+						*count += 1;
+						details.doturl.extrinsic = None;
+						details.doturl.event = Some(*count);
 					}
-				} else {
-					// println!("found {}", name);
-					// print_val(&val.value);
-				}
-				// details.pallet = ev.pallet.clone();
-				// details.variant = ev.variant.clone();
-				// if let Phase::ApplyExtrinsic(ext) = ev.phase {
-				//     details.parent = Some(ext);
-				// }
 
-				//  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
-				//                                 // use
-				// crate::polkadot::runtime_types::xcm::v2::traits::Error;
-				// use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO
-				// version                                 let result = <Outcome as
-				// Decode>::decode(&mut ev.data.as_slice());
-				// if let Ok(outcome) = &result {
-				// match outcome {
-				// Outcome::Complete(_) => details.success = Success::Happy,
-				// Outcome::Incomplete(_, _) => details.success = Success::Worried,
-				//                                         Outcome::Error(_) =>
-				// details.success = Success::Sad,                                     }
-				//                                 }
-				//                                 details.flattern = format!("{:#?}",
-				// result);                             }
-				// if details.pallet == "XcmPallet"
-				//     && details.variant == "ReserveAssetDeposited"
-				// {
-				//     println!("got here rnrtnrtrtnrt");
-				//     println!("{:#?}", details);
-				// }
-				//     if let
-				// polkadot::Event::Ump(polkadot::runtime_types::
-				// polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref
-				// msg, ..)) = event { //.pallet == "Ump" && ev.variant ==
-				// "ExecutedUpward" {     println!("{:#?}", event);
+					let (pallet, variant, contents) =
+						if let Some((pallet, "0", variant, contents)) = event.only3() {
+							(pallet, variant, contents)
+						} else {
+							panic!("could not find call_data.pallet_name in {:#?}", &event)
+						};
 
-				//     // Hypothesis: there's no sent_at because it would be the sent at
-				// of the individual chain.     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
-				//     // TL/DR: we have to wait before we can match up things going
-				// upwards...
+					details.pallet = pallet.to_string();
+					details.variant = variant.to_string();
 
-				//     // blockhash of the recieving block would be incorrect.
-				//     let received_hash = format!("{}",hex::encode(msg));
-				//     println!("recieved UMP hash {}", &received_hash);
-				//     end_link.push(received_hash);
-				//     // // msg is a msg id! not decodable - match against hash of
-				// original     // if let Ok(ver_msg) = <VersionedXcm as
-				// Decode>::decode(&mut msg.as_slice()) {     //
-				// println!("decodearama {:#?}!!!!", ver_msg);     // } else {
-				//     //     println!("booo didn't decode!!!! {}",
-				// hex::encode(msg.as_slice()));     // }
-				// }
+					if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
+						if let Some(inner) = contents.find2("0", "descriptor") {
+							if let (
+								Some(scale_borrow::Value::U64(parachain_id)),
+								Some(scale_borrow::Value::ScaleOwned(para_head)),
+							) = (inner.find2("para_id", "0"), inner.find2("para_head", "0"))
+							{
+								let para_id = NonZeroU32::try_from(*parachain_id as u32).unwrap();
+								inclusions.push((para_id, para_head.as_slice().to_vec()));
+							}
+						}
+					} else {
+						// println!("found {}", name);
+						// print_val(&val.value);
+					}
+					// details.pallet = ev.pallet.clone();
+					// details.variant = ev.variant.clone();
+					// if let Phase::ApplyExtrinsic(ext) = ev.phase {
+					//     details.parent = Some(ext);
+					// }
 
-				// println!("end event");
-				data_events.push(DataEvent {
-					// raw: ev_raw.unwrap(),
-					start_link,
-					// end_link,
-					details,
+					//  if details.pallet == "XcmPallet" && details.variant == "Attempted" {
+					//                                 // use
+					// crate::polkadot::runtime_types::xcm::v2::traits::Error;
+					// use crate::polkadot::runtime_types::xcm::v2::traits::Outcome; //TODO
+					// version                                 let result = <Outcome as
+					// Decode>::decode(&mut ev.data.as_slice());
+					// if let Ok(outcome) = &result {
+					// match outcome {
+					// Outcome::Complete(_) => details.success = Success::Happy,
+					// Outcome::Incomplete(_, _) => details.success = Success::Worried,
+					//                                         Outcome::Error(_) =>
+					// details.success = Success::Sad,                                     }
+					//                                 }
+					//                                 details.flattern = format!("{:#?}",
+					// result);                             }
+					// if details.pallet == "XcmPallet"
+					//     && details.variant == "ReserveAssetDeposited"
+					// {
+					//     println!("got here rnrtnrtrtnrt");
+					//     println!("{:#?}", details);
+					// }
+					//     if let
+					// polkadot::Event::Ump(polkadot::runtime_types::
+					// polkadot_runtime_parachains::ump::pallet::Event::ExecutedUpward(ref
+					// msg, ..)) = event { //.pallet == "Ump" && ev.variant ==
+					// "ExecutedUpward" {     println!("{:#?}", event);
+
+					//     // Hypothesis: there's no sent_at because it would be the sent at
+					// of the individual chain.     // https://substrate.stackexchange.com/questions/2627/how-can-i-see-what-xcm-message-the-moonbeam-river-parachain-has-sent
+					//     // TL/DR: we have to wait before we can match up things going
+					// upwards...
+
+					//     // blockhash of the recieving block would be incorrect.
+					//     let received_hash = format!("{}",hex::encode(msg));
+					//     println!("recieved UMP hash {}", &received_hash);
+					//     end_link.push(received_hash);
+					//     // // msg is a msg id! not decodable - match against hash of
+					// original     // if let Ok(ver_msg) = <VersionedXcm as
+					// Decode>::decode(&mut msg.as_slice()) {     //
+					// println!("decodearama {:#?}!!!!", ver_msg);     // } else {
+					//     //     println!("booo didn't decode!!!! {}",
+					// hex::encode(msg.as_slice()));     // }
+					// }
+
+					// println!("end event");
+					data_events.push(DataEvent {
+						// raw: ev_raw.unwrap(),
+						start_link,
+						// end_link,
+						details,
+					})
+				
+
 				})
-			}
+				.collect();
+			
 
 			if !inclusions.is_empty() {
 				// For live mode we listen to all parachains for blocks so sender will be none.
@@ -1338,7 +1342,7 @@ async fn get_events_for_block(
 					for (para_id, hash) in inclusions {
 						let mailbox = sender.get(&para_id);
 						if let Some(mailbox) = mailbox {
-							let hash = H256::from_slice(hash);
+							let hash = H256::from_slice(hash.as_slice());
 							if let Err(err) =
 								mailbox.send((blocknum, timestamp.unwrap(), hash)).await
 							{

@@ -1285,7 +1285,7 @@ fn add_blocks(
 					handles.sphere_mesh.clone()
 				};
 
-				let call_data = format!("0x{}", hex::encode(block.as_bytes()));
+				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
 				let mut create_source = vec![];
 				for (link, _link_type) in block.end_link() {

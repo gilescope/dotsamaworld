@@ -93,10 +93,10 @@ use egui::Link;
 					}
 					if let Some(val) = &selected.value {
 						// ui.add(|ui| Tree(val.clone()));
-						ui.collapsing(
-							"value", 	|
-							ui| funk(ui, 
-								&scale_value_to_borrowed::convert(val,true)));
+						// ui.collapsing(
+						// 	"value", 	|
+							funk(ui, 
+								&scale_value_to_borrowed::convert(val,true));
 //             .default_open(depth < 1)
 						ui.label(&val.to_string());
 					}
@@ -247,15 +247,22 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
 					let (nk, nv) = &nested_pairs[0];
 					k = nk;
 					v = &nv;
-				}
+				} 
+				// use egui::CollapsingHeader;
 				ui.collapsing(header, |ui|{
 					funk(ui, &v);
 				});
 				
+
+			// 	  ui.add(CollapsingHeader::new(header)
+            // .default_open(open)
+            // .show(ui, |ui| funk(ui, &v, false))
+			// 	  	)	;
+				
 			}
 			else {
 				for (k, v) in pairs.iter() {
-					ui.collapsing(k.to_string(), |ui|{
+					ui.collapsing(*k, |ui|{
 						funk(ui, v);
 					});
 				}
