@@ -93,7 +93,10 @@ use egui::Link;
 					}
 					if let Some(val) = &selected.value {
 						// ui.add(|ui| Tree(val.clone()));
-						ui.collapsing("value", 	|ui| funk(ui, val));
+						ui.collapsing(
+							"value", 	|
+							ui| funk(ui, 
+								&scale_value_to_borrowed::convert(val,true)));
 //             .default_open(depth < 1)
 						ui.label(&val.to_string());
 					}
@@ -227,46 +230,78 @@ use egui::Link;
 		.rect
 		.height();
 }
+use egui::Ui;
 
-
-fn funk<'r>(ui: &'r mut Ui, val: &scale_value::Value) -> () {
-	match &val.value {
-		scale_value::ValueDef::Composite(comp) => {
-			funk_comp(ui, comp);
+fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
+	match &val {
+		scale_borrow::Value::Object(ref pairs) => {
+			if pairs.len() == 1 {
+				let mut header = String::new();
+//				let v = val;
+				let (mut k, v) = &pairs[0];
+				let mut v : &scale_borrow::Value = &v;
+					
+				while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
+					header.push_str(k);
+					header.push('.');
+					let (nk, nv) = &nested_pairs[0];
+					k = nk;
+					v = &nv;
+				}
+				ui.collapsing(header, |ui|{
+					funk(ui, &v);
+				});
+				
+			}
+			else {
+				for (k, v) in pairs.iter() {
+					ui.collapsing(k.to_string(), |ui|{
+						funk(ui, v);
+					});
+				}
+			}
 		}
-		scale_value::ValueDef::Primitive(p) => {
-			ui.label(p.to_string());
+		_ => {
+			ui.label(val.to_string());
 		}
-		scale_value::ValueDef::BitSequence(seq) => 
-		{
-			ui.label(seq.to_string());
-		}
-		scale_value::ValueDef::Variant(scale_value::Variant{name, values}) => {
-			ui.collapsing(name, |ui|{
-				funk_comp(ui, values);
-			});
-		}
+		// scale_value::ValueDef::BitSequence(seq) => 
+		// {
+		// 	ui.label(seq.to_string());
+		// }
+		// scale_value::ValueDef::Variant(scale_value::Variant{name, values}) => {
+		// 	ui.collapsing(name, |ui|{
+		// 		funk_comp(ui, values);
+		// 	});
+		// }
 	}
 }
 
-fn funk_comp<'r>(ui: &'r mut Ui, val: &scale_value::Composite<()>) -> () {
-	match val {
-		scale_value::Composite::Named(pairs) => {
-			for (k, v) in pairs {
-				ui.collapsing(k, |ui|{
-					funk(ui, v);
-				});
-			}
-		}
-		scale_value::Composite::Unnamed(items) => {
-			for (k, v) in items.iter().enumerate() {
-				ui.collapsing(k.to_string(), |ui|{
-					funk(ui, v);
-				});
-			}
-		}
-	}
-}
+// fn path_flattern(val: &mut scale_borrow::Value) {
+// 	if let scale_borrow::Value::Object(pairs) = val {
+// 		if pairs.len() == 1 {
+
+// 		}
+// 	}
+// }
+
+// fn funk_comp<'r>(ui: &'r mut Ui, val: &scale_value::Composite<()>) -> () {
+// 	match val {
+// 		scale_value::Composite::Named(pairs) => {
+// 			for (k, v) in pairs {
+// 				ui.collapsing(k, |ui|{
+// 					funk(ui, v);
+// 				});
+// 			}
+// 		}
+// 		scale_value::Composite::Unnamed(items) => {
+// 			for (k, v) in items.iter().enumerate() {
+// 				ui.collapsing(k.to_string(), |ui|{
+// 					funk(ui, v);
+// 				});
+// 			}
+// 		}
+// 	}
+// }
 
 // TODO: Something like this would probably stop us rendering
 // behind the footer and header.
