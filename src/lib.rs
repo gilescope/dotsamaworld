@@ -82,6 +82,27 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
+
+fn result_callback(res: String) {
+
+}
+
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(module = "/js/bundle.js")]
+extern "C" {
+	// #[wasm_bindgen::prelude::wasm_bindgen]
+	// fn add_chain(chainspec: &str);
+
+	#[wasm_bindgen]
+	fn poll() -> Option<String>;
+
+	// #[wasm_bindgen::prelude::wasm_bindgen]
+	// fn send(message: String);
+}
+
+
 #[cfg(feature = "spacemouse")]
 pub struct MovementSettings {
 	pub sensitivity: f32,
@@ -925,7 +946,7 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
-) {
+) {	
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
 		// web_sys::console::log_1(&format!("check results").into());
 
@@ -1700,6 +1721,8 @@ fn update_visibility(
 	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
+	let res = poll();
+	log!("result of pollllll: {:?}", res);
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
 	let transform: &Transform = player_query.get_single().unwrap();

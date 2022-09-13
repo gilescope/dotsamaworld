@@ -5,3 +5,4 @@ record.csv
 *.metadata.scale
 dist
 node_modules
+js/bundle.js

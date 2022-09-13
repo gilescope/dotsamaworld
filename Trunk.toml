@@ -1,0 +1,4 @@
+[[hooks]]
+stage = "pre_build"
+command = "make"
+command_arguments = []
