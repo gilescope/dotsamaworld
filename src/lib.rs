@@ -114,8 +114,6 @@ static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
 /// if you need bestest fps...
 static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 
-static LIVE: &str = "dotsama:live";
-
 /// Immutable once set up.
 #[derive(Clone, Serialize, Deserialize)] //TODO use scale
 pub struct ChainInfo {
@@ -258,6 +256,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.insert_resource(ui::UrlBar::new(
 		"dotsama:/1//10504599".to_string(),
 		Utc::now().naive_utc(),
+		Env::Local
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
@@ -444,7 +443,7 @@ fn source_data(
 			}
 			is_live
 		} else {
-			LIVE == event.source
+			event.source.ends_with("live")
 		};
 		// if is_live {
 		// 	event.timestamp = None;
@@ -460,12 +459,14 @@ fn source_data(
 
 		log!("tracking speed set to {}", sovereigns.default_track_speed);
 		let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
-			(DotUrl::default(), None)
+			let env = event.source.split(":").collect::<Vec<_>>()[0].to_string();
+			let env = Env::try_from(env.as_str()).unwrap();
+			(DotUrl{env, ..default()}, None)
 		} else {
 			(dot_url.clone().unwrap(), Some(dot_url.unwrap()))
 		};
 
-		let selected_env = &dot_url.env; //if std::env::args().next().is_some() { Env::Test } else {Env::Prod};
+		let selected_env = &dot_url.env;
 		log!("dot url {:?}", &dot_url);
 		//let as_of = Some(dot_url.clone());
 		log!("Block number selected for relay chains: {:?}", &as_of);

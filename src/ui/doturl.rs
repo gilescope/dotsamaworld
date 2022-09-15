@@ -55,7 +55,7 @@ impl DotUrl {
 			// "testindies" => Env::SelfSovereignTest,
 			// "test" => Env::Test,
 			// "nfts" => Env::NFTs,
-			// "local" => Env::Local,
+			"local" => Env::Local,
 			// "cgp" => Env::CGP,
 			"dotsama" | _ => Env::Prod,
 		};
@@ -128,7 +128,7 @@ impl std::fmt::Display for DotUrl {
 			// Env::SelfSovereignTest => "testindies",
 			// Env::Test => "test",
 			// Env::NFTs => "nfts",
-			// Env::Local => "local",
+			Env::Local => "local",
 			// Env::CGP => "cgp",
 		};
 

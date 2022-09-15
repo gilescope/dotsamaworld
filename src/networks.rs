@@ -5,7 +5,7 @@ use std::fmt::write;
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Env {
-	// Local,
+	Local,
 	// Test,
 	#[default]
 	Prod,
@@ -18,7 +18,7 @@ pub enum Env {
 impl std::fmt::Display for Env {
 	fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
 		let display = match self {
-			// Env::Local => "local",
+			Env::Local => "local",
 			// Env::Test => "test",
 			Env::Prod => "dotsama",
 			// Env::SelfSovereign => "independents",
@@ -28,6 +28,17 @@ impl std::fmt::Display for Env {
 		};
 		write(fmt, format_args!("{}", display))?;
 		Ok(())
+	}
+}
+
+impl TryFrom<&str> for Env {
+	type Error = ();
+	fn try_from(val: &str) -> Result<Self, <Self as TryFrom<&str>>::Error> {
+		match val {
+			"dotsama" => Ok(Env::Prod),
+			"local" => Ok(Env::Local),
+			_ => Err(())
+		}
 	}
 }
 
@@ -322,9 +333,16 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 		// 		vec![],
 		// 	]
 		// },
-		// Env::Local => {
-		// 	vec![vec!["ws://127.0.0.1:9944", "ws://127.0.0.1:9966", "ws://127.0.0.1:9920"]]
-		// },
+		Env::Local => {
+			//TODO: we should have different ports for kusama and polkadot
+			// so both can exist at the same time.
+			vec![
+				vec![(None,"ws://127.0.0.1:9900"), 
+				(para_id!(1000), "ws://127.0.0.1:9910"), 
+				(para_id!(2000),"ws://127.0.0.1:9920")],
+				// vec!["ws://127.0.0.1:9944", "ws://127.0.0.1:9966", "ws://127.0.0.1:9920"]
+			]
+		},
 		// Env::NFTs => {
 		// 	// These are parachains known to be rocking the uniques pallet:
 		// 	vec![
