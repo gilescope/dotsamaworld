@@ -5,6 +5,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
+#![feature(let_chains)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
@@ -1927,7 +1928,8 @@ fn setup(
 	// Kick off the live mode automatically so people have something to look at
 	datasource_events.send(DataSourceChangedEvent {
 		//source: "dotsama:/1//10504599".to_string(), 
-		source: LIVE.to_string(),
+		// source: "local:live".to_string(),
+		source: "dotsama:live".to_string(),
 		timestamp: None,
 	});
 }
