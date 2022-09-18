@@ -607,7 +607,7 @@ async fn process_extrinsic<'a, 'scale>(
 						println!("found {} downward_message is, {}", msg_index, &msg);
 						if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
 							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
-								let v = polkadyn::decode_xcm(meta, &bytes[2..]).unwrap();
+								let v = polkadyn::decode_xcm(meta, &bytes[..]).expect(&format!("expect to be able to decode {}", &hex::encode(&bytes[..])));
 								println!("xcm msgv= {}", v);
 								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
 								// msg.set("msg_decoded", msg_decoded);

@@ -153,7 +153,7 @@ use egui::Link;
 						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
 						// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
 						// ui.selectable_value(&mut spec.env, Env::Test, "test");
-						// ui.selectable_value(&mut spec.env, Env::Local, "local");
+						ui.selectable_value(&mut spec.env, Env::Local, "local");
 					});
 
 				ui.add(
@@ -345,7 +345,7 @@ pub struct UrlBar {
 }
 
 impl UrlBar {
-	pub fn new(location: String, timestamp: NaiveDateTime) -> Self {
+	pub fn new(location: String, timestamp: NaiveDateTime, env: Env) -> Self {
 		let loc_clone = location.clone();
 		Self {
 			location,
@@ -353,8 +353,8 @@ impl UrlBar {
 			find: String::new(),
 			timestamp,
 			was_timestamp: timestamp,
-			env: Env::Prod,
-			was_env: Env::Prod,
+			env: env.clone(),
+			was_env: env,
 		}
 	}
 
