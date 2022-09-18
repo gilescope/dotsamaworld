@@ -22,7 +22,7 @@ use bevy_mod_picking::*;
 //use bevy_egui::render_systems::ExtractedWindowSizes;
 //use bevy::window::PresentMode;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-
+use js_sys::Promise;
 #[cfg(target_arch = "wasm32")]
 use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
@@ -90,13 +90,20 @@ fn result_callback(res: String) {
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(module = "/js/bundle.js")]
+#[wasm_bindgen(module = "/js/src/index.js")]
 extern "C" {
 	// #[wasm_bindgen::prelude::wasm_bindgen]
 	// fn add_chain(chainspec: &str);
+    pub type ISmoldot;
 
-	#[wasm_bindgen]
-	fn poll() -> Option<String>;
+    #[wasm_bindgen(constructor)]
+    fn new(arg: JsValue) -> ISmoldot;
+
+	#[wasm_bindgen(method)]
+	fn setup_chain(this: &ISmoldot, chainspec: String) -> String;
+
+	#[wasm_bindgen(method)]
+	fn pollme(this: &ISmoldot) -> String;
 
 	// #[wasm_bindgen::prelude::wasm_bindgen]
 	// fn send(message: String);
@@ -281,6 +288,11 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		Utc::now().naive_utc(),
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
+
+	let smol = ISmoldot::new(JsValue::from(1.0));
+	async_std::task::sleep(Duration::from_secs(1)).await;
+	let res = smol.setup_chain(include_str!("/home/gilescope/git/smoldot/bin/polkadot.json").to_string());
+	// app.insert_resource(Arc::new(Mutex::new(smol)));
 
 	#[cfg(target_family = "wasm")]
 	app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
@@ -1707,6 +1719,7 @@ static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
 fn update_visibility(
+	// mut smol: NonSend<Res<Arc<Mutex<ISmoldot>>>>,
 	mut entity_low_midfi: Query<(
 		&mut Visibility,
 		&GlobalTransform,
@@ -1721,8 +1734,10 @@ fn update_visibility(
 	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
-	let res = poll();
-	log!("result of pollllll: {:?}", res);
+	
+
+	// let res = smol.pollme();
+	// log!("result of pollllll: {:?}", res);
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
 	let transform: &Transform = player_query.get_single().unwrap();

@@ -1822,6 +1822,7 @@ dependencies = [
  "getrandom 0.2.7",
  "gloo-worker",
  "hex",
+ "js-sys",
  "lazy_static",
  "log",
  "open",
