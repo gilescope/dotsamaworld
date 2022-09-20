@@ -5,6 +5,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
+#![feature(local_key_cell_methods)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
@@ -41,6 +42,7 @@ use std::{
 		Arc,
 	},
 };
+ use core::cell::RefCell;
 
 // use bevy_instancing::prelude::{
 //     ColorMeshInstance, CustomMaterial, CustomMaterialPlugin, IndirectRenderingPlugin,
@@ -221,6 +223,10 @@ macro_rules! log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
+thread_local! {
+    static SMOL: RefCell<Option<ISmoldot>> = RefCell::new(None);
+}
+
 async fn async_main() -> color_eyre::eyre::Result<()> {
 	// color_eyre::install()?;
 	//   console_log!("Hello {}!", "world");
@@ -290,8 +296,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
 
 	let smol = ISmoldot::new(JsValue::from(1.0));
-	async_std::task::sleep(Duration::from_secs(1)).await;
+	// async_std::task::sleep(Duration::from_secs(1)).await;
 	let res = smol.setup_chain(include_str!("/home/gilescope/git/smoldot/bin/polkadot.json").to_string());
+	SMOL.set(Some(smol));
 	// app.insert_resource(Arc::new(Mutex::new(smol)));
 
 	#[cfg(target_family = "wasm")]
