@@ -404,7 +404,7 @@ where
 						pallet: "?".to_string(),
 						variant: "?".to_string(),
 						raw: encoded_extrinsic,
-						value: None,
+						// value: None,
 					},
 				}
 			};
@@ -423,7 +423,7 @@ where
 				)
 				.await;
 				if let Some(mut entity) = entity {
-					entity.details_mut().value = Some(extrinsic2.clone().remove_context());
+					// entity.details_mut().value = Some(extrinsic2.clone().remove_context());
 					if let Some(scale_borrow::Value::U64(time)) =
 						extrinsic.expect4("Timestamp", "0", "set", "now")
 					{
@@ -1037,7 +1037,7 @@ async fn process_extrinsic<'a, 'scale>(
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
 			raw: ex_slice.to_vec(),
-			value: None
+			// value: None
 		},
 	})
 
@@ -1226,7 +1226,7 @@ async fn get_events_for_block(
 					let mut details = Details {
 						url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
-						value: Some(event_val.clone()),
+						// value: Some(event_val.clone()),
 						..default()
 					};
 

@@ -91,28 +91,28 @@ use egui::Link;
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						open::that(&selected.url).unwrap();
 					}
-					if let Some(val) = &selected.value {
-						// ui.add(|ui| Tree(val.clone()));
-						// ui.collapsing(
-						// 	"value", 	|'''
-						let borrowed = scale_value_to_borrowed::convert(val,true);
-							funk(ui, &borrowed);
+					// if let Some(val) = &selected.value {
+					// 	// ui.add(|ui| Tree(val.clone()));
+					// 	// ui.collapsing(
+					// 	// 	"value", 	|'''
+					// 	let borrowed = scale_value_to_borrowed::convert(val,true);
+					// 		funk(ui, &borrowed);
 
-						if selected.doturl.is_relay() {
-							if let Some(("Balances", "0", "Withdraw", val)) = borrowed.only3() {
-								if let Some(scale_borrow::Value::U64(amount)) = val.get("amount") {
-									let precision = if selected.doturl.is_darkside() { 12 } else { 10 };
-									let actual = *amount as f64 / ((10_i64).pow(precision) as f64);
-									ui.label(format!("amount in {}: {}", if selected.doturl.is_darkside(){"KSM"} else {"DOT"}, actual));
-								}
-							}
-						}
+					// 	if selected.doturl.is_relay() {
+					// 		if let Some(("Balances", "0", "Withdraw", val)) = borrowed.only3() {
+					// 			if let Some(scale_borrow::Value::U64(amount)) = val.get("amount") {
+					// 				let precision = if selected.doturl.is_darkside() { 12 } else { 10 };
+					// 				let actual = *amount as f64 / ((10_i64).pow(precision) as f64);
+					// 				ui.label(format!("amount in {}: {}", if selected.doturl.is_darkside(){"KSM"} else {"DOT"}, actual));
+					// 			}
+					// 		}
+					// 	}
 
 
-						ui.label(&val.to_string());
+					// 	ui.label(&val.to_string());
 						
-						// ui.label(&borrowed.to_string());
-					}
+					// 	// ui.label(&borrowed.to_string());
+					// }
 
 	
 
