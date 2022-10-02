@@ -288,29 +288,8 @@ impl RawDataSource {
 	}
 }
 
-// #[async_trait(?Send)]
-// trait ProcessIncoming {
-// 	async fn process_incoming_messages(&self);
-// }
-
 #[async_trait(?Send)]
 impl Source for RawDataSource {
-	// #[cfg(target_arch="wasm32")]
-	// async fn process_incoming_messages(&mut self) -> WSBackend {
-	// 	log!("get message processor");
-
-	// 	// while self.client.is_none() {
-	// 	// 	async_std::task::yield_now().await;
-	// 	// }
-	// 	// log!("await process incoming messages");
-	// 	let client = self.client();
-	// 		if let Some(_client) = client.await {
-	// 			log!("got message processor");
-	// 			self.client.as_ref().unwrap().clone()
-	// 		} else { panic!("no client could be gottet")}
-	// 	// log!("finish process incoming messages");
-	// }
-
 	async fn fetch_block_hash(
 		&mut self,
 		block_number: u32,
@@ -328,15 +307,6 @@ impl Source for RawDataSource {
 		}
 	}
 
-	/// Return then in bin form rather than link to subxt:
-	/// subxt::sp_runtime::generic::SignedBlock<
-	///     subxt::sp_runtime::generic::Block<
-	///         subxt::sp_runtime::generic::Header<
-	///             u32,
-	///             subxt::sp_runtime::traits::BlakeTwo256
-	///         >,
-	///         subxt::sp_runtime::OpaqueExtrinsic
-	///       
 	async fn fetch_block(
 		&mut self,
 		block_hash: Option<H256>,
@@ -401,23 +371,6 @@ impl Source for RawDataSource {
 		} else {
 			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
 		}
-		// //TODO: we're decoding and encoding here. cut it out.
-		// Ok(Some(AgnosticBlock {
-		// 	block_number: block_body.block.header.number,
-		// 	extrinsics: block_body
-		// 		.block
-		// 		.extrinsics
-		// 		.into_iter()
-		// 		.map(|ex| ex.encode())
-		// 		.collect::<Vec<_>>(),
-		// }))
-		// } else {
-		// 	if let Err(err) = result {
-		// 		Err(err)
-		// 	} else {
-		// 		Ok(None)
-		// 	}
-		// }
 	}
 
 	async fn fetch_storage(
@@ -438,6 +391,155 @@ impl Source for RawDataSource {
 
 	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()> {
 		if let Some(client) = self.client().await {
+			if let Some(as_of) = as_of {
+				client.query_metadata(Some(as_of.as_bytes())).await.map(Some).map_err(|_e| ())
+			} else {
+				client.query_metadata(None).await.map(Some).map_err(|_e| ())
+			}
+		} else {
+			Err(())
+		}
+	}
+
+	fn url(&self) -> &str {
+		&self.ws_url
+	}
+}
+
+#[cfg(feature = "light-client")]
+pub struct LightClientDataSource {
+	ws_url: String,
+	client: Option<polkapipe::smoldot_std::Backend>,
+}
+
+/// WIP: Just relay chains to start with as powered by smart clients because where to source
+/// the chain-specs?
+#[cfg(feature = "light-client")]
+impl LightClientDataSource {
+	pub fn new(url: &str) -> Self {
+		LightClientDataSource { ws_url: url.to_string(), client: None }
+	}
+
+	async fn client(&mut self) -> Option<&mut polkapipe::smoldot_std::Backend> {
+		if self.client.is_none() {
+			//TODO specify parent
+			if let Ok(client) = polkapipe::smoldot_std::Backend::new(&self.ws_url, None).await
+			{
+			 	self.client = Some(client);
+			}
+		}
+		self.client.as_mut()
+	}
+}
+
+#[cfg(feature = "light-client")]
+#[async_trait(?Send)]
+impl Source for LightClientDataSource {
+	async fn fetch_block_hash(
+		&mut self,
+		block_number: u32,
+	) -> Result<Option<primitive_types::H256>, BError> {
+		
+		if let Some(client) = self.client().await {
+			log!("get block number {}", block_number);
+			// log!("got client");
+			client
+				.query_block_hash(&[block_number])
+				.await
+				.map(|res| Some(H256::from_slice(&res[..])))
+		} else {
+			log!("could not get client");
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
+	}
+
+	async fn fetch_block(
+		&mut self,
+		block_hash: Option<H256>,
+	) -> Result<Option<AgnosticBlock>, BError> {
+		if let Some(client) = self.client().await {
+			let opt = block_hash.map(|b|hex::encode(b.as_bytes()));
+			log!("get block hash {:?}", &opt);
+			let result = client.query_block(opt.as_deref()).await;
+
+			if let Ok(serde_json::value::Value::Object(map)) = &result {
+				// println!("got 2here");
+				if let Some(serde_json::value::Value::Object(map)) = map.get("block") {
+					let mut res = AgnosticBlock { block_number: 0, extrinsics: vec![] };
+					if let Some(serde_json::value::Value::Object(m)) = map.get("header") {
+						if let Some(serde_json::value::Value::String(num_original)) = m.get("number") {
+							 let mut num = num_original.trim_start_matches("0x").to_string();
+							if num.len() % 2 == 1 {
+								// println!("odd found {}", num_original);
+								num = format!("0{}", num);
+							}
+
+							let _bytes = hex::decode(&num).unwrap();
+
+						//	bytes.reverse(); //TODO: why is this needed? it gets the right number but...
+							/* while bytes.len() < 4 {
+								bytes.insert(0, 0);
+							} */
+							// println!("bytes or {}", num_original);
+							// println!("bytes is {}", hex::encode(&bytes));
+							// use parity_scale_codec::Decode; 
+
+						   let number: u32 = u32::from_str_radix(num_original.trim_start_matches("0x"), 16).unwrap();
+//							let number = u32::decode(&mut &bytes[..]).unwrap();
+
+							/* let mut b = [0,0,0,0];
+							for (i, bb) in bytes.iter().enumerate() {
+								b[i] = *bb;
+							} */
+							/* use parity_scale_codec::Compact;
+					/* 		 */let number = Compact::<u32>::decode(&mut &bytes[..]).unwrap(); */
+						/* 	/*  */let re : u32 = number.into(); */
+					// println!("bytes {} -> {}",&num_original, number);   
+							res.block_number = number;
+						}
+					}
+					if let Some(serde_json::value::Value::Array(extrinsics)) = map.get("extrinsics")
+					{
+						for ex in extrinsics {
+							if let serde_json::value::Value::String(val) = ex {
+								/* println!("about to decode '{}'", &val); */
+								res.extrinsics
+									.push(hex::decode(val.trim_start_matches("0x")).unwrap());
+							} else {
+								panic!()
+							}
+						}
+						// println!("got 4here aa{}", extrinsics.len());
+					}
+					return Ok(Some(res))
+				}
+			}
+			result.map(|_| None)
+		} else {
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
+	}
+
+	async fn fetch_storage(
+		&mut self,
+		key: &[u8],
+		as_of: Option<H256>,
+	) -> Result<Option<Vec<u8>>, BError> {
+		if let Some(client) = self.client().await {
+			log!("fetch storage {:?} {:?}", key, as_of);
+			if let Some(as_of) = as_of {
+				client.query_storage(key, Some(as_of.as_bytes())).await.map(Some)
+			} else {
+				client.query_storage(key, None).await.map(Some)
+			}
+		} else {
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+		}
+	}
+
+	async fn fetch_metadata(&mut self, as_of: Option<H256>) -> Result<Option<Vec<u8>>, ()> {
+		if let Some(client) = self.client().await {
+			log!("fetch metadata {:?}", as_of);
 			if let Some(as_of) = as_of {
 				client.query_metadata(Some(as_of.as_bytes())).await.map(Some).map_err(|_e| ())
 			} else {

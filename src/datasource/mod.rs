@@ -8,6 +8,8 @@ use crate::{
 };
 // use async_std::stream::StreamExt;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "light-client")]
+use crate::datasource::raw_source::LightClientDataSource;
 // #[cfg(not(target_arch = "wasm32"))]
 // use async_tungstenite::tungstenite::util::NonBlockingResult;
 use bevy::{prelude::warn, utils::default};
@@ -168,8 +170,17 @@ where
 		// log!("listening to as of {:?}", as_of);
 
 		let url = &chain_info.chain_ws;
+		let urll = match url.as_str() {
+			"wss://rpc.polkadot.io:443" => { include_str!("../../assets/chainspecs/polkadot.json") },
+			"wss://kusama-rpc.polkadot.io:443" => { include_str!("../../assets/chainspecs/kusama.json") },
+			_ => panic!("not found {}", &url),
+		};
 		#[cfg(not(target_arch = "wasm32"))]
-		let mut source = CachedDataSource::new(RawDataSource::new(url));
+		let mut source = if chain_info.chain_url.is_relay() {
+			CachedDataSource::new(LightClientDataSource::new(urll))
+		} else {
+			CachedDataSource::new(LightClientDataSource::new(urll))
+		};
 		#[cfg(target_arch = "wasm32")]
 		let mut source = RawDataSource::new(url);
 

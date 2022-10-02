@@ -13,6 +13,7 @@ default = ["normalmouse"]
 spacemouse = ["bevy_spacemouse"]
 normalmouse = ["bevy_flycam"]
 adaptive-fps = []
+light-client = ["polkapipe/smoldot-std"]
 
 [dependencies]
 primitive-types = { version = "0.11", default-features = false, features = [
@@ -29,10 +30,10 @@ async-recursion = "*"
 
 # Not needed since rust 1.63
 lazy_static = "*"
-futures = { version = "0.3.13", defalult-features = false, features = [] }
+futures = { version = "0.3.13", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+#smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
     "derive",
     "full",
@@ -124,7 +125,9 @@ bevy = { version = "0.8.1", default-features = false, features = [
     "dynamic",
 ] }
 
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["wss"]}
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "19aac258bf0106e67f83ff489bdf7c1ebfe2b3ab", features = [
+    "wss",
+] }
 # polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "wss",
 # ] }
@@ -147,7 +150,9 @@ getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "*"
 ws_stream_wasm = "*"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["ws-web"]}
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "19aac258bf0106e67f83ff489bdf7c1ebfe2b3ab", features = [
+    "ws-web",
+] }
 # polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "ws-web",
 # ] }
@@ -175,7 +180,7 @@ bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen
 # http-types= {git="https://github.com/http-rs/http-types.git"}
 #console_error_panic_hook = { version = "0.1", optional = true }
 
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+#smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
 
 #subxt = {git= "https://github.com/paritytech/subxt.git"}
 
@@ -203,10 +208,10 @@ opt-level = 1
 [profile.release]
 lto = true
 opt-level = 's'
-debuginfo = 0
+debug = 0
 strip = "debuginfo" # strip symbols brakes it findong the worker.
 codegen-units = 1
-panic = "abort"
+# panic = "abort" - doesn't work with bevy "dyn".
 incremental = false
 
 

@@ -5,7 +5,6 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
-#![feature(let_chains)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
@@ -186,10 +185,9 @@ fn log(s: &str) {
 }
 
 pub fn main() {
-	#[cfg(target_arch = "wasm32")]
-	async_std::task::block_on(async_main());
+	let result = async_std::task::block_on(async_main());
 	#[cfg(not(target_arch = "wasm32"))]
-	async_std::task::block_on(async_main()).unwrap();
+	result.unwrap();
 }
 
 macro_rules! log {
