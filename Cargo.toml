@@ -26,7 +26,7 @@ async-std = { version = "1.12.0", features = [
 ] }
 async-trait = "0.1"
 async-recursion = "*"
-
+bytemuck = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
 futures = { version = "0.3.13", defalult-features = false, features = [] }

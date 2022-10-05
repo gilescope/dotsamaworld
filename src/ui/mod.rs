@@ -215,6 +215,10 @@ use egui::Link;
 					ui.heading(selected);
 				}
 				ui.with_layout(egui::Layout::right_to_left(), |ui| {
+					let x = viewpoint_query.get_single().unwrap().translation().x;
+					let y = viewpoint_query.get_single().unwrap().translation().x;
+					let z = viewpoint_query.get_single().unwrap().translation().z;
+
 					let timestamp = super::x_to_timestamp(
 						viewpoint_query.get_single().unwrap().translation().x,
 					);
@@ -223,7 +227,7 @@ use egui::Link;
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-					ui.heading(format!("{:03.0} fps. {}", fps, newdate));
+					ui.heading(format!("x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}", x,y,z,fps, newdate));
 				});
 			});
 		})
