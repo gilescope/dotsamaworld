@@ -5,7 +5,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
-#![feature(let_chains)]
+// #![feature(let_chains)]
 use crate::ui::UrlBar;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
@@ -267,6 +267,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	});
 	#[cfg(not(target_arch = "wasm32"))]
 	app.add_plugins(DefaultPlugins);
+	app.add_plugin(CustomMaterialPlugin);
 
 	// Plugins related to instance rendering...
 	// app.add_plugin(IndirectRenderingPlugin);
@@ -288,7 +289,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		Env::Local
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
-	app.add_plugin(CustomMaterialPlugin);
+	
 
 	#[cfg(target_family = "wasm")]
 	app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
@@ -445,6 +446,7 @@ fn source_data(
 	details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	clean_me: Query<Entity, With<ClearMe>>,
 	mut spec: ResMut<UrlBar>,
+	handles: Res<ResourceHandles>,
 	// #[cfg(not(target_arch="wasm32"))]
 	// writer: EventWriter<DataSourceStreamEvent>,
 ) {
@@ -452,6 +454,31 @@ fn source_data(
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
 
 		clear_world(&details, &mut commands, &clean_me);
+
+		commands.spawn().insert_bundle((
+			handles.block_mesh.clone(), //todo xcm different?
+			InstanceMaterialData(vec![]),
+			
+			// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next lines
+			Transform::from_xyz(0., 0., 0.),
+			GlobalTransform::default(),
+			Visibility::default(),
+			ComputedVisibility::default(),
+
+			// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
+			// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
+			// instanced cubes will be culled.
+			// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
+			// instancing, and that is not taken into account with the built-in frustum culling.
+			// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
+			// component to avoid incorrect culling.
+			NoFrustumCulling,
+		))
+		.insert_bundle(PickableBundle::default())
+				.insert(Name::new("BlockEvent"))
+				.insert(ClearMe)
+				.insert(HiFi);
+		
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -945,7 +972,6 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 }
 
 
-
 fn render_block(
 	mut commands: Commands,
 	mut materials: ResMut<Assets<StandardMaterial>>,
@@ -956,7 +982,12 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
+	mut instances: Query<(Entity, &mut InstanceMaterialData)>,
 ) {
+	// log!("HEhehehehehehehehe");
+	for (_entity, mut instances) in instances.iter_mut()
+	{
+		// log!("GOOOOOOT HERE");
 	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
 		// web_sys::console::log_1(&format!("check results").into());
 
@@ -1207,6 +1238,7 @@ fn render_block(
 						&mut polylines,
 						&encoded,
 						&mut handles,
+						&mut instances
 					);
 
 					add_blocks(
@@ -1223,6 +1255,7 @@ fn render_block(
 						&mut polylines,
 						&encoded,
 						&mut handles,
+						&mut instances,
 					);
 					event.send(RequestRedraw);
 				},
@@ -1237,6 +1270,7 @@ fn render_block(
 			}
 		}
 	}
+}
 	// }
 	// 		}
 	// 	}
@@ -1252,284 +1286,288 @@ fn add_blocks(
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	block_hash: &H256,
-	links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
+	links: & Query<(Entity, &MessageSource, &GlobalTransform)>,
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
 	handles: &mut ResMut<ResourceHandles>,
+	instances: &mut InstanceMaterialData,
 ) {
-	let rflip = chain_info.chain_url.rflip();
-	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
-	// Add all the useful blocks
+		log!("instance count {} ", instances.0.len());
+		let rflip = chain_info.chain_url.rflip();
+		let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
+		// Add all the useful blocks
 
-	let mut mat_map = HashMap::new();
+		let mut mat_map = HashMap::new();
 
-	let layer = chain_info.chain_url.layer() as f32;
-	let (base_x, base_y, base_z) = (
-		(block_num) - 4.,
-		LAYER_GAP * layer,
-		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
-	);
+		let layer = chain_info.chain_url.layer() as f32;
+		let (base_x, base_y, base_z) = (
+			(block_num) - 4.,
+			LAYER_GAP * layer,
+			RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
+		);
 
-	const DOT_HEIGHT: f32 = 1.;
-	const HIGH: f32 = 100.;
-	let mut rain_height: [f32; 81] = [HIGH; 81];
-	let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
+		const DOT_HEIGHT: f32 = 1.;
+		const HIGH: f32 = 100.;
+		let mut rain_height: [f32; 81] = [HIGH; 81];
+		let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
 
-	let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
+		let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
-	for (event_num, (block, events)) in block_events.iter().enumerate() {
-		let z = event_num % 9;
-		let x = (event_num / 9) % 9;
+		for (event_num, (block, events)) in block_events.iter().enumerate() {
+			let z = event_num % 9;
+			let x = (event_num / 9) % 9;
 
-		rain_height[event_num % 81] += fastrand::f32() * HIGH;
+			rain_height[event_num % 81] += fastrand::f32() * HIGH;
 
-		let (px, py, pz) = (base_x + x as f32, rain_height[event_num % 81], (base_z + z as f32));
+			let (px, py, pz) = (base_x + x as f32, rain_height[event_num % 81], (base_z + z as f32));
 
-		let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
+			let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
 
-		if let Some(block @ DataEntity::Extrinsic { .. }) = block {
-			for block in std::iter::once(block).chain(block.contains().iter()) {
-				EXTRINSICS.fetch_add(1, Ordering::Relaxed);
-				let target_y = next_y[event_num % 81];
-				next_y[event_num % 81] += DOT_HEIGHT;
-				let dark = block.details().doturl.is_darkside();
-				let style = style::style_event(block);
-				let material = mat_map.entry(style.clone()).or_insert_with(|| {
-					materials.add(if dark {
-						StandardMaterial {
-							base_color: style.color,
-							emissive: style.color,
-							perceptual_roughness: 0.3,
-							metallic: 1.0,
-							..default()
-						}
-					} else {
-						style.color.into()
-					})
-				});
-				let mesh = if content::is_message(block) {
-					handles.xcm_torus_mesh.clone()
-				} else if matches!(block, DataEntity::Extrinsic { .. }) {
-					handles.extrinsic_mesh.clone()
-				} else {
-					handles.sphere_mesh.clone()
-				};
-
-				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
-
-				let mut create_source = vec![];
-				for (link, _link_type) in block.end_link() {
-					//if this id already exists then this is the destination, not the source...
-					for (entity, id, source_global) in links.iter() {
-						if id.id == *link {
-							// println!("creating rainbow!");
-
-							let mut vertices = vec![
-								source_global.translation(),
-								Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
-							];
-							rainbow(&mut vertices, 50);
-
-							let colors = vec![
-								Color::PURPLE,
-								Color::BLUE,
-								Color::CYAN,
-								Color::YELLOW,
-								Color::RED,
-							];
-							for color in colors.into_iter() {
-								// Create rainbow from entity to current extrinsic location.
-								commands
-									.spawn_bundle(PolylineBundle {
-										polyline: polylines
-											.add(Polyline { vertices: vertices.clone() }),
-										material: polyline_materials.add(PolylineMaterial {
-											width: 10.0,
-											color,
-											perspective: true,
-											..default()
-										}),
-										..default()
-									})
-									.insert(ClearMe);
-
-								for v in vertices.iter_mut() {
-									v.y += 0.5;
-								}
+			if let Some(block @ DataEntity::Extrinsic { .. }) = block {
+				for block in std::iter::once(block).chain(block.contains().iter()) {
+					EXTRINSICS.fetch_add(1, Ordering::Relaxed);
+					let target_y = next_y[event_num % 81];
+					next_y[event_num % 81] += DOT_HEIGHT;
+					let dark = block.details().doturl.is_darkside();
+					let style = style::style_event(block);
+					let material = mat_map.entry(style.clone()).or_insert_with(|| {
+						materials.add(if dark {
+							StandardMaterial {
+								base_color: style.color,
+								emissive: style.color,
+								perceptual_roughness: 0.3,
+								metallic: 1.0,
+								..default()
 							}
+						} else {
+							style.color.into()
+						})
+					});
+					let mesh = if content::is_message(block) {
+						handles.xcm_torus_mesh.clone()
+					} else if matches!(block, DataEntity::Extrinsic { .. }) {
+						handles.extrinsic_mesh.clone()
+					} else {
+						handles.sphere_mesh.clone()
+					};
 
-							commands.entity(entity).remove::<MessageSource>();
+					// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
+
+					let mut create_source = vec![];
+					for (link, _link_type) in block.end_link() {
+						//if this id already exists then this is the destination, not the source...
+						for (entity, id, source_global) in links.iter() {
+							if id.id == *link {
+								// println!("creating rainbow!");
+
+								let mut vertices = vec![
+									source_global.translation(),
+									Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
+								];
+								rainbow(&mut vertices, 50);
+
+								let colors = vec![
+									Color::PURPLE,
+									Color::BLUE,
+									Color::CYAN,
+									Color::YELLOW,
+									Color::RED,
+								];
+								for color in colors.into_iter() {
+									// Create rainbow from entity to current extrinsic location.
+									commands
+										.spawn_bundle(PolylineBundle {
+											polyline: polylines
+												.add(Polyline { vertices: vertices.clone() }),
+											material: polyline_materials.add(PolylineMaterial {
+												width: 10.0,
+												color,
+												perspective: true,
+												..default()
+											}),
+											..default()
+										})
+										.insert(ClearMe);
+
+									for v in vertices.iter_mut() {
+										v.y += 0.5;
+									}
+								}
+
+								commands.entity(entity).remove::<MessageSource>();
+							}
 						}
 					}
-				}
 
-				for (link, link_type) in block.start_link() {
-					// println!("inserting source of rainbow!");
-					create_source
-						.push(MessageSource { id: link.to_string(), link_type: *link_type });
-				}
-
-				let mut bun = commands.spawn_bundle(PbrBundle {
-					mesh,
-					/// * event.blocknum as f32
-					material: material.clone(),
-					transform,
-					..Default::default()
-				});
-
-				bun.insert_bundle(PickableBundle::default())
-			        .insert(block.details().clone())
-					// .insert(Details {
-					// 	// hover: format_entity(block),
-					// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
-					// 	doturl: block.dot().clone(),
-					// 	flattern: block.details().flattern.clone(),
-					// 	url: format!(
-					// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
-					// 		&encoded, &call_data
-					// 	),
-					// 	parent: None,
-					// 	success: ui::details::Success::Happy,
-					// 	pallet: block.pallet().to_string(),
-					// 	variant: block.variant().to_string(),
-					// 	raw: block.as_bytes().to_vec(),
-					// 	value: block.details().value
-					// })
-					.insert(ClearMe)
-					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-					.insert(Name::new("Extrinsic"))
-					.insert(MedFi);
-
-				for source in create_source {
-					bun.insert(source);
-				}
-			}
-		}
-
-		let mut events = events.clone();
-		events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
-		//TODO keep original order a bit
-
-		// for event_group in events.group_by(|a, b| {
-		//     a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
-		// }) {
-		//     let event_group: Vec<_> = event_group.iter().collect();
-
-		//     let height = event_group.len() as f32;
-		//     let annoying = DataEvent {
-		//         details: Details {
-		//             pallet: event_group[0].details.pallet.clone(),
-		//             doturl: event_group[0].details.doturl.clone(),
-		//             parent: event_group[0].details.parent.clone(),
-		//             variant: event_group[0].details.variant.clone(),
-		//             success: event_group[0].details.success.clone(),
-		//             hover: event_group[0].details.hover.clone(),
-		//             flattern: event_group[0].details.flattern.clone(),
-		//             url: event_group[0].details.url.clone(),
-		//         },
-		//         start_link: vec![],
-		//     };
-		//     let event_group = if event_group.len() == 1 {
-		//         event_group
-		//     } else {
-		//         vec![&annoying]
-		//     };
-
-		let mut instances = vec![];
-		for event in events {
-			EVENTS.fetch_add(1, Ordering::Relaxed);
-			let details = Details {
-				url: format!(
-					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-					&encoded, &hex_block_hash
-				),
-				..event.details.clone()
-			};
-			let dark = details.doturl.is_darkside();
-			let entity = DataEvent { details, ..event.clone() };
-			let style = style::style_data_event(&entity);
-			//TODO: map should be a resource.
-			let material = mat_map.entry(style.clone()).or_insert_with(|| {
-				materials.add(if dark {
-					StandardMaterial {
-						base_color: style.color,
-						emissive: style.color,
-						perceptual_roughness: 0.3,
-						metallic: 1.0,
-						..default()
+					for (link, link_type) in block.start_link() {
+						// println!("inserting source of rainbow!");
+						create_source
+							.push(MessageSource { id: link.to_string(), link_type: *link_type });
 					}
-				} else {
-					style.color.into()
-				})
-			});
 
-			let mesh = if content::is_event_message(&entity) {
-				handles.xcm_torus_mesh.clone()
-			} else {
-				handles.sphere_mesh.clone()
-			};
-			rain_height[event_num % 81] += DOT_HEIGHT; // * height;
-			let target_y = next_y[event_num % 81];
-			next_y[event_num % 81] += DOT_HEIGHT; // * height;
-
-			// let t = Transform::from_translation(Vec3::new(
-			// 	px,
-			// 	rain_height[event_num % 81] * build_dir,
-			// 	pz * rflip,
-			// ));
-
-			let (x,y,z) = (px,
-				rain_height[event_num % 81] * build_dir,
-				pz * rflip);
-			instances.push(InstanceData {
-						position: Vec3::new(x, y, z),
-						scale: 1.0,
-						color: style.color.as_rgba_f32(),
+					let mut bun = commands.spawn_bundle(PbrBundle {
+						mesh,
+						/// * event.blocknum as f32
+						material: material.clone(),
+						transform,
+						..Default::default()
 					});
 
-			// let mut x = commands.spawn_bundle(PbrBundle {
-			// 	mesh,
-			// 	material: material.clone(),
-			// 	transform: t,
-			// 	..Default::default()
-			// });
-			// let event_bun = x
-			// 	.insert_bundle(PickableBundle::default())
-			// 	.insert(entity.details.clone())
-			// 	.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-			// 	.insert(Name::new("BlockEvent"))
-			// 	.insert(ClearMe)
-			// 	.insert(HiFi);
-			//
-			// for (link, link_type) in &event.start_link {
-			// 	// println!("inserting source of rainbow (an event)!");
-			// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
-			// }
-		}
+					bun.insert_bundle(PickableBundle::default())
+						.insert(block.details().clone())
+						// .insert(Details {
+						// 	// hover: format_entity(block),
+						// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+						// 	doturl: block.dot().clone(),
+						// 	flattern: block.details().flattern.clone(),
+						// 	url: format!(
+						// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
+						// 		&encoded, &call_data
+						// 	),
+						// 	parent: None,
+						// 	success: ui::details::Success::Happy,
+						// 	pallet: block.pallet().to_string(),
+						// 	variant: block.variant().to_string(),
+						// 	raw: block.as_bytes().to_vec(),
+						// 	value: block.details().value
+						// })
+						.insert(ClearMe)
+						.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
+						.insert(Name::new("Extrinsic"))
+						.insert(MedFi);
 
-		commands.spawn().insert_bundle((
-			handles.block_mesh.clone(), //todo xcm different?
-			Transform::from_xyz(base_x, base_y, base_z),
-			GlobalTransform::default(),
-			InstanceMaterialData(instances),
-			Visibility::default(),
-			ComputedVisibility::default(),
-			// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
-			// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
-			// instanced cubes will be culled.
-			// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
-			// instancing, and that is not taken into account with the built-in frustum culling.
-			// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
-			// component to avoid incorrect culling.
-			NoFrustumCulling,
-		))
-		.insert_bundle(PickableBundle::default())
-				.insert(Name::new("BlockEvent"))
-				.insert(ClearMe)
-				.insert(HiFi);
-		;
+					for source in create_source {
+						bun.insert(source);
+					}
+				}
+			}
+
+			let mut events = events.clone();
+			events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
+			//TODO keep original order a bit
+
+			// for event_group in events.group_by(|a, b| {
+			//     a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
+			// }) {
+			//     let event_group: Vec<_> = event_group.iter().collect();
+
+			//     let height = event_group.len() as f32;
+			//     let annoying = DataEvent {
+			//         details: Details {
+			//             pallet: event_group[0].details.pallet.clone(),
+			//             doturl: event_group[0].details.doturl.clone(),
+			//             parent: event_group[0].details.parent.clone(),
+			//             variant: event_group[0].details.variant.clone(),
+			//             success: event_group[0].details.success.clone(),
+			//             hover: event_group[0].details.hover.clone(),
+			//             flattern: event_group[0].details.flattern.clone(),
+			//             url: event_group[0].details.url.clone(),
+			//         },
+			//         start_link: vec![],
+			//     };
+			//     let event_group = if event_group.len() == 1 {
+			//         event_group
+			//     } else {
+			//         vec![&annoying]
+			//     };
+
+			// let mut instances = vec![];
+			for event in events {
+				EVENTS.fetch_add(1, Ordering::Relaxed);
+				let details = Details {
+					url: format!(
+						"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+						&encoded, &hex_block_hash
+					),
+					..event.details.clone()
+				};
+				// let dark = details.doturl.is_darkside();
+				let entity = DataEvent { details, ..event.clone() };
+				let style = style::style_data_event(&entity);
+				//TODO: map should be a resource.
+				// let material = mat_map.entry(style.clone()).or_insert_with(|| {
+				// 	materials.add(if dark {
+				// 		StandardMaterial {
+				// 			base_color: style.color,
+				// 			emissive: style.color,
+				// 			perceptual_roughness: 0.3,
+				// 			metallic: 1.0,
+				// 			..default()
+				// 		}
+				// 	} else {
+				// 		style.color.into()
+				// 	})
+				// });
+
+				// let mesh = if content::is_event_message(&entity) {
+				// 	handles.xcm_torus_mesh.clone()
+				// } else {
+				// 	handles.sphere_mesh.clone()
+				// };
+				rain_height[event_num % 81] += DOT_HEIGHT; // * height;
+				// let target_y = next_y[event_num % 81];
+				next_y[event_num % 81] += DOT_HEIGHT; // * height;
+
+				// let t = Transform::from_translation(Vec3::new(
+				// 	px,
+				// 	rain_height[event_num % 81] * build_dir,
+				// 	pz * rflip,
+				// ));
+
+				let (x,y,z) = (px,
+					rain_height[event_num % 81] * build_dir,
+					pz * rflip);
+				instances.0.push(InstanceData {
+							position: Vec3::new(base_x + x, base_y + y, base_z + z),
+							scale: 1.0,
+							color: style.color.as_rgba_f32(),
+						});
+
+				// let mut x = commands.spawn_bundle(PbrBundle {
+				// 	mesh,
+				// 	material: material.clone(),
+				// 	transform: t,
+				// 	..Default::default()
+				// });
+				// let event_bun = x
+				// 	.insert_bundle(PickableBundle::default())
+				// 	.insert(entity.details.clone())
+				// 	.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
+				// 	.insert(Name::new("BlockEvent"))
+				// 	.insert(ClearMe)
+				// 	.insert(HiFi);
+				//
+				// for (link, link_type) in &event.start_link {
+				// 	// println!("inserting source of rainbow (an event)!");
+				// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
+				// }
+			}
+
+			// commands.spawn().insert_bundle((
+			// 	handles.block_mesh.clone(), //todo xcm different?
+			// 	Transform::from_xyz(base_x, base_y, base_z),
+			// 	GlobalTransform::default(),
+			// 	InstanceMaterialData(instances),
+			// 	Visibility::default(),
+			// 	ComputedVisibility::default(),
+			// 	// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
+			// 	// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
+			// 	// instanced cubes will be culled.
+			// 	// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
+			// 	// instancing, and that is not taken into account with the built-in frustum culling.
+			// 	// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
+			// 	// component to avoid incorrect culling.
+			// 	NoFrustumCulling,
+			// ))
+			// .insert_bundle(PickableBundle::default())
+			// 		.insert(Name::new("BlockEvent"))
+			// 		.insert(ClearMe)
+			// 		.insert(HiFi);
+			
+			// }
 		// }
+		//log!("hohohohohohhohoo");
 	}
 }
 
@@ -1970,62 +2008,62 @@ fn update_visibility(
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
-	// let transform: &Transform = player_query.get_single().unwrap();
-	// let x = transform.translation.x;
-	// let y = transform.translation.y;
+	let transform: &Transform = player_query.get_single().unwrap();
+	let x = transform.translation.x;
+	let y = transform.translation.y;
 
-	// let user_y = y.signum();
+	let user_y = y.signum();
 
-	// // If nothing's visible because we're far away make a few things visible so you know which dir
-	// // to go in and can double click to get there...
-	// #[cfg(feature = "adaptive-fps")]
-	// if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-	// 	let min = diag.history_len();
-	// 	if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-	// 		// println!("avg {}\t{}", avg, visible_width.0);
-	// 		let target = 30.;
-	// 		let avg = avg as f32;
-	// 		if avg < target && visible_width.0 > 100. {
-	// 			visible_width.0 -= (target - avg) / 4.;
-	// 		}
-	// 		// Because of frame rate differences it will go up much faster than it will go down!
-	// 		else if avg > target && visible_width.0 < 1000. {
-	// 			visible_width.0 += (avg - target) / 32.;
-	// 		}
-	// 	}
-	// }
+	// If nothing's visible because we're far away make a few things visible so you know which dir
+	// to go in and can double click to get there...
+	#[cfg(feature = "adaptive-fps")]
+	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+		let min = diag.history_len();
+		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
+			// println!("avg {}\t{}", avg, visible_width.0);
+			let target = 30.;
+			let avg = avg as f32;
+			if avg < target && visible_width.0 > 100. {
+				visible_width.0 -= (target - avg) / 4.;
+			}
+			// Because of frame rate differences it will go up much faster than it will go down!
+			else if avg > target && visible_width.0 < 1000. {
+				visible_width.0 += (avg - target) / 32.;
+			}
+		}
+	}
 
-	// let width = visible_width.0;
-	// let (min, max) = (x - width, x + width);
+	let width = visible_width.0;
+	let (min, max) = (x - width, x + width);
 
-	// let mut vis_count = 0;
-	// for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-	// 	let loc = transform.translation();
-	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-	// 	if vis.is_visible {
-	// 		vis_count += 1;
-	// 	}
-	// }
-	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-	// 	let loc = transform.translation();
-	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-	// 	if y > 500. {
-	// 		vis.is_visible = false;
-	// 	}
-	// }
-	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-	// 	let loc = transform.translation();
-	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-	// 	if y > 800. {
-	// 		vis.is_visible = false;
-	// 	}
-	// }
+	let mut vis_count = 0;
+	for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+		if vis.is_visible {
+			vis_count += 1;
+		}
+	}
+	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+		if y > 500. {
+			vis.is_visible = false;
+		}
+	}
+	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
+		let loc = transform.translation();
+		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+		if y > 800. {
+			vis.is_visible = false;
+		}
+	}
 
-	// if vis_count == 0 {
-	// 	for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
-	// 		vis.is_visible = true;
-	// 	}
-	// }
+	if vis_count == 0 {
+		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
+			vis.is_visible = true;
+		}
+	}
 
 	// println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
 }
@@ -2088,7 +2126,8 @@ fn setup(
 ) {
 	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
 	let aspect = 1. / 3.;
-	commands.insert_resource(ResourceHandles {
+
+	let handles = ResourceHandles {
 		block_mesh,
 		banner_materials: default(),
 		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(Vec2::new(BLOCK, BLOCK * aspect)))),
@@ -2117,7 +2156,11 @@ fn setup(
 			..default()
 		}),
 		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)))
-	});
+	};
+
+
+
+	commands.insert_resource(handles);
 
 	// add entities to the world
 	// plane
@@ -2172,6 +2215,9 @@ fn setup(
 	entity_comands
 		.insert(Viewport)
 		.insert_bundle(PickingCameraBundle { ..default() });
+
+
+	
 
 	// #[cfg(feature = "spacemouse")]
 	// entity_comands.insert(SpaceMouseRelativeControllable);

@@ -91,16 +91,16 @@ use egui::Link;
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						open::that(&selected.url).unwrap();
 					}
-					if let Some(val) = &selected.value {
-						// ui.add(|ui| Tree(val.clone()));
-						// ui.collapsing(
-						// 	"value", 	|
-							funk(ui, 
-								&scale_value_to_borrowed::convert(val,true));
-//             .default_open(depth < 1)
-						ui.label(&val.to_string());
-						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
-					}
+// 					if let Some(val) = &selected.value {
+// 						// ui.add(|ui| Tree(val.clone()));
+// 						// ui.collapsing(
+// 						// 	"value", 	|
+// 							funk(ui, 
+// 								&scale_value_to_borrowed::convert(val,true));
+// //             .default_open(depth < 1)
+// 						ui.label(&val.to_string());
+// 						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
+// 					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
 					ui.label("RAW Scale:");
 					
