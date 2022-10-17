@@ -23,7 +23,9 @@ struct VertexOutput {
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {
-    let position = vertex.position * vertex.i_pos_scale.w + vertex.i_pos_scale.xyz;
+    let position = vertex.position + vertex.i_pos_scale.xyz;
+    //  * vertex.i_pos_scale.w; - scale used to store rain destination
+    //TODO: don't need to copy it to shader.
     var out: VertexOutput;
     out.clip_position = mesh_position_local_to_clip(mesh.model, vec4<f32>(position, 1.0));
     out.color = vertex.i_color;

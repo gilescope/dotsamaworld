@@ -464,7 +464,7 @@ fn source_data(
 		clear_world(&details, &mut commands, &clean_me);
 
 		commands.spawn().insert_bundle((
-			handles.block_mesh.clone(), //todo xcm different?
+			handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
 			InstanceMaterialData(vec![]),
 			
 			// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next lines
@@ -1514,7 +1514,7 @@ fn add_blocks(
 				// 	handles.sphere_mesh.clone()
 				// };
 				rain_height[event_num % 81] += DOT_HEIGHT; // * height;
-				// let target_y = next_y[event_num % 81];
+				let target_y = next_y[event_num % 81];
 				next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
 				// let t = Transform::from_translation(Vec3::new(
@@ -1527,8 +1527,8 @@ fn add_blocks(
 					rain_height[event_num % 81] * build_dir,
 					pz * rflip);
 				instances.0.push(InstanceData {
-							position: Vec3::new(base_x + x, base_y + y, base_z + z),
-							scale: 1.0,
+							position: Vec3::new( x, y, z),
+							scale: base_y + target_y * build_dir,
 							color: style.color.as_rgba_f32(),
 						});
 
@@ -1613,6 +1613,9 @@ struct InstanceData {
     position: Vec3,
     scale: f32,
     color: [f32; 4],
+	// TODO: color can be a u32!
+	//  // Unpack the `u32` from the vertex buffer into the `vec4<f32>` used by the fragment shader
+	//    out.color = vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u)) & vec4<u32>(255u)) / 255.0;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1839,34 +1842,40 @@ macro_rules! min {
     }}
 }
 
-pub fn rain(
+fn rain(
 	time: Res<Time>,
 	mut commands: Commands,
-	mut drops: Query<(Entity, &mut Transform, &Rainable)>,
+	// mut drops: Query<(Entity, &mut Transform, &Rainable)>,
+	mut drops: Query<(Entity, &mut InstanceMaterialData)>,
 	mut timer: ResMut<UpdateTimer>,
 ) {
 	//TODO: remove the Rainable component once it has landed for performance!
 	let delta = 1.;
 	if timer.timer.tick(time.delta()).just_finished() {
-		for (entity, mut transform, rainable) in drops.iter_mut() {
-			if let BuildDirection::Up = rainable.build_direction {
-				if transform.translation.y > rainable.dest {
-					let todo = transform.translation.y - rainable.dest;
-					let delta = min!(1., delta * (todo / rainable.dest));
+		for (entity, mut rainable) in drops.iter_mut() {
+			for r in rainable.0.iter_mut() {
+				let dest = r.scale;
+				if dest != 0. {
+					if dest > 0. {
+						if r.position.y > dest {
+							let todo = r.position.y - dest;
+							let delta = min!(1., delta * (todo / dest));
 
-					transform.translation.y = max!(rainable.dest, transform.translation.y - delta);
-					// Stop raining...
-					if delta < f32::EPSILON {
-						commands.entity(entity).remove::<Rainable>();
-					}
-				}
-			} else {
-				// Austrialian down under world. Balls coming up from the depths...
-				if transform.translation.y < rainable.dest {
-					transform.translation.y = min!(rainable.dest, transform.translation.y + delta);
-					// Stop raining...
-					if delta < f32::EPSILON {
-						commands.entity(entity).remove::<Rainable>();
+							r.position.y = max!(dest, r.position.y - delta);
+							// Stop raining...
+							if delta < f32::EPSILON {
+								r.scale = 0.;
+							}
+						}
+					} else {
+						// Austrialian down under world. Balls coming up from the depths...
+						if r.position.y < dest {
+							r.position.y = min!(dest, r.position.y + delta);
+							// Stop raining...
+							if delta < f32::EPSILON {
+								r.scale = 0.;
+							}
+						}
 					}
 				}
 			}
