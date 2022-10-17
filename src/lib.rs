@@ -7,9 +7,11 @@
 #![feature(stmt_expr_attributes)]
 // #![feature(let_chains)]
 use crate::ui::UrlBar;
+use bevy::asset::load_internal_asset;
 use bevy::{ecs as bevy_ecs, prelude::*};
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
+use bevy::reflect::TypeUuid;
 // use core::slice::SlicePattern;
 use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
@@ -220,6 +222,9 @@ macro_rules! log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
+pub const SHADER_HANDLE: HandleUntyped =
+    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
+
 async fn async_main() -> color_eyre::eyre::Result<()> {
 	// color_eyre::install()?;
 	//   console_log!("Hello {}!", "world");
@@ -267,6 +272,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	});
 	#[cfg(not(target_arch = "wasm32"))]
 	app.add_plugins(DefaultPlugins);
+
+	// CustomMaterialPlugin needs the shader handle set up:
+	load_internal_asset!(app, SHADER_HANDLE, "../assets/shaders/instancing.wgsl", Shader::from_wgsl);
 	app.add_plugin(CustomMaterialPlugin);
 
 	// Plugins related to instance rendering...
@@ -1676,15 +1684,9 @@ pub struct CustomPipeline {
 
 impl FromWorld for CustomPipeline {
     fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        asset_server.watch_for_changes().unwrap();
-        let shader = asset_server.load("shaders/instancing.wgsl");
-
-        let mesh_pipeline = world.resource::<MeshPipeline>();
-
         CustomPipeline {
-            shader,
-            mesh_pipeline: mesh_pipeline.clone(),
+            shader:SHADER_HANDLE.typed(),
+            mesh_pipeline: world.resource::<MeshPipeline>().clone(),
         }
     }
 }
