@@ -29,10 +29,10 @@ async-recursion = "*"
 bytemuck = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
-futures = { version = "0.3.13", defalult-features = false, features = [] }
+futures = { version = "0.3.13", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+#smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
     "derive",
     "full",
@@ -175,7 +175,7 @@ bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen
 # http-types= {git="https://github.com/http-rs/http-types.git"}
 #console_error_panic_hook = { version = "0.1", optional = true }
 
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+#smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
 
 #subxt = {git= "https://github.com/paritytech/subxt.git"}
 
