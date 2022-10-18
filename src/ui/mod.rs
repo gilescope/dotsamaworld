@@ -4,7 +4,7 @@ pub mod details;
 pub mod doturl;
 pub mod toggle;
 //  use egui::ImageData;
-use crate::{Anchor, Env, Inspector, Viewport, log};
+use crate::{log, Anchor, Env, Inspector, Viewport};
 use bevy::prelude::*;
 use bevy_egui::EguiContext;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
@@ -52,7 +52,6 @@ pub fn ui_bars_system(
 				// 	// ui.heading("Selected:");
 				// });
 				// ui.separator();
-				
 
 				// if inspector.selected.is_some() {
 				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
@@ -82,32 +81,33 @@ pub fn ui_bars_system(
 				// 		});
 				// }
 				// }
-use egui::Link;
-				if let Some(selected) = &inspector.selected {					
+				use egui::Link;
+				if let Some(selected) = &inspector.selected {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so use open.				
+					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
+					// use open.
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						open::that(&selected.url).unwrap();
 					}
-// 					if let Some(val) = &selected.value {
-// 						// ui.add(|ui| Tree(val.clone()));
-// 						// ui.collapsing(
-// 						// 	"value", 	|
-// 							funk(ui, 
-// 								&scale_value_to_borrowed::convert(val,true));
-// //             .default_open(depth < 1)
-// 						ui.label(&val.to_string());
-// 						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
-// 					}
+					// 					if let Some(val) = &selected.value {
+					// 						// ui.add(|ui| Tree(val.clone()));
+					// 						// ui.collapsing(
+					// 						// 	"value", 	|
+					// 							funk(ui,
+					// 								&scale_value_to_borrowed::convert(val,true));
+					// //             .default_open(depth < 1)
+					// 						ui.label(&val.to_string());
+					// 						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
+					// 					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
 					ui.label("RAW Scale:");
-					
+
 					if ui.button("📋").clicked() {
 						let s = hex::encode(&selected.raw);
 						log!("{}", &s);
-						ui.output().copied_text = s;//TODO not working...
+						ui.output().copied_text = s; //TODO not working...
 					};
 					ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
@@ -182,8 +182,12 @@ use egui::Link;
 						}
 					}
 					for (loc, details) in entities.iter() {
-						if spec.find.len() <= details.pallet.len() && spec.find.as_bytes().eq_ignore_ascii_case(&details.pallet.as_bytes()[..spec.find.len()])
-						// if details.pallet.contains(&spec.find) || details.variant.contains(&spec.find)
+						if spec.find.len() <= details.pallet.len() &&
+							spec.find.as_bytes().eq_ignore_ascii_case(
+								&details.pallet.as_bytes()[..spec.find.len()],
+							)
+						// if details.pallet.contains(&spec.find) ||
+						// details.variant.contains(&spec.find)
 						{
 							destination.location = Some(loc.translation());
 							inspector.selected = Some(details.clone());
@@ -227,7 +231,10 @@ use egui::Link;
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-					ui.heading(format!("x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}", x,y,z,fps, newdate));
+					ui.heading(format!(
+						"x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}",
+						x, y, z, fps, newdate
+					));
 				});
 			});
 		})
@@ -243,8 +250,8 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
 			if pairs.len() == 1 {
 				let mut header = String::new();
 				let (mut k, v) = &pairs[0];
-				let mut v : &scale_borrow::Value = &v;
-					
+				let mut v: &scale_borrow::Value = &v;
+
 				while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 					header.push_str(k);
 					header.push('.');
@@ -254,15 +261,15 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
 				}
 				header.push_str(k);
 				// use egui::CollapsingHeader;
-				ui.collapsing(header, |ui|{
+				ui.collapsing(header, |ui| {
 					funk(ui, &v);
 				});
 			} else {
 				for (mut k, v) in pairs.iter() {
 					if let scale_borrow::Value::Object(nested_pairs) = &v {
 						let mut header = String::new();
-						let mut v : &scale_borrow::Value = &v;
-							
+						let mut v: &scale_borrow::Value = &v;
+
 						while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 							header.push_str(k);
 							header.push('.');
@@ -272,26 +279,25 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
 						}
 						header.push_str(k);
 						// use egui::CollapsingHeader;
-						ui.collapsing(header, |ui|{
+						ui.collapsing(header, |ui| {
 							funk(ui, &v);
 						});
 					} else {
-						ui.collapsing(k, |ui|{
+						ui.collapsing(k, |ui| {
 							funk(ui, v);
 						});
 					}
 				}
 			}
-		}
+		},
 		scale_borrow::Value::ScaleOwned(bytes) => {
 			ui.label(format!("0x{}", hex::encode(bytes.as_slice())));
-		}
+		},
 		_ => {
 			ui.label(val.to_string());
-		}
+		},
 	}
 }
-
 
 // TODO: Something like this would probably stop us rendering
 // behind the footer and header.

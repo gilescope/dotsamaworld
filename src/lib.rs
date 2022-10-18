@@ -7,11 +7,12 @@
 #![feature(stmt_expr_attributes)]
 // #![feature(let_chains)]
 use crate::ui::UrlBar;
-use bevy::asset::load_internal_asset;
-use bevy::{ecs as bevy_ecs, prelude::*};
+use bevy::{
+	asset::load_internal_asset, ecs as bevy_ecs, prelude::*, reflect::TypeUuid,
+	render::primitives::Frustum,
+};
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
-use bevy::reflect::TypeUuid;
 // use core::slice::SlicePattern;
 use serde::{Deserialize, Serialize};
 // use bevy::winit::WinitSettings;
@@ -32,7 +33,7 @@ use gloo_worker::Spawnable;
 use crate::movement::Destination;
 #[cfg(feature = "adaptive-fps")]
 use bevy::diagnostic::Diagnostics;
-use bevy::window::RequestRedraw;
+use bevy::{render::primitives::Sphere, window::RequestRedraw};
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use std::f32::consts::PI;
 // use scale_info::build;
@@ -46,24 +47,24 @@ use std::{
 };
 
 use bevy::{
-    core_pipeline::core_3d::Transparent3d,
-    ecs::system::{lifetimeless::*, SystemParamItem},
-    math::prelude::*,
-    pbr::{MeshPipeline, MeshPipelineKey, MeshUniform, SetMeshBindGroup, SetMeshViewBindGroup},
-    prelude::*,
-    render::{
-        extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{GpuBufferInfo, MeshVertexBufferLayout},
-        render_asset::RenderAssets,
-        render_phase::{
-            AddRenderCommand, DrawFunctions, EntityRenderCommand, RenderCommandResult, RenderPhase,
-            SetItemPipeline, TrackedRenderPass,
-        },
-        render_resource::*,
-        renderer::RenderDevice,
-        view::{ComputedVisibility, ExtractedView, Msaa, NoFrustumCulling, Visibility},
-        RenderApp, RenderStage,
-    },
+	core_pipeline::core_3d::Transparent3d,
+	ecs::system::{lifetimeless::*, SystemParamItem},
+	math::prelude::*,
+	pbr::{MeshPipeline, MeshPipelineKey, MeshUniform, SetMeshBindGroup, SetMeshViewBindGroup},
+	prelude::*,
+	render::{
+		extract_component::{ExtractComponent, ExtractComponentPlugin},
+		mesh::{GpuBufferInfo, MeshVertexBufferLayout},
+		render_asset::RenderAssets,
+		render_phase::{
+			AddRenderCommand, DrawFunctions, EntityRenderCommand, RenderCommandResult, RenderPhase,
+			SetItemPipeline, TrackedRenderPass,
+		},
+		render_resource::*,
+		renderer::RenderDevice,
+		view::{ComputedVisibility, ExtractedView, Msaa, NoFrustumCulling, Visibility},
+		RenderApp, RenderStage,
+	},
 };
 use bytemuck::{Pod, Zeroable};
 
@@ -223,7 +224,7 @@ macro_rules! log {
 }
 
 pub const SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
+	HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
 
 async fn async_main() -> color_eyre::eyre::Result<()> {
 	// color_eyre::install()?;
@@ -247,11 +248,11 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	// app
 	app.insert_resource(Msaa { samples: 4 });
 
-    #[cfg(target_family = "wasm")]
-    app.insert_resource(WindowDescriptor {
-        canvas: Some("canvas".into()), // CSS selector of the first canvas on the page.
-        ..default()
-    });
+	#[cfg(target_family = "wasm")]
+	app.insert_resource(WindowDescriptor {
+		canvas: Some("canvas".into()), // CSS selector of the first canvas on the page.
+		..default()
+	});
 
 	// The web asset plugin must be inserted before the `AssetPlugin` so
 	// that the asset plugin doesn't create another instance of an asset
@@ -274,7 +275,12 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.add_plugins(DefaultPlugins);
 
 	// CustomMaterialPlugin needs the shader handle set up:
-	load_internal_asset!(app, SHADER_HANDLE, "../assets/shaders/instancing.wgsl", Shader::from_wgsl);
+	load_internal_asset!(
+		app,
+		SHADER_HANDLE,
+		"../assets/shaders/instancing.wgsl",
+		Shader::from_wgsl
+	);
 	app.add_plugin(CustomMaterialPlugin);
 
 	// Plugins related to instance rendering...
@@ -294,10 +300,9 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	app.insert_resource(ui::UrlBar::new(
 		"dotsama:/1//10504599".to_string(),
 		Utc::now().naive_utc(),
-		Env::Local
+		Env::Local,
 	));
 	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
-	
 
 	#[cfg(target_family = "wasm")]
 	app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
@@ -463,30 +468,30 @@ fn source_data(
 
 		clear_world(&details, &mut commands, &clean_me);
 
-		commands.spawn().insert_bundle((
-			handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-			InstanceMaterialData(vec![]),
-			
-			// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next lines
-			Transform::from_xyz(0., 0., 0.),
-			GlobalTransform::default(),
-			Visibility::default(),
-			ComputedVisibility::default(),
-
-			// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
-			// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
-			// instanced cubes will be culled.
-			// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
-			// instancing, and that is not taken into account with the built-in frustum culling.
-			// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
-			// component to avoid incorrect culling.
-			NoFrustumCulling,
-		))
-		.insert_bundle(PickableBundle::default())
-				.insert(Name::new("BlockEvent"))
-				.insert(ClearMe)
-				.insert(HiFi);
-		
+		commands
+			.spawn()
+			.insert_bundle((
+				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
+				InstanceMaterialData(vec![]),
+				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+				// lines
+				Transform::from_xyz(0., 0., 0.),
+				GlobalTransform::default(),
+				Visibility::default(),
+				ComputedVisibility::default(),
+				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+				// view frustum, all the instanced cubes will be culled.
+				// The InstanceMaterialData contains the 'GlobalTransform' information for this
+				// custom instancing, and that is not taken into account with the built-in frustum
+				// culling. We must disable the built-in frustum culling by adding the
+				// `NoFrustumCulling` marker component to avoid incorrect culling.
+				NoFrustumCulling,
+			))
+			.insert_bundle(PickableBundle::default())
+			.insert(Name::new("BlockEvent"))
+			.insert(ClearMe)
+			.insert(HiFi);
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -526,7 +531,7 @@ fn source_data(
 		let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 			let env = event.source.split(":").collect::<Vec<_>>()[0].to_string();
 			let env = Env::try_from(env.as_str()).unwrap();
-			(DotUrl{env, ..default()}, None)
+			(DotUrl { env, ..default() }, None)
 		} else {
 			(dot_url.clone().unwrap(), Some(dot_url.unwrap()))
 		};
@@ -733,11 +738,7 @@ async fn do_datasources<F, R>(
 	}
 }
 
-fn draw_chain_rect(
-	handles: &ResourceHandles,
-	chain_info: &ChainInfo,
-	commands: &mut Commands,
-) {
+fn draw_chain_rect(handles: &ResourceHandles, chain_info: &ChainInfo, commands: &mut Commands) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
 	let encoded: String = url::form_urlencoded::Serializer::new(String::new())
@@ -979,7 +980,6 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
-
 fn render_block(
 	mut commands: Commands,
 	mut materials: ResMut<Assets<StandardMaterial>>,
@@ -993,165 +993,172 @@ fn render_block(
 	mut instances: Query<(Entity, &mut InstanceMaterialData)>,
 ) {
 	// log!("HEhehehehehehehehe");
-	for (_entity, mut instances) in instances.iter_mut()
-	{
+	for (_entity, mut instances) in instances.iter_mut() {
 		// log!("GOOOOOOT HERE");
-	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-		// web_sys::console::log_1(&format!("check results").into());
+		if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
+			// web_sys::console::log_1(&format!("check results").into());
 
-		// let is_self_sovereign = false; //TODO
-		//todo this can be 1 queue
-		//for msg in relays.relays.iter().flattern() {
-		//	 for rrelay in &relays.relays {
-		//	 	for cchain in rrelay.iter() {
-		// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
-		// for chain in relay.iter() {
-		//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
-		//		let chain_info = &cchain.info;
-		if let Some(data_update) = (*block_events).pop() {
-			// web_sys::console::log_1(&format!("got results").into());
-			match data_update {
-				DataUpdate::NewBlock(block) => {
-					// web_sys::console::log_1(&format!("got results on main rendere").into());
+			// let is_self_sovereign = false; //TODO
+			//todo this can be 1 queue
+			//for msg in relays.relays.iter().flattern() {
+			//	 for rrelay in &relays.relays {
+			//	 	for cchain in rrelay.iter() {
+			// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
+			// for chain in relay.iter() {
+			//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
+			//		let chain_info = &cchain.info;
+			if let Some(data_update) = (*block_events).pop() {
+				// web_sys::console::log_1(&format!("got results").into());
+				match data_update {
+					DataUpdate::NewBlock(block) => {
+						// web_sys::console::log_1(&format!("got results on main rendere").into());
 
-					//TODO optimise!
-					let mut chain_info = None;
-					'outer: for r in &relays.relays {
-						for rchain_info in r {
-							if rchain_info.chain_url.contains(&block.blockurl) {
-								// web_sys::console::log_1(&format!("{} contains {}",
-								// rchain_info.chain_url, block.blockurl).into());
-								chain_info = Some(rchain_info);
-								if !rchain_info.chain_url.is_relay() {
-									break 'outer
+						//TODO optimise!
+						let mut chain_info = None;
+						'outer: for r in &relays.relays {
+							for rchain_info in r {
+								if rchain_info.chain_url.contains(&block.blockurl) {
+									// web_sys::console::log_1(&format!("{} contains {}",
+									// rchain_info.chain_url, block.blockurl).into());
+									chain_info = Some(rchain_info);
+									if !rchain_info.chain_url.is_relay() {
+										break 'outer
+									}
 								}
 							}
 						}
-					}
 
-					let chain_info = chain_info.unwrap();
-					// log!("got results on main rendere with chain info");
+						let chain_info = chain_info.unwrap();
+						// log!("got results on main rendere with chain info");
 
-					BLOCKS.fetch_add(1, Ordering::Relaxed);
+						BLOCKS.fetch_add(1, Ordering::Relaxed);
 
-					// println!(
-					// 	"chains {} blocks {} txs {} events {}",
-					// 	CHAINS.load(Ordering::Relaxed),
-					// 	BLOCKS.load(Ordering::Relaxed),
-					// 	EXTRINSICS.load(Ordering::Relaxed),
-					// 	EVENTS.load(Ordering::Relaxed)
-					// );
-					// log!("block rend chain index {}", chain_info.chain_index);
+						// println!(
+						// 	"chains {} blocks {} txs {} events {}",
+						// 	CHAINS.load(Ordering::Relaxed),
+						// 	BLOCKS.load(Ordering::Relaxed),
+						// 	EXTRINSICS.load(Ordering::Relaxed),
+						// 	EVENTS.load(Ordering::Relaxed)
+						// );
+						// log!("block rend chain index {}", chain_info.chain_index);
 
-					// Skip data we no longer care about because the datasource has changed
-					let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
-					if block.data_epoc != now_epoc {
-						log!(
-							"discarding out of date block made at {} but we are at {}",
-							block.data_epoc,
-							now_epoc
-						);
-						return
-					}
+						// Skip data we no longer care about because the datasource has changed
+						let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+						if block.data_epoc != now_epoc {
+							log!(
+								"discarding out of date block made at {} but we are at {}",
+								block.data_epoc,
+								now_epoc
+							);
+							return
+						}
 
-					let mut base_time = *BASETIME.lock().unwrap();
-					if base_time == 0 {
-						base_time = block.timestamp.unwrap_or(0);
-						log!("BASETIME set to {}", base_time);
-						*BASETIME.lock().unwrap() = base_time;
-					}
+						let mut base_time = *BASETIME.lock().unwrap();
+						if base_time == 0 {
+							base_time = block.timestamp.unwrap_or(0);
+							log!("BASETIME set to {}", base_time);
+							*BASETIME.lock().unwrap() = base_time;
+						}
 
-					// let block_num = if is_self_sovereign {
-					//     block.blockurl.block_number.unwrap() as u32
-					// } else {
+						// let block_num = if is_self_sovereign {
+						//     block.blockurl.block_number.unwrap() as u32
+						// } else {
 
-					//     if base_time == 0
-					//     if rcount == 0 {
-					//         if chain == 0 &&  {
-					//             //relay
-					//             RELAY_BLOCKS.store(
-					//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-					//                 Ordering::Relaxed,
-					//             );
-					//         }
-					//         RELAY_BLOCKS.load(Ordering::Relaxed)
-					//     } else {
-					//         if chain == 0 {
-					//             //relay
-					//             RELAY_BLOCKS2.store(
-					//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-					//                 Ordering::Relaxed,
-					//             );
-					//         }
-					//         RELAY_BLOCKS2.load(Ordering::Relaxed)
-					//     }
-					// };
+						//     if base_time == 0
+						//     if rcount == 0 {
+						//         if chain == 0 &&  {
+						//             //relay
+						//             RELAY_BLOCKS.store(
+						//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+						//                 Ordering::Relaxed,
+						//             );
+						//         }
+						//         RELAY_BLOCKS.load(Ordering::Relaxed)
+						//     } else {
+						//         if chain == 0 {
+						//             //relay
+						//             RELAY_BLOCKS2.store(
+						//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+						//                 Ordering::Relaxed,
+						//             );
+						//         }
+						//         RELAY_BLOCKS2.load(Ordering::Relaxed)
+						//     }
+						// };
 
-					let rflip = chain_info.chain_url.rflip();
-					let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-						.append_pair("rpc", &chain_info.chain_ws)
-						.finish();
+						let rflip = chain_info.chain_url.rflip();
+						let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+							.append_pair("rpc", &chain_info.chain_ws)
+							.finish();
 
-					let is_relay = chain_info.chain_url.is_relay();
-					let details = Details {
-						doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
+						let is_relay = chain_info.chain_url.is_relay();
+						let details = Details {
+							doturl: DotUrl {
+								extrinsic: None,
+								event: None,
+								..block.blockurl.clone()
+							},
 
-						url: format!(
-							"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
-							&encoded,
-							hex::encode(block.blockhash)
-						),
-						..default()
-					};
-					// log!("rendering block from {}", details.doturl);
+							url: format!(
+								"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+								&encoded,
+								hex::encode(block.blockhash)
+							),
+							..default()
+						};
+						// log!("rendering block from {}", details.doturl);
 
-					// println!("block.timestamp {:?}", block.timestamp);
-					// println!("base_time {:?}",base_time);
-					let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+						// println!("block.timestamp {:?}", block.timestamp);
+						// println!("base_time {:?}",base_time);
+						let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
 
-					// Add the new block as a large square on the ground:
-					{
-						let timestamp_color = if chain_info.chain_url.is_relay() {
-							block.timestamp.unwrap()
-						} else {
-							if block.timestamp_parent.is_none() && block.timestamp.is_none() {
-								log!("skiping block from {} as has no timestamp", details.doturl);
-								return;
-							}
-							block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
-						} / 400;
+						// Add the new block as a large square on the ground:
+						{
+							let timestamp_color = if chain_info.chain_url.is_relay() {
+								block.timestamp.unwrap()
+							} else {
+								if block.timestamp_parent.is_none() && block.timestamp.is_none() {
+									log!(
+										"skiping block from {} as has no timestamp",
+										details.doturl
+									);
+									return
+								}
+								block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
+							} / 400;
 
-						let transform = Transform::from_translation(Vec3::new(
-							0. + (block_num as f32),
-							if is_relay { 0. } else { LAYER_GAP },
-							(RELAY_CHAIN_CHASM_WIDTH +
-								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-								rflip,
-						));
-						// println!("block created at {:?} blocknum {}", transform,
-						// block_num);
+							let transform = Transform::from_translation(Vec3::new(
+								0. + (block_num as f32),
+								if is_relay { 0. } else { LAYER_GAP },
+								(RELAY_CHAIN_CHASM_WIDTH +
+									BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+									rflip,
+							));
+							// println!("block created at {:?} blocknum {}", transform,
+							// block_num);
 
-						let mut bun = commands.spawn_bundle(PbrBundle {
-							mesh: handles.block_mesh.clone(),
-							material: materials.add(StandardMaterial {
-								base_color: style::color_block_number(
-									timestamp_color, // TODO: material needs to be cached by color
-									chain_info.chain_url.is_darkside(),
-								), // Color::rgba(0., 0., 0., 0.7),
-								alpha_mode: AlphaMode::Blend,
-								perceptual_roughness: 0.08,
-								unlit: block.blockurl.is_darkside(),
-								..default()
-							}),
-							transform,
-							..Default::default()
-						});
+							let mut bun = commands.spawn_bundle(PbrBundle {
+								mesh: handles.block_mesh.clone(),
+								material: materials.add(StandardMaterial {
+									base_color: style::color_block_number(
+										timestamp_color, /* TODO: material needs to be cached by
+										                  * color */
+										chain_info.chain_url.is_darkside(),
+									), // Color::rgba(0., 0., 0., 0.7),
+									alpha_mode: AlphaMode::Blend,
+									perceptual_roughness: 0.08,
+									unlit: block.blockurl.is_darkside(),
+									..default()
+								}),
+								transform,
+								..Default::default()
+							});
 
-						bun.insert(ClearMe);
+							bun.insert(ClearMe);
 
-						let chain_str = details.doturl.chain_str();
+							let chain_str = details.doturl.chain_str();
 
-						bun.insert(details)
+							bun.insert(details)
 							.insert(Name::new("Block"))
 							.with_children(|parent| {
 								let material_handle = handles.banner_materials.entry(chain_info.chain_index).or_insert_with(|| {
@@ -1214,71 +1221,67 @@ fn render_block(
 									.insert(ClearMe);
 							})
 							.insert_bundle(PickableBundle::default());
-					}
+						}
 
-					let ext_with_events = datasource::associate_events(
-						block.extrinsics.clone(),
-						block.events.clone(),
-					);
+						let ext_with_events = datasource::associate_events(
+							block.extrinsics.clone(),
+							block.events.clone(),
+						);
 
-					// Leave infrastructure events underground and show user activity above
-					// ground.
-					let (boring, fun): (Vec<_>, Vec<_>) =
-						ext_with_events.into_iter().partition(|(e, _)| {
-							if let Some(ext) = e {
-								content::is_utility_extrinsic(ext)
-							} else {
-								true
-							}
-						});
+						// Leave infrastructure events underground and show user activity above
+						// ground.
+						let (boring, fun): (Vec<_>, Vec<_>) =
+							ext_with_events.into_iter().partition(|(e, _)| {
+								if let Some(ext) = e {
+									content::is_utility_extrinsic(ext)
+								} else {
+									true
+								}
+							});
 
-					add_blocks(
-						chain_info,
-						block_num,
-						fun,
-						&mut commands,
-						// &mut meshes,
-						&mut materials,
-						BuildDirection::Up,
-						&block.blockhash,
-						&links,
-						&mut polyline_materials,
-						&mut polylines,
-						&encoded,
-						&mut handles,
-						&mut instances
-					);
+						add_blocks(
+							chain_info,
+							block_num,
+							fun,
+							&mut commands,
+							// &mut meshes,
+							&mut materials,
+							BuildDirection::Up,
+							&block.blockhash,
+							&links,
+							&mut polyline_materials,
+							&mut polylines,
+							&encoded,
+							&mut handles,
+							&mut instances,
+						);
 
-					add_blocks(
-						chain_info,
-						block_num,
-						boring,
-						&mut commands,
-						// &mut meshes,
-						&mut materials,
-						BuildDirection::Down,
-						&block.blockhash,
-						&links,
-						&mut polyline_materials,
-						&mut polylines,
-						&encoded,
-						&mut handles,
-						&mut instances,
-					);
-					event.send(RequestRedraw);
-				},
-				DataUpdate::NewChain(chain_info) => {
-					CHAINS.fetch_add(1, Ordering::Relaxed);
-					draw_chain_rect(
-						handles.as_ref(),
-						&chain_info,
-						&mut commands
-					)
-				},
+						add_blocks(
+							chain_info,
+							block_num,
+							boring,
+							&mut commands,
+							// &mut meshes,
+							&mut materials,
+							BuildDirection::Down,
+							&block.blockhash,
+							&links,
+							&mut polyline_materials,
+							&mut polylines,
+							&encoded,
+							&mut handles,
+							&mut instances,
+						);
+						event.send(RequestRedraw);
+					},
+					DataUpdate::NewChain(chain_info) => {
+						CHAINS.fetch_add(1, Ordering::Relaxed);
+						draw_chain_rect(handles.as_ref(), &chain_info, &mut commands)
+					},
+				}
 			}
 		}
 	}
-}
 	// }
 	// 		}
 	// 	}
@@ -1294,490 +1297,485 @@ fn add_blocks(
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	block_hash: &H256,
-	links: & Query<(Entity, &MessageSource, &GlobalTransform)>,
+	links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
 	handles: &mut ResMut<ResourceHandles>,
 	instances: &mut InstanceMaterialData,
 ) {
-		log!("instance count {} ", instances.0.len());
-		let rflip = chain_info.chain_url.rflip();
-		let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
-		// Add all the useful blocks
+	log!("instance count {} ", instances.0.len());
+	let rflip = chain_info.chain_url.rflip();
+	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
+	// Add all the useful blocks
 
-		let mut mat_map = HashMap::new();
+	let mut mat_map = HashMap::new();
 
-		let layer = chain_info.chain_url.layer() as f32;
-		let (base_x, base_y, base_z) = (
-			(block_num) - 4.,
-			LAYER_GAP * layer,
-			RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
-		);
+	let layer = chain_info.chain_url.layer() as f32;
+	let (base_x, base_y, base_z) = (
+		(block_num) - 4.,
+		LAYER_GAP * layer,
+		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
+	);
 
-		const DOT_HEIGHT: f32 = 1.;
-		const HIGH: f32 = 100.;
-		let mut rain_height: [f32; 81] = [HIGH; 81];
-		let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
+	const DOT_HEIGHT: f32 = 1.;
+	const HIGH: f32 = 100.;
+	let mut rain_height: [f32; 81] = [HIGH; 81];
+	let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
 
-		let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
+	let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
-		for (event_num, (block, events)) in block_events.iter().enumerate() {
-			let z = event_num % 9;
-			let x = (event_num / 9) % 9;
+	for (event_num, (block, events)) in block_events.iter().enumerate() {
+		let z = event_num % 9;
+		let x = (event_num / 9) % 9;
 
-			rain_height[event_num % 81] += fastrand::f32() * HIGH;
+		rain_height[event_num % 81] += fastrand::f32() * HIGH;
 
-			let (px, py, pz) = (base_x + x as f32, rain_height[event_num % 81], (base_z + z as f32));
+		let (px, py, pz) = (base_x + x as f32, rain_height[event_num % 81], (base_z + z as f32));
 
-			let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
+		let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
 
-			if let Some(block @ DataEntity::Extrinsic { .. }) = block {
-				for block in std::iter::once(block).chain(block.contains().iter()) {
-					EXTRINSICS.fetch_add(1, Ordering::Relaxed);
-					let target_y = next_y[event_num % 81];
-					next_y[event_num % 81] += DOT_HEIGHT;
-					let dark = block.details().doturl.is_darkside();
-					let style = style::style_event(block);
-					let material = mat_map.entry(style.clone()).or_insert_with(|| {
-						materials.add(if dark {
-							StandardMaterial {
-								base_color: style.color,
-								emissive: style.color,
-								perceptual_roughness: 0.3,
-								metallic: 1.0,
-								..default()
-							}
-						} else {
-							style.color.into()
-						})
-					});
-					let mesh = if content::is_message(block) {
-						handles.xcm_torus_mesh.clone()
-					} else if matches!(block, DataEntity::Extrinsic { .. }) {
-						handles.extrinsic_mesh.clone()
+		if let Some(block @ DataEntity::Extrinsic { .. }) = block {
+			for block in std::iter::once(block).chain(block.contains().iter()) {
+				EXTRINSICS.fetch_add(1, Ordering::Relaxed);
+				let target_y = next_y[event_num % 81];
+				next_y[event_num % 81] += DOT_HEIGHT;
+				let dark = block.details().doturl.is_darkside();
+				let style = style::style_event(block);
+				let material = mat_map.entry(style.clone()).or_insert_with(|| {
+					materials.add(if dark {
+						StandardMaterial {
+							base_color: style.color,
+							emissive: style.color,
+							perceptual_roughness: 0.3,
+							metallic: 1.0,
+							..default()
+						}
 					} else {
-						handles.sphere_mesh.clone()
-					};
+						style.color.into()
+					})
+				});
+				let mesh = if content::is_message(block) {
+					handles.xcm_torus_mesh.clone()
+				} else if matches!(block, DataEntity::Extrinsic { .. }) {
+					handles.extrinsic_mesh.clone()
+				} else {
+					handles.sphere_mesh.clone()
+				};
 
-					// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
+				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
-					let mut create_source = vec![];
-					for (link, _link_type) in block.end_link() {
-						//if this id already exists then this is the destination, not the source...
-						for (entity, id, source_global) in links.iter() {
-							if id.id == *link {
-								// println!("creating rainbow!");
+				let mut create_source = vec![];
+				for (link, _link_type) in block.end_link() {
+					//if this id already exists then this is the destination, not the source...
+					for (entity, id, source_global) in links.iter() {
+						if id.id == *link {
+							// println!("creating rainbow!");
 
-								let mut vertices = vec![
-									source_global.translation(),
-									Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
-								];
-								rainbow(&mut vertices, 50);
+							let mut vertices = vec![
+								source_global.translation(),
+								Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
+							];
+							rainbow(&mut vertices, 50);
 
-								let colors = vec![
-									Color::PURPLE,
-									Color::BLUE,
-									Color::CYAN,
-									Color::YELLOW,
-									Color::RED,
-								];
-								for color in colors.into_iter() {
-									// Create rainbow from entity to current extrinsic location.
-									commands
-										.spawn_bundle(PolylineBundle {
-											polyline: polylines
-												.add(Polyline { vertices: vertices.clone() }),
-											material: polyline_materials.add(PolylineMaterial {
-												width: 10.0,
-												color,
-												perspective: true,
-												..default()
-											}),
+							let colors = vec![
+								Color::PURPLE,
+								Color::BLUE,
+								Color::CYAN,
+								Color::YELLOW,
+								Color::RED,
+							];
+							for color in colors.into_iter() {
+								// Create rainbow from entity to current extrinsic location.
+								commands
+									.spawn_bundle(PolylineBundle {
+										polyline: polylines
+											.add(Polyline { vertices: vertices.clone() }),
+										material: polyline_materials.add(PolylineMaterial {
+											width: 10.0,
+											color,
+											perspective: true,
 											..default()
-										})
-										.insert(ClearMe);
+										}),
+										..default()
+									})
+									.insert(ClearMe);
 
-									for v in vertices.iter_mut() {
-										v.y += 0.5;
-									}
+								for v in vertices.iter_mut() {
+									v.y += 0.5;
 								}
-
-								commands.entity(entity).remove::<MessageSource>();
 							}
+
+							commands.entity(entity).remove::<MessageSource>();
 						}
 					}
+				}
 
-					for (link, link_type) in block.start_link() {
-						// println!("inserting source of rainbow!");
-						create_source
-							.push(MessageSource { id: link.to_string(), link_type: *link_type });
-					}
+				for (link, link_type) in block.start_link() {
+					// println!("inserting source of rainbow!");
+					create_source
+						.push(MessageSource { id: link.to_string(), link_type: *link_type });
+				}
 
-					let mut bun = commands.spawn_bundle(PbrBundle {
-						mesh,
-						/// * event.blocknum as f32
-						material: material.clone(),
-						transform,
-						..Default::default()
-					});
+				let mut bun = commands.spawn_bundle(PbrBundle {
+					mesh,
+					/// * event.blocknum as f32
+					material: material.clone(),
+					transform,
+					..Default::default()
+				});
 
-					bun.insert_bundle(PickableBundle::default())
-						.insert(block.details().clone())
-						// .insert(Details {
-						// 	// hover: format_entity(block),
-						// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
-						// 	doturl: block.dot().clone(),
-						// 	flattern: block.details().flattern.clone(),
-						// 	url: format!(
-						// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
-						// 		&encoded, &call_data
-						// 	),
-						// 	parent: None,
-						// 	success: ui::details::Success::Happy,
-						// 	pallet: block.pallet().to_string(),
-						// 	variant: block.variant().to_string(),
-						// 	raw: block.as_bytes().to_vec(),
-						// 	value: block.details().value
-						// })
-						.insert(ClearMe)
-						.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-						.insert(Name::new("Extrinsic"))
-						.insert(MedFi);
+				bun.insert_bundle(PickableBundle::default())
+					.insert(block.details().clone())
+					// .insert(Details {
+					// 	// hover: format_entity(block),
+					// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+					// 	doturl: block.dot().clone(),
+					// 	flattern: block.details().flattern.clone(),
+					// 	url: format!(
+					// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
+					// 		&encoded, &call_data
+					// 	),
+					// 	parent: None,
+					// 	success: ui::details::Success::Happy,
+					// 	pallet: block.pallet().to_string(),
+					// 	variant: block.variant().to_string(),
+					// 	raw: block.as_bytes().to_vec(),
+					// 	value: block.details().value
+					// })
+					.insert(ClearMe)
+					.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
+					.insert(Name::new("Extrinsic"))
+					.insert(MedFi);
 
-					for source in create_source {
-						bun.insert(source);
-					}
+				for source in create_source {
+					bun.insert(source);
 				}
 			}
+		}
 
-			let mut events = events.clone();
-			events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
-			//TODO keep original order a bit
+		let mut events = events.clone();
+		events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
+		//TODO keep original order a bit
 
-			// for event_group in events.group_by(|a, b| {
-			//     a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
-			// }) {
-			//     let event_group: Vec<_> = event_group.iter().collect();
+		// for event_group in events.group_by(|a, b| {
+		//     a.details.pallet == b.details.pallet && a.details.variant == b.details.variant
+		// }) {
+		//     let event_group: Vec<_> = event_group.iter().collect();
 
-			//     let height = event_group.len() as f32;
-			//     let annoying = DataEvent {
-			//         details: Details {
-			//             pallet: event_group[0].details.pallet.clone(),
-			//             doturl: event_group[0].details.doturl.clone(),
-			//             parent: event_group[0].details.parent.clone(),
-			//             variant: event_group[0].details.variant.clone(),
-			//             success: event_group[0].details.success.clone(),
-			//             hover: event_group[0].details.hover.clone(),
-			//             flattern: event_group[0].details.flattern.clone(),
-			//             url: event_group[0].details.url.clone(),
-			//         },
-			//         start_link: vec![],
-			//     };
-			//     let event_group = if event_group.len() == 1 {
-			//         event_group
-			//     } else {
-			//         vec![&annoying]
-			//     };
+		//     let height = event_group.len() as f32;
+		//     let annoying = DataEvent {
+		//         details: Details {
+		//             pallet: event_group[0].details.pallet.clone(),
+		//             doturl: event_group[0].details.doturl.clone(),
+		//             parent: event_group[0].details.parent.clone(),
+		//             variant: event_group[0].details.variant.clone(),
+		//             success: event_group[0].details.success.clone(),
+		//             hover: event_group[0].details.hover.clone(),
+		//             flattern: event_group[0].details.flattern.clone(),
+		//             url: event_group[0].details.url.clone(),
+		//         },
+		//         start_link: vec![],
+		//     };
+		//     let event_group = if event_group.len() == 1 {
+		//         event_group
+		//     } else {
+		//         vec![&annoying]
+		//     };
 
-			// let mut instances = vec![];
-			for event in events {
-				EVENTS.fetch_add(1, Ordering::Relaxed);
-				let details = Details {
-					url: format!(
-						"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-						&encoded, &hex_block_hash
-					),
-					..event.details.clone()
-				};
-				// let dark = details.doturl.is_darkside();
-				let entity = DataEvent { details, ..event.clone() };
-				let style = style::style_data_event(&entity);
-				//TODO: map should be a resource.
-				// let material = mat_map.entry(style.clone()).or_insert_with(|| {
-				// 	materials.add(if dark {
-				// 		StandardMaterial {
-				// 			base_color: style.color,
-				// 			emissive: style.color,
-				// 			perceptual_roughness: 0.3,
-				// 			metallic: 1.0,
-				// 			..default()
-				// 		}
-				// 	} else {
-				// 		style.color.into()
-				// 	})
-				// });
+		// let mut instances = vec![];
+		for event in events {
+			EVENTS.fetch_add(1, Ordering::Relaxed);
+			let details = Details {
+				url: format!(
+					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+					&encoded, &hex_block_hash
+				),
+				..event.details.clone()
+			};
+			// let dark = details.doturl.is_darkside();
+			let entity = DataEvent { details, ..event.clone() };
+			let style = style::style_data_event(&entity);
+			//TODO: map should be a resource.
+			// let material = mat_map.entry(style.clone()).or_insert_with(|| {
+			// 	materials.add(if dark {
+			// 		StandardMaterial {
+			// 			base_color: style.color,
+			// 			emissive: style.color,
+			// 			perceptual_roughness: 0.3,
+			// 			metallic: 1.0,
+			// 			..default()
+			// 		}
+			// 	} else {
+			// 		style.color.into()
+			// 	})
+			// });
 
-				// let mesh = if content::is_event_message(&entity) {
-				// 	handles.xcm_torus_mesh.clone()
-				// } else {
-				// 	handles.sphere_mesh.clone()
-				// };
-				rain_height[event_num % 81] += DOT_HEIGHT; // * height;
-				let target_y = next_y[event_num % 81];
-				next_y[event_num % 81] += DOT_HEIGHT; // * height;
+			// let mesh = if content::is_event_message(&entity) {
+			// 	handles.xcm_torus_mesh.clone()
+			// } else {
+			// 	handles.sphere_mesh.clone()
+			// };
+			rain_height[event_num % 81] += DOT_HEIGHT; // * height;
+			let target_y = next_y[event_num % 81];
+			next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
-				// let t = Transform::from_translation(Vec3::new(
-				// 	px,
-				// 	rain_height[event_num % 81] * build_dir,
-				// 	pz * rflip,
-				// ));
+			// let t = Transform::from_translation(Vec3::new(
+			// 	px,
+			// 	rain_height[event_num % 81] * build_dir,
+			// 	pz * rflip,
+			// ));
 
-				let (x,y,z) = (px,
-					rain_height[event_num % 81] * build_dir,
-					pz * rflip);
-				instances.0.push(InstanceData {
-							position: Vec3::new( x, y, z),
-							scale: base_y + target_y * build_dir,
-							color: style.color.as_rgba_f32(),
-						});
+			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
+			instances.0.push(InstanceData {
+				position: Vec3::new(x, y, z),
+				scale: base_y + target_y * build_dir,
+				color: style.color.as_rgba_f32(),
+			});
 
-				// let mut x = commands.spawn_bundle(PbrBundle {
-				// 	mesh,
-				// 	material: material.clone(),
-				// 	transform: t,
-				// 	..Default::default()
-				// });
-				// let event_bun = x
-				// 	.insert_bundle(PickableBundle::default())
-				// 	.insert(entity.details.clone())
-				// 	.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-				// 	.insert(Name::new("BlockEvent"))
-				// 	.insert(ClearMe)
-				// 	.insert(HiFi);
-				//
-				// for (link, link_type) in &event.start_link {
-				// 	// println!("inserting source of rainbow (an event)!");
-				// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
-				// }
-			}
-
-			// commands.spawn().insert_bundle((
-			// 	handles.block_mesh.clone(), //todo xcm different?
-			// 	Transform::from_xyz(base_x, base_y, base_z),
-			// 	GlobalTransform::default(),
-			// 	InstanceMaterialData(instances),
-			// 	Visibility::default(),
-			// 	ComputedVisibility::default(),
-			// 	// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
-			// 	// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
-			// 	// instanced cubes will be culled.
-			// 	// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
-			// 	// instancing, and that is not taken into account with the built-in frustum culling.
-			// 	// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
-			// 	// component to avoid incorrect culling.
-			// 	NoFrustumCulling,
-			// ))
-			// .insert_bundle(PickableBundle::default())
-			// 		.insert(Name::new("BlockEvent"))
-			// 		.insert(ClearMe)
-			// 		.insert(HiFi);
-			
+			// let mut x = commands.spawn_bundle(PbrBundle {
+			// 	mesh,
+			// 	material: material.clone(),
+			// 	transform: t,
+			// 	..Default::default()
+			// });
+			// let event_bun = x
+			// 	.insert_bundle(PickableBundle::default())
+			// 	.insert(entity.details.clone())
+			// 	.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
+			// 	.insert(Name::new("BlockEvent"))
+			// 	.insert(ClearMe)
+			// 	.insert(HiFi);
+			//
+			// for (link, link_type) in &event.start_link {
+			// 	// println!("inserting source of rainbow (an event)!");
+			// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
 			// }
+		}
+
+		// commands.spawn().insert_bundle((
+		// 	handles.block_mesh.clone(), //todo xcm different?
+		// 	Transform::from_xyz(base_x, base_y, base_z),
+		// 	GlobalTransform::default(),
+		// 	InstanceMaterialData(instances),
+		// 	Visibility::default(),
+		// 	ComputedVisibility::default(),
+		// 	// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
+		// 	// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
+		// 	// instanced cubes will be culled.
+		// 	// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
+		// 	// instancing, and that is not taken into account with the built-in frustum culling.
+		// 	// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
+		// 	// component to avoid incorrect culling.
+		// 	NoFrustumCulling,
+		// ))
+		// .insert_bundle(PickableBundle::default())
+		// 		.insert(Name::new("BlockEvent"))
+		// 		.insert(ClearMe)
+		// 		.insert(HiFi);
+
+		// }
 		// }
 		//log!("hohohohohohhohoo");
 	}
 }
 
-
-
 #[derive(Component, Deref)]
 struct InstanceMaterialData(Vec<InstanceData>);
 
 impl ExtractComponent for InstanceMaterialData {
-    type Query = &'static InstanceMaterialData;
-    type Filter = ();
+	type Query = (&'static InstanceMaterialData, &'static Frustum);
+	type Filter = ();
 
-    fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
-        InstanceMaterialData(item.0.clone())
-    }
+	// Frustum cull at extract
+	fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
+		//Todo: make frustum planes slightly bigger by half a box width so sphere can be point.
+		InstanceMaterialData(
+			item.0
+				 .0
+				.iter()
+				.filter_map(|i| {
+					item.1
+						.intersects_sphere(&Sphere { center: i.position.into(), radius: 5. }, false)
+						.then(|| i.clone())
+				})
+				.collect::<Vec<_>>(),
+		)
+	}
 }
 
 pub struct CustomMaterialPlugin;
 
 impl Plugin for CustomMaterialPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugin(ExtractComponentPlugin::<InstanceMaterialData>::default());
-        app.sub_app_mut(RenderApp)
-            .add_render_command::<Transparent3d, DrawCustom>()
-            .init_resource::<CustomPipeline>()
-            .init_resource::<SpecializedMeshPipelines<CustomPipeline>>()
-            .add_system_to_stage(RenderStage::Queue, queue_custom)
-            .add_system_to_stage(RenderStage::Prepare, prepare_instance_buffers);
-    }
+	fn build(&self, app: &mut App) {
+		app.add_plugin(ExtractComponentPlugin::<InstanceMaterialData>::default());
+		app.sub_app_mut(RenderApp)
+			.add_render_command::<Transparent3d, DrawCustom>()
+			.init_resource::<CustomPipeline>()
+			.init_resource::<SpecializedMeshPipelines<CustomPipeline>>()
+			.add_system_to_stage(RenderStage::Queue, queue_custom)
+			.add_system_to_stage(RenderStage::Prepare, prepare_instance_buffers);
+	}
 }
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct InstanceData {
-    position: Vec3,
-    scale: f32,
-    color: [f32; 4],
+	position: Vec3,
+	scale: f32,
+	color: [f32; 4],
 	// TODO: color can be a u32!
 	//  // Unpack the `u32` from the vertex buffer into the `vec4<f32>` used by the fragment shader
-	//    out.color = vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u)) & vec4<u32>(255u)) / 255.0;
+	//    out.color = vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
+	// vec4<u32>(255u)) / 255.0;
 }
 
 #[allow(clippy::too_many_arguments)]
 fn queue_custom(
-    transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
-    custom_pipeline: Res<CustomPipeline>,
-    msaa: Res<Msaa>,
-    mut pipelines: ResMut<SpecializedMeshPipelines<CustomPipeline>>,
-    mut pipeline_cache: ResMut<PipelineCache>,
-    meshes: Res<RenderAssets<Mesh>>,
-    material_meshes: Query<(Entity, &MeshUniform, &Handle<Mesh>), With<InstanceMaterialData>>,
-    mut views: Query<(&ExtractedView, &mut RenderPhase<Transparent3d>)>,
+	transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
+	custom_pipeline: Res<CustomPipeline>,
+	msaa: Res<Msaa>,
+	mut pipelines: ResMut<SpecializedMeshPipelines<CustomPipeline>>,
+	mut pipeline_cache: ResMut<PipelineCache>,
+	meshes: Res<RenderAssets<Mesh>>,
+	material_meshes: Query<(Entity, &MeshUniform, &Handle<Mesh>), With<InstanceMaterialData>>,
+	mut views: Query<(&ExtractedView, &mut RenderPhase<Transparent3d>)>,
 ) {
-    let draw_custom = transparent_3d_draw_functions
-        .read()
-        .get_id::<DrawCustom>()
-        .unwrap();
+	let draw_custom = transparent_3d_draw_functions.read().get_id::<DrawCustom>().unwrap();
 
-    let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples);
+	let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples);
 
-    for (view, mut transparent_phase) in &mut views {
-        let rangefinder = view.rangefinder3d();
-        for (entity, mesh_uniform, mesh_handle) in &material_meshes {
-            if let Some(mesh) = meshes.get(mesh_handle) {
-                let key =
-                    msaa_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
-                let pipeline = pipelines
-                    .specialize(&mut pipeline_cache, &custom_pipeline, key, &mesh.layout)
-                    .unwrap();
-                transparent_phase.add(Transparent3d {
-                    entity,
-                    pipeline,
-                    draw_function: draw_custom,
-                    distance: rangefinder.distance(&mesh_uniform.transform),
-                });
-            }
-        }
-    }
+	for (view, mut transparent_phase) in &mut views {
+		let rangefinder = view.rangefinder3d();
+		for (entity, mesh_uniform, mesh_handle) in &material_meshes {
+			if let Some(mesh) = meshes.get(mesh_handle) {
+				let key =
+					msaa_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
+				let pipeline = pipelines
+					.specialize(&mut pipeline_cache, &custom_pipeline, key, &mesh.layout)
+					.unwrap();
+				transparent_phase.add(Transparent3d {
+					entity,
+					pipeline,
+					draw_function: draw_custom,
+					distance: rangefinder.distance(&mesh_uniform.transform),
+				});
+			}
+		}
+	}
 }
 
 #[derive(Component)]
 pub struct InstanceBuffer {
-    buffer: Buffer,
-    length: usize,
+	buffer: Buffer,
+	length: usize,
 }
 
 fn prepare_instance_buffers(
-    mut commands: Commands,
-    query: Query<(Entity, &InstanceMaterialData)>,
-    render_device: Res<RenderDevice>,
+	mut commands: Commands,
+	query: Query<(Entity, &InstanceMaterialData)>,
+	render_device: Res<RenderDevice>,
 ) {
-    for (entity, instance_data) in &query {
-        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("instance data buffer"),
-            contents: bytemuck::cast_slice(instance_data.as_slice()),
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        });
-        commands.entity(entity).insert(InstanceBuffer {
-            buffer,
-            length: instance_data.len(),
-        });
-    }
+	for (entity, instance_data) in &query {
+		let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+			label: Some("instance data buffer"),
+			contents: bytemuck::cast_slice(instance_data.as_slice()),
+			usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+		});
+		commands
+			.entity(entity)
+			.insert(InstanceBuffer { buffer, length: instance_data.len() });
+	}
 }
 
 pub struct CustomPipeline {
-    shader: Handle<Shader>,
-    mesh_pipeline: MeshPipeline,
+	shader: Handle<Shader>,
+	mesh_pipeline: MeshPipeline,
 }
 
 impl FromWorld for CustomPipeline {
-    fn from_world(world: &mut World) -> Self {
-        CustomPipeline {
-            shader:SHADER_HANDLE.typed(),
-            mesh_pipeline: world.resource::<MeshPipeline>().clone(),
-        }
-    }
+	fn from_world(world: &mut World) -> Self {
+		CustomPipeline {
+			shader: SHADER_HANDLE.typed(),
+			mesh_pipeline: world.resource::<MeshPipeline>().clone(),
+		}
+	}
 }
 
 impl SpecializedMeshPipeline for CustomPipeline {
-    type Key = MeshPipelineKey;
+	type Key = MeshPipelineKey;
 
-    fn specialize(
-        &self,
-        key: Self::Key,
-        layout: &MeshVertexBufferLayout,
-    ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
-        let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
-        descriptor.vertex.shader = self.shader.clone();
-        descriptor.vertex.buffers.push(VertexBufferLayout {
-            array_stride: std::mem::size_of::<InstanceData>() as u64,
-            step_mode: VertexStepMode::Instance,
-            attributes: vec![
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 3, // shader locations 0-2 are taken up by Position, Normal and UV attributes
-                },
-                VertexAttribute {
-                    format: VertexFormat::Float32x4,
-                    offset: VertexFormat::Float32x4.size(),
-                    shader_location: 4,
-                },
-            ],
-        });
-        descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
-        descriptor.layout = Some(vec![
-            self.mesh_pipeline.view_layout.clone(),
-            self.mesh_pipeline.mesh_layout.clone(),
-        ]);
+	fn specialize(
+		&self,
+		key: Self::Key,
+		layout: &MeshVertexBufferLayout,
+	) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
+		let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
+		descriptor.vertex.shader = self.shader.clone();
+		descriptor.vertex.buffers.push(VertexBufferLayout {
+			array_stride: std::mem::size_of::<InstanceData>() as u64,
+			step_mode: VertexStepMode::Instance,
+			attributes: vec![
+				VertexAttribute {
+					format: VertexFormat::Float32x4,
+					offset: 0,
+					shader_location: 3, /* shader locations 0-2 are taken up by Position, Normal
+					                     * and UV attributes */
+				},
+				VertexAttribute {
+					format: VertexFormat::Float32x4,
+					offset: VertexFormat::Float32x4.size(),
+					shader_location: 4,
+				},
+			],
+		});
+		descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
+		descriptor.layout = Some(vec![
+			self.mesh_pipeline.view_layout.clone(),
+			self.mesh_pipeline.mesh_layout.clone(),
+		]);
 
-        Ok(descriptor)
-    }
+		Ok(descriptor)
+	}
 }
 
-type DrawCustom = (
-    SetItemPipeline,
-    SetMeshViewBindGroup<0>,
-    SetMeshBindGroup<1>,
-    DrawMeshInstanced,
-);
+type DrawCustom =
+	(SetItemPipeline, SetMeshViewBindGroup<0>, SetMeshBindGroup<1>, DrawMeshInstanced);
 
 pub struct DrawMeshInstanced;
 
 impl EntityRenderCommand for DrawMeshInstanced {
-    type Param = (
-        SRes<RenderAssets<Mesh>>,
-        SQuery<Read<Handle<Mesh>>>,
-        SQuery<Read<InstanceBuffer>>,
-    );
-    #[inline]
-    fn render<'w>(
-        _view: Entity,
-        item: Entity,
-        (meshes, mesh_query, instance_buffer_query): SystemParamItem<'w, '_, Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
-    ) -> RenderCommandResult {
-        let mesh_handle = mesh_query.get(item).unwrap();
-        let instance_buffer = instance_buffer_query.get_inner(item).unwrap();
+	type Param =
+		(SRes<RenderAssets<Mesh>>, SQuery<Read<Handle<Mesh>>>, SQuery<Read<InstanceBuffer>>);
+	#[inline]
+	fn render<'w>(
+		_view: Entity,
+		item: Entity,
+		(meshes, mesh_query, instance_buffer_query): SystemParamItem<'w, '_, Self::Param>,
+		pass: &mut TrackedRenderPass<'w>,
+	) -> RenderCommandResult {
+		let mesh_handle = mesh_query.get(item).unwrap();
+		let instance_buffer = instance_buffer_query.get_inner(item).unwrap();
 
-        let gpu_mesh = match meshes.into_inner().get(mesh_handle) {
-            Some(gpu_mesh) => gpu_mesh,
-            None => return RenderCommandResult::Failure,
-        };
+		let gpu_mesh = match meshes.into_inner().get(mesh_handle) {
+			Some(gpu_mesh) => gpu_mesh,
+			None => return RenderCommandResult::Failure,
+		};
 
-        pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
-        pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
+		pass.set_vertex_buffer(0, gpu_mesh.vertex_buffer.slice(..));
+		pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
 
-        match &gpu_mesh.buffer_info {
-            GpuBufferInfo::Indexed {
-                buffer,
-                index_format,
-                count,
-            } => {
-                pass.set_index_buffer(buffer.slice(..), 0, *index_format);
-                pass.draw_indexed(0..*count, 0, 0..instance_buffer.length as u32);
-            }
-            GpuBufferInfo::NonIndexed { vertex_count } => {
-                pass.draw(0..*vertex_count, 0..instance_buffer.length as u32);
-            }
-        }
-        RenderCommandResult::Success
-    }
+		match &gpu_mesh.buffer_info {
+			GpuBufferInfo::Indexed { buffer, index_format, count } => {
+				pass.set_index_buffer(buffer.slice(..), 0, *index_format);
+				pass.draw_indexed(0..*count, 0, 0..instance_buffer.length as u32);
+			},
+			GpuBufferInfo::NonIndexed { vertex_count } => {
+				pass.draw(0..*vertex_count, 0..instance_buffer.length as u32);
+			},
+		}
+		RenderCommandResult::Success
+	}
 }
 
 /// Yes this is now a verb. Who knew?
@@ -2125,7 +2123,7 @@ struct ResourceHandles {
 
 	chain_rect_mesh: Handle<Mesh>,
 	darkside_rect_material: Handle<StandardMaterial>,
-	lightside_rect_material: Handle<StandardMaterial>
+	lightside_rect_material: Handle<StandardMaterial>,
 }
 
 /// set up a simple 3D scene
@@ -2166,10 +2164,8 @@ fn setup(
 			unlit: true,
 			..default()
 		}),
-		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.)))
+		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
 	};
-
-
 
 	commands.insert_resource(handles);
 
@@ -2227,9 +2223,6 @@ fn setup(
 		.insert(Viewport)
 		.insert_bundle(PickingCameraBundle { ..default() });
 
-
-	
-
 	// #[cfg(feature = "spacemouse")]
 	// entity_comands.insert(SpaceMouseRelativeControllable);
 
@@ -2250,7 +2243,7 @@ fn setup(
 
 	// Kick off the live mode automatically so people have something to look at
 	datasource_events.send(DataSourceChangedEvent {
-		//source: "dotsama:/1//10504599".to_string(), 
+		//source: "dotsama:/1//10504599".to_string(),
 		// source: "local:live".to_string(),
 		source: "dotsama:live".to_string(),
 		timestamp: None,

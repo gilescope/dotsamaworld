@@ -1,11 +1,7 @@
-use crate::DATASOURCE_EPOC;
-use crate::do_datasources;
-use crate::UPDATE_QUEUE;
-use crate::BASETIME;
-use crate::BridgeMessage;
+use crate::{
+	datasource, do_datasources, log, BridgeMessage, BASETIME, DATASOURCE_EPOC, UPDATE_QUEUE,
+};
 use core::sync::atomic::Ordering;
-use crate::datasource;
-use crate::log;
 
 macro_rules! log {
     // Note that this is using the `log` function imported above during
@@ -15,7 +11,6 @@ macro_rules! log {
 
 use core::time::Duration;
 use gloo_worker::WorkerScope;
-
 
 use gloo_worker::{HandlerId, Worker};
 

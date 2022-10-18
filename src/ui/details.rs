@@ -18,7 +18,8 @@ pub enum Success {
 }
 
 #[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
-pub struct Details//<'scale> - would require details being stored somewhere with ids.
+pub struct Details
+//<'scale> - would require details being stored somewhere with ids.
 {
 	pub pallet: String,
 	pub doturl: DotUrl,

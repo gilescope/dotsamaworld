@@ -37,7 +37,7 @@ impl TryFrom<&str> for Env {
 		match val {
 			"dotsama" => Ok(Env::Prod),
 			"local" => Ok(Env::Local),
-			_ => Err(())
+			_ => Err(()),
 		}
 	}
 }
@@ -337,9 +337,11 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 			//TODO: we should have different ports for kusama and polkadot
 			// so both can exist at the same time.
 			vec![
-				vec![(None,"ws://127.0.0.1:9900"), 
-				(para_id!(1000), "ws://127.0.0.1:9910"), 
-				(para_id!(2000),"ws://127.0.0.1:9920")],
+				vec![
+					(None, "ws://127.0.0.1:9900"),
+					(para_id!(1000), "ws://127.0.0.1:9910"),
+					(para_id!(2000), "ws://127.0.0.1:9920"),
+				],
 				// vec!["ws://127.0.0.1:9944", "ws://127.0.0.1:9966", "ws://127.0.0.1:9920"]
 			]
 		},

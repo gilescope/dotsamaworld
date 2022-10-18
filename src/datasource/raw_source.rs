@@ -342,7 +342,7 @@ impl Source for RawDataSource {
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError> {
 		if let Some(client) = self.client().await {
-			let opt = block_hash.map(|b|hex::encode(b.as_bytes()));
+			let opt = block_hash.map(|b| hex::encode(b.as_bytes()));
 			let result = client.query_block(opt.as_deref()).await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
