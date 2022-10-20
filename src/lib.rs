@@ -1507,7 +1507,7 @@ fn add_blocks(
 			instances.0.push(InstanceData {
 				position: Vec3::new(x, y, z),
 				scale: base_y + target_y * build_dir,
-				color: style.color.as_rgba_f32(),
+				color: style.color.as_rgba_u32(),
 			});
 
 			// let mut x = commands.spawn_bundle(PbrBundle {

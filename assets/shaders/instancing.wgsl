@@ -13,7 +13,7 @@ struct Vertex {
     @location(2) uv: vec2<f32>,
 
     @location(3) i_pos_scale: vec4<f32>,
-    @location(4) i_color: vec4<f32>,
+    @location(4) i_color: u32,
 };
 
 struct VertexOutput {
@@ -28,7 +28,9 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     //TODO: don't need to copy it to shader.
     var out: VertexOutput;
     out.clip_position = mesh_position_local_to_clip(mesh.model, vec4<f32>(position, 1.0));
-    out.color = vertex.i_color;
+    // out.color = vertex.i_color;
+    out.color = vec4<f32>((vec4<u32>(vertex.i_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
+            vec4<u32>(255u)) / 255.0;
     return out;
 }
 

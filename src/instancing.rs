@@ -29,23 +29,28 @@ use bytemuck::{Pod, Zeroable};
 pub(super) struct InstanceMaterialData(pub(super) Vec<InstanceData>);
 
 impl ExtractComponent for InstanceMaterialData {
-	type Query = (&'static InstanceMaterialData, &'static Frustum);
+	// type Query = (&'static InstanceMaterialData, &'static Frustum);
+    type Query = &'static InstanceMaterialData;
 	type Filter = ();
 
 	// Frustum cull at extract
 	fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
 		//Todo: make frustum planes slightly bigger by half a box width so sphere can be point.
-		InstanceMaterialData(
-			item.0
-				 .0
-				.iter()
-				.filter_map(|i| {
-					item.1
-						.intersects_sphere(&Sphere { center: i.position.into(), radius: 5. }, false)
-						.then(|| i.clone())
-				})
-				.collect::<Vec<_>>(),
-		)
+		
+        InstanceMaterialData(
+			item.0.clone())
+
+        // InstanceMaterialData(
+		// 	item.0
+		// 		 .0
+		// 		.iter()
+		// 		.filter_map(|i| {
+		// 			item.1
+		// 				.intersects_sphere(&Sphere { center: i.position.into(), radius: 5. }, false)
+		// 				.then(|| i.clone())
+		// 		})
+		// 		.collect::<Vec<_>>(),
+		// )
 	}
 }
 
@@ -67,12 +72,14 @@ impl Plugin for CustomMaterialPlugin {
 #[repr(C)]
 pub(super) struct InstanceData {
 	pub(super) position: Vec3,
+	// Destination height of rain.
 	pub(super) scale: f32,
-	pub(super) color: [f32; 4],
-	// TODO: color can be a u32!
-	//  // Unpack the `u32` from the vertex buffer into the `vec4<f32>` used by the fragment shader
-	//    out.color = vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
-	// vec4<u32>(255u)) / 255.0;
+	pub(super) color: u32, /* 4], */
+	                       /* TODO: color can be a u32!
+	                        *  // Unpack the `u32` from the vertex buffer into the `vec4<f32>`
+	                        * used by the fragment shader    out.color =
+	                        * vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u))
+	                        * & vec4<u32>(255u)) / 255.0; */
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -168,7 +175,7 @@ impl SpecializedMeshPipeline for CustomPipeline {
 					                     * and UV attributes */
 				},
 				VertexAttribute {
-					format: VertexFormat::Float32x4,
+					format: VertexFormat::Uint32,
 					offset: VertexFormat::Float32x4.size(),
 					shader_location: 4,
 				},
