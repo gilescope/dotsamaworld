@@ -1,3 +1,4 @@
+use crate::{Viewport, SHADER_HANDLE};
 use bevy::{
 	core_pipeline::core_3d::Transparent3d,
 	ecs as bevy_ecs,
@@ -7,7 +8,7 @@ use bevy::{
 	render::{
 		extract_component::{ExtractComponent, ExtractComponentPlugin},
 		mesh::{GpuBufferInfo, MeshVertexBufferLayout},
-		primitives::Frustum,
+		primitives::{Frustum, Sphere},
 		render_asset::RenderAssets,
 		render_phase::{
 			AddRenderCommand, DrawFunctions, EntityRenderCommand, RenderCommandResult, RenderPhase,
@@ -20,37 +21,26 @@ use bevy::{
 	},
 };
 use bevy_ecs::prelude::Component;
-
-use crate::SHADER_HANDLE;
-use bevy::render::primitives::Sphere;
 use bytemuck::{Pod, Zeroable};
 
-#[derive(Component, Deref)]
-pub(super) struct InstanceMaterialData(pub(super) Vec<InstanceData>);
+#[derive(Component)]
+pub(super) struct InstanceMaterialData(pub(super) Vec<InstanceData>, pub(super) Vec<bool>);
 
 impl ExtractComponent for InstanceMaterialData {
-	// type Query = (&'static InstanceMaterialData, &'static Frustum);
-    type Query = &'static InstanceMaterialData;
+	type Query = &'static InstanceMaterialData;
 	type Filter = ();
 
-	// Frustum cull at extract
-	fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
+	fn extract_component(query: bevy::ecs::query::QueryItem<Self::Query>) -> Self {
 		//Todo: make frustum planes slightly bigger by half a box width so sphere can be point.
-		
-        InstanceMaterialData(
-			item.0.clone())
-
-        // InstanceMaterialData(
-		// 	item.0
-		// 		 .0
-		// 		.iter()
-		// 		.filter_map(|i| {
-		// 			item.1
-		// 				.intersects_sphere(&Sphere { center: i.position.into(), radius: 5. }, false)
-		// 				.then(|| i.clone())
-		// 		})
-		// 		.collect::<Vec<_>>(),
-		// )
+		return InstanceMaterialData(
+			query
+				.0
+				.iter()
+				.zip(query.1.iter())
+				.filter_map(|(i, visible)| if *visible { Some(i.clone()) } else { None })
+				.collect(),
+			vec![],
+		)
 	}
 }
 
@@ -74,12 +64,7 @@ pub(super) struct InstanceData {
 	pub(super) position: Vec3,
 	// Destination height of rain.
 	pub(super) scale: f32,
-	pub(super) color: u32, /* 4], */
-	                       /* TODO: color can be a u32!
-	                        *  // Unpack the `u32` from the vertex buffer into the `vec4<f32>`
-	                        * used by the fragment shader    out.color =
-	                        * vec4<f32>((vec4<u32>(vertex.color) >> vec4<u32>(0u, 8u, 16u, 24u))
-	                        * & vec4<u32>(255u)) / 255.0; */
+	pub(super) color: u32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -131,12 +116,12 @@ fn prepare_instance_buffers(
 	for (entity, instance_data) in &query {
 		let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
 			label: Some("instance data buffer"),
-			contents: bytemuck::cast_slice(instance_data.as_slice()),
+			contents: bytemuck::cast_slice(instance_data.0.as_slice()),
 			usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
 		});
 		commands
 			.entity(entity)
-			.insert(InstanceBuffer { buffer, length: instance_data.len() });
+			.insert(InstanceBuffer { buffer, length: instance_data.0.len() });
 	}
 }
 

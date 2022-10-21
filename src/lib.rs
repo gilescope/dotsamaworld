@@ -20,17 +20,19 @@ use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
 #[cfg(target_arch = "wasm32")]
 use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
+use crate::{instancing::CustomMaterialPlugin, movement::Destination, ui::UrlBar};
 #[cfg(feature = "adaptive-fps")]
 use bevy::diagnostic::Diagnostics;
-
-use crate::{instancing::CustomMaterialPlugin, movement::Destination, ui::UrlBar};
 use bevy::{
 	asset::load_internal_asset,
 	diagnostic::FrameTimeDiagnosticsPlugin,
 	ecs as bevy_ecs,
 	prelude::*,
 	reflect::TypeUuid,
-	render::view::{ComputedVisibility, Msaa, NoFrustumCulling, Visibility},
+	render::{
+		primitives::{Frustum, Sphere},
+		view::{ComputedVisibility, Msaa, NoFrustumCulling, Visibility},
+	},
 	window::RequestRedraw,
 };
 use bevy_ecs::prelude::Component;
@@ -449,7 +451,7 @@ fn source_data(
 			.spawn()
 			.insert_bundle((
 				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-				InstanceMaterialData(vec![]),
+				InstanceMaterialData(vec![], vec![]),
 				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
 				// lines
 				Transform::from_xyz(0., 0., 0.),
@@ -1509,6 +1511,7 @@ fn add_blocks(
 				scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
 			});
+			instances.1.push(false);
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
 			// 	mesh,
@@ -1787,11 +1790,24 @@ fn update_visibility(
 	mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
 	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
+	frustum: Query<&Frustum, With<Viewport>>,
+	mut instances: Query<(Entity, &mut InstanceMaterialData)>,
 	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
 	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
+
+	let frustum: &Frustum = frustum.get_single().unwrap();
+	let mut instance_data = instances.get_single_mut().unwrap().1;
+
+	let mut new_vis = vec![];
+	for instance in instance_data.0.iter() {
+		let vis = frustum
+			.intersects_sphere(&Sphere { center: instance.position.into(), radius: 5. }, false);
+		new_vis.push(vis);
+	}
+	instance_data.1 = new_vis;
 
 	let transform: &Transform = player_query.get_single().unwrap();
 	let x = transform.translation.x;
