@@ -1510,6 +1510,7 @@ fn add_blocks(
 				position: Vec3::new(x, y, z),
 				scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
+				flags: 0,
 			});
 			instances.1.push(false);
 

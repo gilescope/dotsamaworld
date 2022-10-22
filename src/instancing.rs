@@ -65,6 +65,7 @@ pub(super) struct InstanceData {
 	// Destination height of rain.
 	pub(super) scale: f32,
 	pub(super) color: u32,
+	pub(super) flags: u32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -163,6 +164,11 @@ impl SpecializedMeshPipeline for CustomPipeline {
 					format: VertexFormat::Uint32,
 					offset: VertexFormat::Float32x4.size(),
 					shader_location: 4,
+				},
+                VertexAttribute {
+					format: VertexFormat::Uint32,
+					offset: VertexFormat::Float32x4.size() + VertexFormat::Uint32.size(),
+					shader_location: 5,
 				},
 			],
 		});

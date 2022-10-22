@@ -14,6 +14,7 @@ struct Vertex {
 
     @location(3) i_pos_scale: vec4<f32>,
     @location(4) i_color: u32,
+    @location(5) i_flags: u32,
 };
 
 struct VertexOutput {

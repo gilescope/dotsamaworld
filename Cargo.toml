@@ -203,11 +203,21 @@ opt-level = 1
 [profile.release]
 lto = true
 opt-level = 's'
+debug = false
 debuginfo = 0
 strip = "debuginfo" # strip symbols brakes it findong the worker.
 codegen-units = 1
 panic = "abort"
 incremental = false
+
+[profile.profiling]
+lto = true
+opt-level = 's'
+debug = true
+# strip = "debuginfo" # strip symbols brakes it findong the worker.
+codegen-units = 1
+# panic = "abort"
+incremental = true
 
 
 [profile.dev.package.backtrace]
