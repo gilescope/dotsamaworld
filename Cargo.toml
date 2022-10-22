@@ -124,7 +124,9 @@ bevy = { version = "0.8.1", default-features = false, features = [
     "dynamic",
 ] }
 
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["wss"]}
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791d468b7ed1387feee81c54473e608a", features = [
+    "wss",
+] }
 # polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "wss",
 # ] }
@@ -147,7 +149,9 @@ getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "*"
 ws_stream_wasm = "*"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev="a1a85669791d468b7ed1387feee81c54473e608a", features = ["ws-web"]}
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791d468b7ed1387feee81c54473e608a", features = [
+    "ws-web",
+] }
 # polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
 #     "ws-web",
 # ] }
@@ -204,13 +208,13 @@ opt-level = 1
 lto = true
 opt-level = 's'
 debug = false
-debuginfo = 0
 strip = "debuginfo" # strip symbols brakes it findong the worker.
 codegen-units = 1
 panic = "abort"
 incremental = false
 
 [profile.profiling]
+inherits = "release"
 lto = true
 opt-level = 's'
 debug = true

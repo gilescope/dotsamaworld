@@ -426,6 +426,12 @@ struct SourceDataTask(
 	bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>,
 );
 
+#[derive(Component)]
+struct EventInstances;
+
+#[derive(Component)]
+struct ExtrinsicInstances;
+
 // fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) //+ Send + Sync + 'static
 // {
 // 	log!("got a block!!!");
@@ -450,6 +456,32 @@ fn source_data(
 		commands
 			.spawn()
 			.insert_bundle((
+				handles.sphere_mesh.clone(), //todo xcm different? block_mesh
+				InstanceMaterialData(vec![], vec![]),
+				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+				// lines
+				Transform::from_xyz(0., 0., 0.),
+				GlobalTransform::default(),
+				Visibility::default(),
+				ComputedVisibility::default(),
+				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+				// view frustum, all the instanced cubes will be culled.
+				// The InstanceMaterialData contains the 'GlobalTransform' information for this
+				// custom instancing, and that is not taken into account with the built-in frustum
+				// culling. We must disable the built-in frustum culling by adding the
+				// `NoFrustumCulling` marker component to avoid incorrect culling.
+				NoFrustumCulling,
+			))
+		//	.insert_bundle(PickableBundle::default())
+			.insert(Name::new("BlockEvent"))
+			.insert(ClearMe)
+			.insert(HiFi)
+			.insert(EventInstances);
+
+		commands
+			.spawn()
+			.insert_bundle((
 				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
 				InstanceMaterialData(vec![], vec![]),
 				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
@@ -467,10 +499,11 @@ fn source_data(
 				// `NoFrustumCulling` marker component to avoid incorrect culling.
 				NoFrustumCulling,
 			))
-			.insert_bundle(PickableBundle::default())
-			.insert(Name::new("BlockEvent"))
+//			.insert_bundle(PickableBundle::default())
+			.insert(Name::new("BlockExtrinsic"))
 			.insert(ClearMe)
-			.insert(HiFi);
+			.insert(MedFi)
+			.insert(ExtrinsicInstances);
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -969,14 +1002,12 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
-	mut instances: Query<(Entity, &mut InstanceMaterialData)>,
+	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>)>,
+	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>)>,
 ) {
-	// log!("HEhehehehehehehehe");
-	for (_entity, mut instances) in instances.iter_mut() {
-		// log!("GOOOOOOT HERE");
+	for mut extrinsic_instances in extrinsic_instances.iter_mut() {
+	for mut event_instances in event_instances.iter_mut() {
 		if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-			// web_sys::console::log_1(&format!("check results").into());
-
 			// let is_self_sovereign = false; //TODO
 			//todo this can be 1 queue
 			//for msg in relays.relays.iter().flattern() {
@@ -1232,7 +1263,8 @@ fn render_block(
 							&mut polylines,
 							&encoded,
 							&mut handles,
-							&mut instances,
+							&mut extrinsic_instances,
+							&mut event_instances
 						);
 
 						add_blocks(
@@ -1249,7 +1281,8 @@ fn render_block(
 							&mut polylines,
 							&encoded,
 							&mut handles,
-							&mut instances,
+							&mut extrinsic_instances,
+							&mut event_instances
 						);
 						event.send(RequestRedraw);
 					},
@@ -1261,9 +1294,7 @@ fn render_block(
 			}
 		}
 	}
-	// }
-	// 		}
-	// 	}
+}
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
@@ -1281,14 +1312,16 @@ fn add_blocks(
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
 	handles: &mut ResMut<ResourceHandles>,
-	instances: &mut InstanceMaterialData,
+	extrinsic_instances: &mut InstanceMaterialData,
+	event_instances: &mut InstanceMaterialData,
 ) {
-	log!("instance count {} ", instances.0.len());
+	// log!("instance count {} ", event_instances.0.len());
+	// log!("instance count {} ", extrinsic_instances.0.len());
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
 
-	let mut mat_map = HashMap::new();
+	// let mut mat_map = HashMap::new();
 
 	let layer = chain_info.chain_url.layer() as f32;
 	let (base_x, base_y, base_z) = (
@@ -1321,26 +1354,26 @@ fn add_blocks(
 				next_y[event_num % 81] += DOT_HEIGHT;
 				let dark = block.details().doturl.is_darkside();
 				let style = style::style_event(block);
-				let material = mat_map.entry(style.clone()).or_insert_with(|| {
-					materials.add(if dark {
-						StandardMaterial {
-							base_color: style.color,
-							emissive: style.color,
-							perceptual_roughness: 0.3,
-							metallic: 1.0,
-							..default()
-						}
-					} else {
-						style.color.into()
-					})
-				});
-				let mesh = if content::is_message(block) {
-					handles.xcm_torus_mesh.clone()
-				} else if matches!(block, DataEntity::Extrinsic { .. }) {
-					handles.extrinsic_mesh.clone()
-				} else {
-					handles.sphere_mesh.clone()
-				};
+				// let material = mat_map.entry(style.clone()).or_insert_with(|| {
+				// 	materials.add(if dark {
+				// 		StandardMaterial {
+				// 			base_color: style.color,
+				// 			emissive: style.color,
+				// 			perceptual_roughness: 0.3,
+				// 			metallic: 1.0,
+				// 			..default()
+				// 		}
+				// 	} else {
+				// 		style.color.into()
+				// 	})
+				// });
+				// let mesh = if content::is_message(block) {
+				// 	handles.xcm_torus_mesh.clone()
+				// } else if matches!(block, DataEntity::Extrinsic { .. }) {
+				// 	handles.extrinsic_mesh.clone()
+				// } else {
+				// 	handles.sphere_mesh.clone()
+				// };
 
 				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
@@ -1396,40 +1429,48 @@ fn add_blocks(
 						.push(MessageSource { id: link.to_string(), link_type: *link_type });
 				}
 
-				let mut bun = commands.spawn_bundle(PbrBundle {
-					mesh,
-					/// * event.blocknum as f32
-					material: material.clone(),
-					transform,
-					..Default::default()
+				// let mut bun = commands.spawn_bundle(PbrBundle {
+				// 	mesh,
+				// 	/// * event.blocknum as f32
+				// 	material: material.clone(),
+				// 	transform,
+				// 	..Default::default()
+				// });
+
+				// bun.insert_bundle(PickableBundle::default())
+				// 	.insert(block.details().clone())
+				// 	// .insert(Details {
+				// 	// 	// hover: format_entity(block),
+				// 	// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
+				// 	// 	doturl: block.dot().clone(),
+				// 	// 	flattern: block.details().flattern.clone(),
+				// 	// 	url: format!(
+				// 	// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
+				// 	// 		&encoded, &call_data
+				// 	// 	),
+				// 	// 	parent: None,
+				// 	// 	success: ui::details::Success::Happy,
+				// 	// 	pallet: block.pallet().to_string(),
+				// 	// 	variant: block.variant().to_string(),
+				// 	// 	raw: block.as_bytes().to_vec(),
+				// 	// 	value: block.details().value
+				// 	// })
+				// 	.insert(ClearMe)
+				// 	// .insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
+				// 	.insert(Name::new("Extrinsic"))
+				// 	.insert(MedFi);
+
+				extrinsic_instances.0.push(InstanceData {
+					position: Vec3::new(px, py, pz * rflip),
+					scale: base_y + target_y * build_dir,
+					color: style.color.as_rgba_u32(),
+					flags: 0,
 				});
+				extrinsic_instances.1.push(false);
 
-				bun.insert_bundle(PickableBundle::default())
-					.insert(block.details().clone())
-					// .insert(Details {
-					// 	// hover: format_entity(block),
-					// 	// data: (block).clone(),http://192.168.1.241:3000/#/extrinsics/decode?calldata=0
-					// 	doturl: block.dot().clone(),
-					// 	flattern: block.details().flattern.clone(),
-					// 	url: format!(
-					// 		"https://polkadot.js.org/apps/?{}#/extrinsics/decode/{}",
-					// 		&encoded, &call_data
-					// 	),
-					// 	parent: None,
-					// 	success: ui::details::Success::Happy,
-					// 	pallet: block.pallet().to_string(),
-					// 	variant: block.variant().to_string(),
-					// 	raw: block.as_bytes().to_vec(),
-					// 	value: block.details().value
-					// })
-					.insert(ClearMe)
-					// .insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-					.insert(Name::new("Extrinsic"))
-					.insert(MedFi);
-
-				for source in create_source {
-					bun.insert(source);
-				}
+				// for source in create_source {
+				// 	bun.insert(source);
+				// }
 			}
 		}
 
@@ -1506,13 +1547,13 @@ fn add_blocks(
 			// ));
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
-			instances.0.push(InstanceData {
+			event_instances.0.push(InstanceData {
 				position: Vec3::new(x, y, z),
 				scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
 				flags: 0,
 			});
-			instances.1.push(false);
+			event_instances.1.push(false);
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
 			// 	mesh,
@@ -1792,7 +1833,7 @@ fn update_visibility(
 	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
 	frustum: Query<&Frustum, With<Viewport>>,
-	mut instances: Query<(Entity, &mut InstanceMaterialData)>,
+	mut instances: Query<&mut InstanceMaterialData>,
 	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
 	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
@@ -1800,15 +1841,17 @@ fn update_visibility(
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 
 	let frustum: &Frustum = frustum.get_single().unwrap();
-	let mut instance_data = instances.get_single_mut().unwrap().1;
+	for mut instance_data in instances.iter_mut() {
+		//let mut instance_data = instances.get_single_mut().unwrap().1;
 
-	let mut new_vis = vec![];
-	for instance in instance_data.0.iter() {
-		let vis = frustum
-			.intersects_sphere(&Sphere { center: instance.position.into(), radius: 5. }, false);
-		new_vis.push(vis);
+		let mut new_vis = vec![];
+		for instance in instance_data.0.iter() {
+			let vis = frustum
+				.intersects_sphere(&Sphere { center: instance.position.into(), radius: 5. }, false);
+			new_vis.push(vis);
+		}
+		instance_data.1 = new_vis;
 	}
-	instance_data.1 = new_vis;
 
 	let transform: &Transform = player_query.get_single().unwrap();
 	let x = transform.translation.x;
