@@ -479,7 +479,7 @@ fn source_data(
 				// `NoFrustumCulling` marker component to avoid incorrect culling.
 				NoFrustumCulling,
 			))
-		//	.insert_bundle(PickableBundle::default())
+			//	.insert_bundle(PickableBundle::default())
 			.insert(Name::new("BlockEvent"))
 			.insert(ClearMe)
 			.insert(HiFi)
@@ -505,7 +505,7 @@ fn source_data(
 				// `NoFrustumCulling` marker component to avoid incorrect culling.
 				NoFrustumCulling,
 			))
-//			.insert_bundle(PickableBundle::default())
+			//			.insert_bundle(PickableBundle::default())
 			.insert(Name::new("BlockExtrinsic"))
 			.insert(ClearMe)
 			.insert(MedFi)
@@ -555,7 +555,7 @@ fn source_data(
 				// `NoFrustumCulling` marker component to avoid incorrect culling.
 				NoFrustumCulling,
 			))
-//			.insert_bundle(PickableBundle::default())
+			//			.insert_bundle(PickableBundle::default())
 			.insert(Name::new("Chain"))
 			.insert(ClearMe)
 			// .insert(LoFi)
@@ -806,8 +806,11 @@ async fn do_datasources<F, R>(
 	}
 }
 
-fn draw_chain_rect(handles: &ResourceHandles, chain_info: &ChainInfo, commands: &mut Commands,
-	chain_instances: &mut InstanceMaterialData
+fn draw_chain_rect(
+	handles: &ResourceHandles,
+	chain_info: &ChainInfo,
+	commands: &mut Commands,
+	chain_instances: &mut InstanceMaterialData,
 ) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
@@ -850,17 +853,18 @@ fn draw_chain_rect(handles: &ResourceHandles, chain_info: &ChainInfo, commands: 
 	};
 
 	chain_instances.0.push(InstanceData {
-		position: Vec3::new((10000. / 2.) - 35.,
-				if is_relay { 0. } else { LAYER_GAP },
-				((RELAY_CHAIN_CHASM_WIDTH - 5.) +
-					(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
-					rfip),
+		position: Vec3::new(
+			(10000. / 2.) - 35.,
+			if is_relay { 0. } else { LAYER_GAP },
+			((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
+				rfip,
+		),
 		scale: 0.,
 		color: if chain_info.chain_url.is_darkside() {
-			Color::Rgba{red:0.2, green:0.2, blue:0.2, alpha:1.}.as_rgba_u32()
+			Color::Rgba { red: 0.2, green: 0.2, blue: 0.2, alpha: 1. }.as_rgba_u32()
 		} else {
-			Color::Rgba{red:0.4, green:0.4, blue:0.4, alpha:1.}.as_rgba_u32()
-			},
+			Color::Rgba { red: 0.4, green: 0.4, blue: 0.4, alpha: 1. }.as_rgba_u32()
+		},
 		flags: 0,
 	});
 	chain_instances.1.push(true);
@@ -1074,315 +1078,365 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	mut handles: ResMut<ResourceHandles>,
-	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>,Without<BlockInstances>, Without<ChainInstances>)>,
-	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>, Without<BlockInstances>, Without<ChainInstances>)>,
-	mut block_instances: Query<&mut InstanceMaterialData, (With<BlockInstances>,Without<EventInstances>, Without<ExtrinsicInstances>, Without<ChainInstances>)>,
-	mut chain_instances: Query<&mut InstanceMaterialData, (With<ChainInstances>,Without<EventInstances>, Without<ExtrinsicInstances>, Without<BlockInstances>)>,
+	mut event_instances: Query<
+		&mut InstanceMaterialData,
+		(
+			With<EventInstances>,
+			Without<ExtrinsicInstances>,
+			Without<BlockInstances>,
+			Without<ChainInstances>,
+		),
+	>,
+	mut extrinsic_instances: Query<
+		&mut InstanceMaterialData,
+		(
+			With<ExtrinsicInstances>,
+			Without<EventInstances>,
+			Without<BlockInstances>,
+			Without<ChainInstances>,
+		),
+	>,
+	mut block_instances: Query<
+		&mut InstanceMaterialData,
+		(
+			With<BlockInstances>,
+			Without<EventInstances>,
+			Without<ExtrinsicInstances>,
+			Without<ChainInstances>,
+		),
+	>,
+	mut chain_instances: Query<
+		&mut InstanceMaterialData,
+		(
+			With<ChainInstances>,
+			Without<EventInstances>,
+			Without<ExtrinsicInstances>,
+			Without<BlockInstances>,
+		),
+	>,
 ) {
 	for mut extrinsic_instances in extrinsic_instances.iter_mut() {
-	for mut event_instances in event_instances.iter_mut() {
-	for mut block_instances in block_instances.iter_mut() {
-		if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-			// let is_self_sovereign = false; //TODO
-			//todo this can be 1 queue
-			//for msg in relays.relays.iter().flattern() {
-			//	 for rrelay in &relays.relays {
-			//	 	for cchain in rrelay.iter() {
-			// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
-			// for chain in relay.iter() {
-			//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
-			//		let chain_info = &cchain.info;
-			if let Some(data_update) = (*block_events).pop() {
-				// web_sys::console::log_1(&format!("got results").into());
-				match data_update {
-					DataUpdate::NewBlock(block) => {
-						// web_sys::console::log_1(&format!("got results on main rendere").into());
+		for mut event_instances in event_instances.iter_mut() {
+			for mut block_instances in block_instances.iter_mut() {
+				let mut data_update: Option<DataUpdate> = None;
+				if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
+					// let is_self_sovereign = false; //TODO
+					//todo this can be 1 queue
+					//for msg in relays.relays.iter().flattern() {
+					//	 for rrelay in &relays.relays {
+					//	 	for cchain in rrelay.iter() {
+					// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
+					// for chain in relay.iter() {
+					//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
+					//		let chain_info = &cchain.info;
+					data_update = (*block_events).pop();
+				}
+				if let Some(data_update) = data_update {
+					// web_sys::console::log_1(&format!("got results").into());
+					match data_update {
+						DataUpdate::NewBlock(block) => {
+							// web_sys::console::log_1(&format!("got results on main
+							// rendere").into());
 
-						//TODO optimise!
-						let mut chain_info = None;
-						'outer: for r in &relays.relays {
-							for rchain_info in r {
-								if rchain_info.chain_url.contains(&block.blockurl) {
-									// web_sys::console::log_1(&format!("{} contains {}",
-									// rchain_info.chain_url, block.blockurl).into());
-									chain_info = Some(rchain_info);
-									if !rchain_info.chain_url.is_relay() {
-										break 'outer
+							//TODO optimise!
+							let mut chain_info = None;
+							'outer: for r in &relays.relays {
+								for rchain_info in r {
+									if rchain_info.chain_url.contains(&block.blockurl) {
+										// web_sys::console::log_1(&format!("{} contains {}",
+										// rchain_info.chain_url, block.blockurl).into());
+										chain_info = Some(rchain_info);
+										if !rchain_info.chain_url.is_relay() {
+											break 'outer
+										}
 									}
 								}
 							}
-						}
 
-						let chain_info = chain_info.unwrap();
-						// log!("got results on main rendere with chain info");
+							let chain_info = chain_info.unwrap();
+							// log!("got results on main rendere with chain info");
 
-						// println!( - can see from instance counts now if needed.
-						// 	"chains {} blocks {} txs {} events {}",
-						// 	CHAINS.load(Ordering::Relaxed),
-						// 	BLOCKS.load(Ordering::Relaxed),
-						// 	EXTRINSICS.load(Ordering::Relaxed),
-						// 	EVENTS.load(Ordering::Relaxed)
-						// );
-						// log!("block rend chain index {}", chain_info.chain_index);
+							// println!( - can see from instance counts now if needed.
+							// 	"chains {} blocks {} txs {} events {}",
+							// 	CHAINS.load(Ordering::Relaxed),
+							// 	BLOCKS.load(Ordering::Relaxed),
+							// 	EXTRINSICS.load(Ordering::Relaxed),
+							// 	EVENTS.load(Ordering::Relaxed)
+							// );
+							// log!("block rend chain index {}", chain_info.chain_index);
 
-						// Skip data we no longer care about because the datasource has changed
-						let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
-						if block.data_epoc != now_epoc {
-							log!(
-								"discarding out of date block made at {} but we are at {}",
-								block.data_epoc,
-								now_epoc
-							);
-							return
-						}
+							// Skip data we no longer care about because the datasource has changed
+							let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+							if block.data_epoc != now_epoc {
+								log!(
+									"discarding out of date block made at {} but we are at {}",
+									block.data_epoc,
+									now_epoc
+								);
+								return
+							}
 
-						let mut base_time = *BASETIME.lock().unwrap();
-						if base_time == 0 {
-							base_time = block.timestamp.unwrap_or(0);
-							log!("BASETIME set to {}", base_time);
-							*BASETIME.lock().unwrap() = base_time;
-						}
+							let mut base_time = *BASETIME.lock().unwrap();
+							if base_time == 0 {
+								base_time = block.timestamp.unwrap_or(0);
+								log!("BASETIME set to {}", base_time);
+								*BASETIME.lock().unwrap() = base_time;
+							}
 
-						// let block_num = if is_self_sovereign {
-						//     block.blockurl.block_number.unwrap() as u32
-						// } else {
+							// let block_num = if is_self_sovereign {
+							//     block.blockurl.block_number.unwrap() as u32
+							// } else {
 
-						//     if base_time == 0
-						//     if rcount == 0 {
-						//         if chain == 0 &&  {
-						//             //relay
-						//             RELAY_BLOCKS.store(
-						//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-						//                 Ordering::Relaxed,
-						//             );
-						//         }
-						//         RELAY_BLOCKS.load(Ordering::Relaxed)
-						//     } else {
-						//         if chain == 0 {
-						//             //relay
-						//             RELAY_BLOCKS2.store(
-						//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-						//                 Ordering::Relaxed,
-						//             );
-						//         }
-						//         RELAY_BLOCKS2.load(Ordering::Relaxed)
-						//     }
-						// };
+							//     if base_time == 0
+							//     if rcount == 0 {
+							//         if chain == 0 &&  {
+							//             //relay
+							//             RELAY_BLOCKS.store(
+							//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+							//                 Ordering::Relaxed,
+							//             );
+							//         }
+							//         RELAY_BLOCKS.load(Ordering::Relaxed)
+							//     } else {
+							//         if chain == 0 {
+							//             //relay
+							//             RELAY_BLOCKS2.store(
+							//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+							//                 Ordering::Relaxed,
+							//             );
+							//         }
+							//         RELAY_BLOCKS2.load(Ordering::Relaxed)
+							//     }
+							// };
 
-						let rflip = chain_info.chain_url.rflip();
-						let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-							.append_pair("rpc", &chain_info.chain_ws)
-							.finish();
+							let rflip = chain_info.chain_url.rflip();
+							let encoded: String =
+								url::form_urlencoded::Serializer::new(String::new())
+									.append_pair("rpc", &chain_info.chain_ws)
+									.finish();
 
-						let is_relay = chain_info.chain_url.is_relay();
-						let details = Details {
-							doturl: DotUrl {
-								extrinsic: None,
-								event: None,
-								..block.blockurl.clone()
-							},
+							let is_relay = chain_info.chain_url.is_relay();
+							let details = Details {
+								doturl: DotUrl {
+									extrinsic: None,
+									event: None,
+									..block.blockurl.clone()
+								},
 
-							url: format!(
-								"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
-								&encoded,
-								hex::encode(block.blockhash)
-							),
-							..default()
-						};
-						// log!("rendering block from {}", details.doturl);
+								url: format!(
+									"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+									&encoded,
+									hex::encode(block.blockhash)
+								),
+								..default()
+							};
+							// log!("rendering block from {}", details.doturl);
 
-						// println!("block.timestamp {:?}", block.timestamp);
-						// println!("base_time {:?}",base_time);
-						let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+							// println!("block.timestamp {:?}", block.timestamp);
+							// println!("base_time {:?}",base_time);
+							let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
 
-						// Add the new block as a large square on the ground:
-						{
-							let timestamp_color = if chain_info.chain_url.is_relay() {
-								block.timestamp.unwrap()
-							} else {
-								if block.timestamp_parent.is_none() && block.timestamp.is_none() {
-									log!(
-										"skiping block from {} as has no timestamp",
-										details.doturl
-									);
-									return
-								}
-								block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
-							} / 400;
+							// Add the new block as a large square on the ground:
+							{
+								let timestamp_color = if chain_info.chain_url.is_relay() {
+									block.timestamp.unwrap()
+								} else {
+									if block.timestamp_parent.is_none() && block.timestamp.is_none()
+									{
+										log!(
+											"skiping block from {} as has no timestamp",
+											details.doturl
+										);
+										return
+									}
+									block
+										.timestamp_parent
+										.unwrap_or_else(|| block.timestamp.unwrap())
+								} / 400;
 
-							// let transform = Transform::from_translation(Vec3::new(
-							// 	0. + (block_num as f32),
-							// 	if is_relay { 0. } else { LAYER_GAP },
-							// 	(RELAY_CHAIN_CHASM_WIDTH +
-							// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-							// 		rflip,
-							// ));
-							// println!("block created at {:?} blocknum {}", transform,
-							// block_num);
+								// let transform = Transform::from_translation(Vec3::new(
+								// 	0. + (block_num as f32),
+								// 	if is_relay { 0. } else { LAYER_GAP },
+								// 	(RELAY_CHAIN_CHASM_WIDTH +
+								// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+								// 		rflip,
+								// ));
+								// println!("block created at {:?} blocknum {}", transform,
+								// block_num);
 
-							// let mut bun = commands.spawn_bundle(PbrBundle {
-							// 	mesh: handles.block_mesh.clone(),
-							// 	material: materials.add(StandardMaterial {
-							// 		base_color: style::color_block_number(
-							// 			timestamp_color, /* TODO: material needs to be cached by
-							// 			                  * color */
-							// 			chain_info.chain_url.is_darkside(),
-							// 		), // Color::rgba(0., 0., 0., 0.7),
-							// 		alpha_mode: AlphaMode::Blend,
-							// 		perceptual_roughness: 0.08,
-							// 		unlit: block.blockurl.is_darkside(),
-							// 		..default()
-							// 	}),
-							// 	transform,
-							// 	..Default::default()
-							// });
-							// bun.insert(ClearMe);
+								// let mut bun = commands.spawn_bundle(PbrBundle {
+								// 	mesh: handles.block_mesh.clone(),
+								// 	material: materials.add(StandardMaterial {
+								// 		base_color: style::color_block_number(
+								// 			timestamp_color, /* TODO: material needs to be cached by
+								// 			                  * color */
+								// 			chain_info.chain_url.is_darkside(),
+								// 		), // Color::rgba(0., 0., 0., 0.7),
+								// 		alpha_mode: AlphaMode::Blend,
+								// 		perceptual_roughness: 0.08,
+								// 		unlit: block.blockurl.is_darkside(),
+								// 		..default()
+								// 	}),
+								// 	transform,
+								// 	..Default::default()
+								// });
+								// bun.insert(ClearMe);
 
-							block_instances.0.push(InstanceData {
-								position: Vec3::new(0. + (block_num as f32),
-								if is_relay { 0. } else { LAYER_GAP },
-								(RELAY_CHAIN_CHASM_WIDTH +
-									BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-									rflip),
-								scale: 0.,
-								color: style::color_block_number(
+								block_instances.0.push(InstanceData {
+									position: Vec3::new(
+										0. + (block_num as f32),
+										if is_relay { 0. } else { LAYER_GAP },
+										(RELAY_CHAIN_CHASM_WIDTH +
+											BLOCK_AND_SPACER *
+												chain_info.chain_index.abs() as f32) * rflip,
+									),
+									scale: 0.,
+									color: style::color_block_number(
 										timestamp_color,
 										chain_info.chain_url.is_darkside(),
-									).as_rgba_u32(),
-								flags: 0,
-							});
-							block_instances.1.push(false);
+									)
+									.as_rgba_u32(),
+									flags: 0,
+								});
+								block_instances.1.push(false);
 
-							let chain_str = details.doturl.chain_str();
+								let chain_str = details.doturl.chain_str();
 
-							// bun.insert(details)
-							// .insert(Name::new("Block"))
-							// .with_children(|parent| {
-							// 	let material_handle = handles.banner_materials.entry(chain_info.chain_index).or_insert_with(|| {
-							// 		// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
-							// 		// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
-							// 		#[cfg(target_arch="wasm32")]
-							// 		let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
-							// 		#[cfg(not(target_arch="wasm32"))]
-							// 		let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
+								// bun.insert(details)
+								// .insert(Name::new("Block"))
+								// .with_children(|parent| {
+								// 	let material_handle =
+								// handles.banner_materials.entry(chain_info.chain_index).
+								// or_insert_with(|| { 		// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+								// 		// to convert from CID v0 (starts Qm) to CID v1 which most
+								// gateways use. 		#[cfg(target_arch="wasm32")]
+								// 		let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
+								// 		#[cfg(not(target_arch="wasm32"))]
+								// 		let texture_handle =
+								// asset_server.load(&format!("branding/{}.jpeg", chain_str));
 
-							// 		materials.add(StandardMaterial {
-							// 			base_color_texture: Some(texture_handle),
-							// 			alpha_mode: AlphaMode::Blend,
-							// 			unlit: true,
-							// 			..default()
-							// 		})
-							// 	}).clone();
+								// 		materials.add(StandardMaterial {
+								// 			base_color_texture: Some(texture_handle),
+								// 			alpha_mode: AlphaMode::Blend,
+								// 			unlit: true,
+								// 			..default()
+								// 		})
+								// 	}).clone();
 
-							// 	// textured quad - normal
-							// 	let rot =
-							// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+								// 	// textured quad - normal
+								// 	let rot =
+								// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); //
+								// to_radians()
 
-							// 	let transform = Transform {
-							// 		translation: Vec3::new(
-							// 			-7.,
-							// 			0.1,
-							// 			0.,
-							// 		),
-							// 		rotation: rot,
-							// 		..default()
-							// 	};
+								// 	let transform = Transform {
+								// 		translation: Vec3::new(
+								// 			-7.,
+								// 			0.1,
+								// 			0.,
+								// 		),
+								// 		rotation: rot,
+								// 		..default()
+								// 	};
 
-							// 	parent
-							// 		.spawn_bundle(PbrBundle {
-							// 			mesh: handles.banner_mesh.clone(),
-							// 			material: material_handle.clone(),
-							// 			transform,
-							// 			..default()
-							// 		})
-							// 		.insert(Name::new("BillboardDown"))
-							// 		.insert(ClearMe);
+								// 	parent
+								// 		.spawn_bundle(PbrBundle {
+								// 			mesh: handles.banner_mesh.clone(),
+								// 			material: material_handle.clone(),
+								// 			transform,
+								// 			..default()
+								// 		})
+								// 		.insert(Name::new("BillboardDown"))
+								// 		.insert(ClearMe);
 
-							// 	// textured quad - normal
-							// 	let rot =
-							// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-							// 	let transform = Transform {
-							// 		translation: Vec3::new(-7.,0.1,0.),
-							// 		rotation: rot,
-							// 		..default()
-							// 	};
+								// 	// textured quad - normal
+								// 	let rot =
+								// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); //
+								// to_radians() 	let transform = Transform {
+								// 		translation: Vec3::new(-7.,0.1,0.),
+								// 		rotation: rot,
+								// 		..default()
+								// 	};
 
-							// 	parent
-							// 		.spawn_bundle(PbrBundle {
-							// 			mesh: handles.banner_mesh.clone(),
-							// 			material: material_handle,
-							// 			transform,
-							// 			..default()
-							// 		})
-							// 		.insert(Name::new("BillboardUp"))
-							// 		.insert(ClearMe);
-							// })
-							// .insert_bundle(PickableBundle::default());
-						}
-// return;
-						let ext_with_events = datasource::associate_events(
-							block.extrinsics.clone(),
-							block.events.clone(),
-						);
+								// 	parent
+								// 		.spawn_bundle(PbrBundle {
+								// 			mesh: handles.banner_mesh.clone(),
+								// 			material: material_handle,
+								// 			transform,
+								// 			..default()
+								// 		})
+								// 		.insert(Name::new("BillboardUp"))
+								// 		.insert(ClearMe);
+								// })
+								// .insert_bundle(PickableBundle::default());
+							}
+							// return;
+							let ext_with_events = datasource::associate_events(
+								block.extrinsics.clone(),
+								block.events.clone(),
+							);
 
-						// Leave infrastructure events underground and show user activity above
-						// ground.
-						let (boring, fun): (Vec<_>, Vec<_>) =
-							ext_with_events.into_iter().partition(|(e, _)| {
-								if let Some(ext) = e {
-									content::is_utility_extrinsic(ext)
-								} else {
-									true
-								}
-							});
+							// Leave infrastructure events underground and show user activity above
+							// ground.
+							let (boring, fun): (Vec<_>, Vec<_>) =
+								ext_with_events.into_iter().partition(|(e, _)| {
+									if let Some(ext) = e {
+										content::is_utility_extrinsic(ext)
+									} else {
+										true
+									}
+								});
 
-						add_blocks(
-							chain_info,
-							block_num,
-							fun,
-							&mut commands,
-							// &mut meshes,
-							&mut materials,
-							BuildDirection::Up,
-							&block.blockhash,
-							&links,
-							&mut polyline_materials,
-							&mut polylines,
-							&encoded,
-							&mut handles,
-							&mut extrinsic_instances,
-							&mut event_instances
-						);
+							add_blocks(
+								chain_info,
+								block_num,
+								fun,
+								&mut commands,
+								// &mut meshes,
+								&mut materials,
+								BuildDirection::Up,
+								&block.blockhash,
+								&links,
+								&mut polyline_materials,
+								&mut polylines,
+								&encoded,
+								&mut handles,
+								&mut extrinsic_instances,
+								&mut event_instances,
+							);
 
-						add_blocks(
-							chain_info,
-							block_num,
-							boring,
-							&mut commands,
-							// &mut meshes,
-							&mut materials,
-							BuildDirection::Down,
-							&block.blockhash,
-							&links,
-							&mut polyline_materials,
-							&mut polylines,
-							&encoded,
-							&mut handles,
-							&mut extrinsic_instances,
-							&mut event_instances
-						);
-						event.send(RequestRedraw);
-					},
-					DataUpdate::NewChain(chain_info) => {
-						for mut chain_instances in chain_instances.iter_mut() {
-							draw_chain_rect(handles.as_ref(), &chain_info, &mut commands, &mut chain_instances)
-						}
-					},
+							add_blocks(
+								chain_info,
+								block_num,
+								boring,
+								&mut commands,
+								// &mut meshes,
+								&mut materials,
+								BuildDirection::Down,
+								&block.blockhash,
+								&links,
+								&mut polyline_materials,
+								&mut polylines,
+								&encoded,
+								&mut handles,
+								&mut extrinsic_instances,
+								&mut event_instances,
+							);
+							event.send(RequestRedraw);
+						},
+						DataUpdate::NewChain(chain_info) => {
+							for mut chain_instances in chain_instances.iter_mut() {
+								draw_chain_rect(
+									handles.as_ref(),
+									&chain_info,
+									&mut commands,
+									&mut chain_instances,
+								)
+							}
+						},
+					}
 				}
 			}
 		}
-	}
-}
 	}
 }
 
@@ -1404,8 +1458,6 @@ fn add_blocks(
 	extrinsic_instances: &mut InstanceMaterialData,
 	event_instances: &mut InstanceMaterialData,
 ) {
-	// log!("instance count {} ", event_instances.0.len());
-	// log!("instance count {} ", extrinsic_instances.0.len());
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
@@ -1945,8 +1997,8 @@ fn update_visibility(
 
 	// let user_y = y.signum();
 
-	// // If nothing's visible because we're far away make a few things visible so you know which dir
-	// // to go in and can double click to get there...
+	// // If nothing's visible because we're far away make a few things visible so you know which
+	// dir // to go in and can double click to get there...
 	// #[cfg(feature = "adaptive-fps")]
 	// if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
 	// 	let min = diag.history_len();
