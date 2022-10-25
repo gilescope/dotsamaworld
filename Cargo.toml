@@ -215,12 +215,9 @@ incremental = false
 
 [profile.profiling]
 inherits = "release"
-lto = true
-opt-level = 's'
 debug = true
-# strip = "debuginfo" # strip symbols brakes it findong the worker.
-codegen-units = 1
-# panic = "abort"
+strip = "none"
+panic = "unwind"
 incremental = true
 
 

@@ -432,6 +432,9 @@ struct EventInstances;
 #[derive(Component)]
 struct ExtrinsicInstances;
 
+#[derive(Component)]
+struct BlockInstances;
+
 // fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) //+ Send + Sync + 'static
 // {
 // 	log!("got a block!!!");
@@ -504,6 +507,32 @@ fn source_data(
 			.insert(ClearMe)
 			.insert(MedFi)
 			.insert(ExtrinsicInstances);
+
+		commands
+			.spawn()
+			.insert_bundle((
+				handles.block_mesh.clone(), //todo xcm different? block_mesh
+				InstanceMaterialData(vec![], vec![]),
+				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+				// lines
+				Transform::from_xyz(0., 0., 0.),
+				GlobalTransform::default(),
+				Visibility::default(),
+				ComputedVisibility::default(),
+				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+				// view frustum, all the instanced cubes will be culled.
+				// The InstanceMaterialData contains the 'GlobalTransform' information for this
+				// custom instancing, and that is not taken into account with the built-in frustum
+				// culling. We must disable the built-in frustum culling by adding the
+				// `NoFrustumCulling` marker component to avoid incorrect culling.
+				NoFrustumCulling,
+			))
+//			.insert_bundle(PickableBundle::default())
+			.insert(Name::new("Block"))
+			.insert(ClearMe)
+			// .insert(LoFi)
+			.insert(BlockInstances);
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -1001,12 +1030,14 @@ fn render_block(
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
-	mut handles: ResMut<ResourceHandles>, // reader: EventReader<DataSourceStreamEvent>,
-	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>)>,
-	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>)>,
+	mut handles: ResMut<ResourceHandles>,
+	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>,Without<BlockInstances>)>,
+	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>, Without<BlockInstances>)>,
+	mut block_instances: Query<&mut InstanceMaterialData, (With<BlockInstances>,Without<EventInstances>, Without<ExtrinsicInstances>)>,
 ) {
 	for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	for mut event_instances in event_instances.iter_mut() {
+	for mut block_instances in block_instances.iter_mut() {
 		if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
 			// let is_self_sovereign = false; //TODO
 			//todo this can be 1 queue
@@ -1137,102 +1168,116 @@ fn render_block(
 								block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
 							} / 400;
 
-							let transform = Transform::from_translation(Vec3::new(
-								0. + (block_num as f32),
-								if is_relay { 0. } else { LAYER_GAP },
-								(RELAY_CHAIN_CHASM_WIDTH +
-									BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-									rflip,
-							));
+							// let transform = Transform::from_translation(Vec3::new(
+							// 	0. + (block_num as f32),
+							// 	if is_relay { 0. } else { LAYER_GAP },
+							// 	(RELAY_CHAIN_CHASM_WIDTH +
+							// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							// 		rflip,
+							// ));
 							// println!("block created at {:?} blocknum {}", transform,
 							// block_num);
 
-							let mut bun = commands.spawn_bundle(PbrBundle {
-								mesh: handles.block_mesh.clone(),
-								material: materials.add(StandardMaterial {
-									base_color: style::color_block_number(
-										timestamp_color, /* TODO: material needs to be cached by
-										                  * color */
-										chain_info.chain_url.is_darkside(),
-									), // Color::rgba(0., 0., 0., 0.7),
-									alpha_mode: AlphaMode::Blend,
-									perceptual_roughness: 0.08,
-									unlit: block.blockurl.is_darkside(),
-									..default()
-								}),
-								transform,
-								..Default::default()
-							});
+							// let mut bun = commands.spawn_bundle(PbrBundle {
+							// 	mesh: handles.block_mesh.clone(),
+							// 	material: materials.add(StandardMaterial {
+							// 		base_color: style::color_block_number(
+							// 			timestamp_color, /* TODO: material needs to be cached by
+							// 			                  * color */
+							// 			chain_info.chain_url.is_darkside(),
+							// 		), // Color::rgba(0., 0., 0., 0.7),
+							// 		alpha_mode: AlphaMode::Blend,
+							// 		perceptual_roughness: 0.08,
+							// 		unlit: block.blockurl.is_darkside(),
+							// 		..default()
+							// 	}),
+							// 	transform,
+							// 	..Default::default()
+							// });
+							// bun.insert(ClearMe);
 
-							bun.insert(ClearMe);
+							block_instances.0.push(InstanceData {
+								position: Vec3::new(0. + (block_num as f32),
+								if is_relay { 0. } else { LAYER_GAP },
+								(RELAY_CHAIN_CHASM_WIDTH +
+									BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+									rflip),
+								scale: 0.,
+								color: style::color_block_number(
+										timestamp_color,
+										chain_info.chain_url.is_darkside(),
+									).as_rgba_u32(),
+								flags: 0,
+							});
+							block_instances.1.push(false);
 
 							let chain_str = details.doturl.chain_str();
 
-							bun.insert(details)
-							.insert(Name::new("Block"))
-							.with_children(|parent| {
-								let material_handle = handles.banner_materials.entry(chain_info.chain_index).or_insert_with(|| {
-									// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
-									// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
-									#[cfg(target_arch="wasm32")]
-									let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
-									#[cfg(not(target_arch="wasm32"))]
-									let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
+							// bun.insert(details)
+							// .insert(Name::new("Block"))
+							// .with_children(|parent| {
+							// 	let material_handle = handles.banner_materials.entry(chain_info.chain_index).or_insert_with(|| {
+							// 		// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+							// 		// to convert from CID v0 (starts Qm) to CID v1 which most gateways use.
+							// 		#[cfg(target_arch="wasm32")]
+							// 		let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
+							// 		#[cfg(not(target_arch="wasm32"))]
+							// 		let texture_handle = asset_server.load(&format!("branding/{}.jpeg", chain_str));
 
-									materials.add(StandardMaterial {
-										base_color_texture: Some(texture_handle),
-										alpha_mode: AlphaMode::Blend,
-										unlit: true,
-										..default()
-									})
-								}).clone();
+							// 		materials.add(StandardMaterial {
+							// 			base_color_texture: Some(texture_handle),
+							// 			alpha_mode: AlphaMode::Blend,
+							// 			unlit: true,
+							// 			..default()
+							// 		})
+							// 	}).clone();
 
-								// textured quad - normal
-								let rot =
-									Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
+							// 	// textured quad - normal
+							// 	let rot =
+							// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); // to_radians()
 
-								let transform = Transform {
-									translation: Vec3::new(
-										-7.,
-										0.1,
-										0.,
-									),
-									rotation: rot,
-									..default()
-								};
+							// 	let transform = Transform {
+							// 		translation: Vec3::new(
+							// 			-7.,
+							// 			0.1,
+							// 			0.,
+							// 		),
+							// 		rotation: rot,
+							// 		..default()
+							// 	};
 
-								parent
-									.spawn_bundle(PbrBundle {
-										mesh: handles.banner_mesh.clone(),
-										material: material_handle.clone(),
-										transform,
-										..default()
-									})
-									.insert(Name::new("BillboardDown"))
-									.insert(ClearMe);
+							// 	parent
+							// 		.spawn_bundle(PbrBundle {
+							// 			mesh: handles.banner_mesh.clone(),
+							// 			material: material_handle.clone(),
+							// 			transform,
+							// 			..default()
+							// 		})
+							// 		.insert(Name::new("BillboardDown"))
+							// 		.insert(ClearMe);
 
-								// textured quad - normal
-								let rot =
-									Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
-								let transform = Transform {
-									translation: Vec3::new(-7.,0.1,0.),
-									rotation: rot,
-									..default()
-								};
+							// 	// textured quad - normal
+							// 	let rot =
+							// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); // to_radians()
+							// 	let transform = Transform {
+							// 		translation: Vec3::new(-7.,0.1,0.),
+							// 		rotation: rot,
+							// 		..default()
+							// 	};
 
-								parent
-									.spawn_bundle(PbrBundle {
-										mesh: handles.banner_mesh.clone(),
-										material: material_handle,
-										transform,
-										..default()
-									})
-									.insert(Name::new("BillboardUp"))
-									.insert(ClearMe);
-							})
-							.insert_bundle(PickableBundle::default());
+							// 	parent
+							// 		.spawn_bundle(PbrBundle {
+							// 			mesh: handles.banner_mesh.clone(),
+							// 			material: material_handle,
+							// 			transform,
+							// 			..default()
+							// 		})
+							// 		.insert(Name::new("BillboardUp"))
+							// 		.insert(ClearMe);
+							// })
+							// .insert_bundle(PickableBundle::default());
 						}
-
+// return;
 						let ext_with_events = datasource::associate_events(
 							block.extrinsics.clone(),
 							block.events.clone(),
@@ -1295,6 +1340,7 @@ fn render_block(
 		}
 	}
 }
+	}
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
@@ -1461,7 +1507,7 @@ fn add_blocks(
 				// 	.insert(MedFi);
 
 				extrinsic_instances.0.push(InstanceData {
-					position: Vec3::new(px, py, pz * rflip),
+					position: Vec3::new(px, py * build_dir, pz * rflip),
 					scale: base_y + target_y * build_dir,
 					color: style.color.as_rgba_u32(),
 					flags: 0,
