@@ -1,4 +1,4 @@
-use crate::{Viewport, SHADER_HANDLE};
+use crate::SHADER_HANDLE;
 use bevy::{
 	core_pipeline::core_3d::Transparent3d,
 	ecs as bevy_ecs,
@@ -8,7 +8,6 @@ use bevy::{
 	render::{
 		extract_component::{ExtractComponent, ExtractComponentPlugin},
 		mesh::{GpuBufferInfo, MeshVertexBufferLayout},
-		primitives::{Frustum, Sphere},
 		render_asset::RenderAssets,
 		render_phase::{
 			AddRenderCommand, DrawFunctions, EntityRenderCommand, RenderCommandResult, RenderPhase,

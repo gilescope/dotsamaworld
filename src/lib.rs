@@ -435,6 +435,9 @@ struct ExtrinsicInstances;
 #[derive(Component)]
 struct BlockInstances;
 
+#[derive(Component)]
+struct ChainInstances;
+
 // fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) //+ Send + Sync + 'static
 // {
 // 	log!("got a block!!!");
@@ -528,11 +531,35 @@ fn source_data(
 				// `NoFrustumCulling` marker component to avoid incorrect culling.
 				NoFrustumCulling,
 			))
-//			.insert_bundle(PickableBundle::default())
 			.insert(Name::new("Block"))
 			.insert(ClearMe)
-			// .insert(LoFi)
 			.insert(BlockInstances);
+
+		commands
+			.spawn()
+			.insert_bundle((
+				handles.chain_rect_mesh.clone(), //todo xcm different? block_mesh
+				InstanceMaterialData(vec![], vec![]),
+				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+				// lines
+				Transform::from_xyz(0., 0., 0.),
+				GlobalTransform::default(),
+				Visibility::default(),
+				ComputedVisibility::default(),
+				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+				// view frustum, all the instanced cubes will be culled.
+				// The InstanceMaterialData contains the 'GlobalTransform' information for this
+				// custom instancing, and that is not taken into account with the built-in frustum
+				// culling. We must disable the built-in frustum culling by adding the
+				// `NoFrustumCulling` marker component to avoid incorrect culling.
+				NoFrustumCulling,
+			))
+//			.insert_bundle(PickableBundle::default())
+			.insert(Name::new("Chain"))
+			.insert(ClearMe)
+			// .insert(LoFi)
+			.insert(ChainInstances);
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -779,40 +806,64 @@ async fn do_datasources<F, R>(
 	}
 }
 
-fn draw_chain_rect(handles: &ResourceHandles, chain_info: &ChainInfo, commands: &mut Commands) {
+fn draw_chain_rect(handles: &ResourceHandles, chain_info: &ChainInfo, commands: &mut Commands,
+	chain_instances: &mut InstanceMaterialData
+) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
 	let encoded: String = url::form_urlencoded::Serializer::new(String::new())
 		.append_pair("rpc", &chain_info.chain_ws)
 		.finish();
 	let is_relay = chain_info.chain_url.is_relay();
-	commands
-		.spawn_bundle(PbrBundle {
-			mesh: handles.chain_rect_mesh.clone(),
-			material: if chain_info.chain_url.is_darkside() {
-				handles.darkside_rect_material.clone()
-			} else {
-				handles.lightside_rect_material.clone()
-			},
-			transform: Transform::from_translation(Vec3::new(
-				(10000. / 2.) - 35.,
+	// commands
+	// 	.spawn_bundle(PbrBundle {
+	// 		mesh: handles.chain_rect_mesh.clone(),
+	// 		material: if chain_info.chain_url.is_darkside() {
+	// 			handles.darkside_rect_material.clone()
+	// 		} else {
+	// 			handles.lightside_rect_material.clone()
+	// 		},
+	// 		transform: Transform::from_translation(Vec3::new(
+	// 			(10000. / 2.) - 35.,
+	// 			if is_relay { 0. } else { LAYER_GAP },
+	// 			((RELAY_CHAIN_CHASM_WIDTH - 5.) +
+	// 				(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
+	// 				rfip,
+	// 		)),
+
+	// 		..Default::default()
+	// 	})
+	// 	.insert(Details {
+	// 		doturl: DotUrl { block_number: None, ..chain_info.chain_url.clone() },
+	// 		flattern: chain_info.chain_ws.to_string(),
+	// 		url: format!("https://polkadot.js.org/apps/?{}", &encoded),
+	// 		..default()
+	// 	})
+	// 	.insert(Name::new("Blockchain"))
+	// 	.insert(ClearMeAlwaysVisible)
+	// 	.insert(bevy::render::view::NoFrustumCulling);
+
+	let mat = if chain_info.chain_url.is_darkside() {
+		handles.darkside_rect_material.clone()
+	} else {
+		handles.lightside_rect_material.clone()
+	};
+
+	chain_instances.0.push(InstanceData {
+		position: Vec3::new((10000. / 2.) - 35.,
 				if is_relay { 0. } else { LAYER_GAP },
 				((RELAY_CHAIN_CHASM_WIDTH - 5.) +
 					(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
-					rfip,
-			)),
-
-			..Default::default()
-		})
-		.insert(Details {
-			doturl: DotUrl { block_number: None, ..chain_info.chain_url.clone() },
-			flattern: chain_info.chain_ws.to_string(),
-			url: format!("https://polkadot.js.org/apps/?{}", &encoded),
-			..default()
-		})
-		.insert(Name::new("Blockchain"))
-		.insert(ClearMeAlwaysVisible)
-		.insert(bevy::render::view::NoFrustumCulling);
+					rfip),
+		scale: 0.,
+		color: if chain_info.chain_url.is_darkside() {
+			Color::Rgba{red:0.2, green:0.2, blue:0.2, alpha:1.}.as_rgba_u32()
+		} else {
+			Color::Rgba{red:0.4, green:0.4, blue:0.4, alpha:1.}.as_rgba_u32()
+			},
+		flags: 0,
+	});
+	chain_instances.1.push(true);
 }
 
 fn clear_world(
@@ -995,14 +1046,6 @@ struct ClearMe;
 #[derive(Component)]
 struct ClearMeAlwaysVisible;
 
-static CHAINS: AtomicU32 = AtomicU32::new(0);
-
-static BLOCKS: AtomicU32 = AtomicU32::new(0);
-
-static EXTRINSICS: AtomicU32 = AtomicU32::new(0);
-
-static EVENTS: AtomicU32 = AtomicU32::new(0);
-
 // fn pad_system(gamepads: Res<Gamepads>) {
 //     // iterates every active game pad
 //     for gamepad in gamepads.iter() {
@@ -1031,9 +1074,10 @@ fn render_block(
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
 	mut handles: ResMut<ResourceHandles>,
-	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>,Without<BlockInstances>)>,
-	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>, Without<BlockInstances>)>,
-	mut block_instances: Query<&mut InstanceMaterialData, (With<BlockInstances>,Without<EventInstances>, Without<ExtrinsicInstances>)>,
+	mut event_instances: Query<&mut InstanceMaterialData, (With<EventInstances>,Without<ExtrinsicInstances>,Without<BlockInstances>, Without<ChainInstances>)>,
+	mut extrinsic_instances: Query<&mut InstanceMaterialData, (With<ExtrinsicInstances>,Without<EventInstances>, Without<BlockInstances>, Without<ChainInstances>)>,
+	mut block_instances: Query<&mut InstanceMaterialData, (With<BlockInstances>,Without<EventInstances>, Without<ExtrinsicInstances>, Without<ChainInstances>)>,
+	mut chain_instances: Query<&mut InstanceMaterialData, (With<ChainInstances>,Without<EventInstances>, Without<ExtrinsicInstances>, Without<BlockInstances>)>,
 ) {
 	for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	for mut event_instances in event_instances.iter_mut() {
@@ -1072,9 +1116,7 @@ fn render_block(
 						let chain_info = chain_info.unwrap();
 						// log!("got results on main rendere with chain info");
 
-						BLOCKS.fetch_add(1, Ordering::Relaxed);
-
-						// println!(
+						// println!( - can see from instance counts now if needed.
 						// 	"chains {} blocks {} txs {} events {}",
 						// 	CHAINS.load(Ordering::Relaxed),
 						// 	BLOCKS.load(Ordering::Relaxed),
@@ -1332,8 +1374,9 @@ fn render_block(
 						event.send(RequestRedraw);
 					},
 					DataUpdate::NewChain(chain_info) => {
-						CHAINS.fetch_add(1, Ordering::Relaxed);
-						draw_chain_rect(handles.as_ref(), &chain_info, &mut commands)
+						for mut chain_instances in chain_instances.iter_mut() {
+							draw_chain_rect(handles.as_ref(), &chain_info, &mut commands, &mut chain_instances)
+						}
 					},
 				}
 			}
@@ -1395,7 +1438,6 @@ fn add_blocks(
 
 		if let Some(block @ DataEntity::Extrinsic { .. }) = block {
 			for block in std::iter::once(block).chain(block.contains().iter()) {
-				EXTRINSICS.fetch_add(1, Ordering::Relaxed);
 				let target_y = next_y[event_num % 81];
 				next_y[event_num % 81] += DOT_HEIGHT;
 				let dark = block.details().doturl.is_darkside();
@@ -1549,9 +1591,7 @@ fn add_blocks(
 		//         vec![&annoying]
 		//     };
 
-		// let mut instances = vec![];
 		for event in events {
-			EVENTS.fetch_add(1, Ordering::Relaxed);
 			let details = Details {
 				url: format!(
 					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
@@ -1879,7 +1919,7 @@ fn update_visibility(
 	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
 	player_query: Query<&Transform, With<Viewport>>,
 	frustum: Query<&Frustum, With<Viewport>>,
-	mut instances: Query<&mut InstanceMaterialData>,
+	mut instances: Query<&mut InstanceMaterialData, Without<ChainInstances>>,
 	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
 	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
@@ -1899,62 +1939,62 @@ fn update_visibility(
 		instance_data.1 = new_vis;
 	}
 
-	let transform: &Transform = player_query.get_single().unwrap();
-	let x = transform.translation.x;
-	let y = transform.translation.y;
+	// let transform: &Transform = player_query.get_single().unwrap();
+	// let x = transform.translation.x;
+	// let y = transform.translation.y;
 
-	let user_y = y.signum();
+	// let user_y = y.signum();
 
-	// If nothing's visible because we're far away make a few things visible so you know which dir
-	// to go in and can double click to get there...
-	#[cfg(feature = "adaptive-fps")]
-	if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-		let min = diag.history_len();
-		if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-			// println!("avg {}\t{}", avg, visible_width.0);
-			let target = 30.;
-			let avg = avg as f32;
-			if avg < target && visible_width.0 > 100. {
-				visible_width.0 -= (target - avg) / 4.;
-			}
-			// Because of frame rate differences it will go up much faster than it will go down!
-			else if avg > target && visible_width.0 < 1000. {
-				visible_width.0 += (avg - target) / 32.;
-			}
-		}
-	}
+	// // If nothing's visible because we're far away make a few things visible so you know which dir
+	// // to go in and can double click to get there...
+	// #[cfg(feature = "adaptive-fps")]
+	// if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+	// 	let min = diag.history_len();
+	// 	if let Some(avg) = diag.values().map(|&i| i as u32).min() {
+	// 		// println!("avg {}\t{}", avg, visible_width.0);
+	// 		let target = 30.;
+	// 		let avg = avg as f32;
+	// 		if avg < target && visible_width.0 > 100. {
+	// 			visible_width.0 -= (target - avg) / 4.;
+	// 		}
+	// 		// Because of frame rate differences it will go up much faster than it will go down!
+	// 		else if avg > target && visible_width.0 < 1000. {
+	// 			visible_width.0 += (avg - target) / 32.;
+	// 		}
+	// 	}
+	// }
 
-	let width = visible_width.0;
-	let (min, max) = (x - width, x + width);
+	// let width = visible_width.0;
+	// let (min, max) = (x - width, x + width);
 
-	let mut vis_count = 0;
-	for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-		let loc = transform.translation();
-		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-		if vis.is_visible {
-			vis_count += 1;
-		}
-	}
-	for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-		let loc = transform.translation();
-		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-		if y > 500. {
-			vis.is_visible = false;
-		}
-	}
-	for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-		let loc = transform.translation();
-		vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-		if y > 800. {
-			vis.is_visible = false;
-		}
-	}
+	// let mut vis_count = 0;
+	// for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
+	// 	let loc = transform.translation();
+	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+	// 	if vis.is_visible {
+	// 		vis_count += 1;
+	// 	}
+	// }
+	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
+	// 	let loc = transform.translation();
+	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+	// 	if y > 500. {
+	// 		vis.is_visible = false;
+	// 	}
+	// }
+	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
+	// 	let loc = transform.translation();
+	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
+	// 	if y > 800. {
+	// 		vis.is_visible = false;
+	// 	}
+	// }
 
-	if vis_count == 0 {
-		for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
-			vis.is_visible = true;
-		}
-	}
+	// if vis_count == 0 {
+	// 	for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
+	// 		vis.is_visible = true;
+	// 	}
+	// }
 
 	// println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
 }
@@ -2118,10 +2158,10 @@ fn setup(
 	//     transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
 	//     ..Default::default()
 	// });
-	commands.spawn_bundle(PointLightBundle {
-		transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
-		..Default::default()
-	});
+	// commands.spawn_bundle(PointLightBundle {
+	// 	transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
+	// 	..Default::default()
+	// });
 
 	// Kick off the live mode automatically so people have something to look at
 	datasource_events.send(DataSourceChangedEvent {
