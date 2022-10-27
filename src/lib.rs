@@ -807,16 +807,16 @@ async fn do_datasources<F, R>(
 }
 
 fn draw_chain_rect(
-	handles: &ResourceHandles,
+	// handles: &ResourceHandles,
 	chain_info: &ChainInfo,
-	commands: &mut Commands,
+	// commands: &mut Commands,
 	chain_instances: &mut InstanceMaterialData,
 ) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
-	let encoded: String = url::form_urlencoded::Serializer::new(String::new())
-		.append_pair("rpc", &chain_info.chain_ws)
-		.finish();
+	// let encoded: String = url::form_urlencoded::Serializer::new(String::new())
+	// 	.append_pair("rpc", &chain_info.chain_ws)
+	// 	.finish();
 	let is_relay = chain_info.chain_url.is_relay();
 	// commands
 	// 	.spawn_bundle(PbrBundle {
@@ -846,11 +846,11 @@ fn draw_chain_rect(
 	// 	.insert(ClearMeAlwaysVisible)
 	// 	.insert(bevy::render::view::NoFrustumCulling);
 
-	let mat = if chain_info.chain_url.is_darkside() {
-		handles.darkside_rect_material.clone()
-	} else {
-		handles.lightside_rect_material.clone()
-	};
+	// let mat = if chain_info.chain_url.is_darkside() {
+	// 	handles.darkside_rect_material.clone()
+	// } else {
+	// 	handles.lightside_rect_material.clone()
+	// };
 
 	chain_instances.0.push(InstanceData {
 		position: Vec3::new(
@@ -1070,14 +1070,14 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 
 fn render_block(
 	mut commands: Commands,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	// mut materials: ResMut<Assets<StandardMaterial>>,
 	relays: Res<Sovereigns>,
-	asset_server: Res<AssetServer>,
+	// asset_server: Res<AssetServer>,
 	links: Query<(Entity, &MessageSource, &GlobalTransform)>,
 	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	mut polylines: ResMut<Assets<Polyline>>,
 	mut event: EventWriter<RequestRedraw>,
-	mut handles: ResMut<ResourceHandles>,
+	// mut handles: ResMut<ResourceHandles>,
 	mut event_instances: Query<
 		&mut InstanceMaterialData,
 		(
@@ -1293,7 +1293,7 @@ fn render_block(
 								});
 								block_instances.1.push(false);
 
-								let chain_str = details.doturl.chain_str();
+								// let chain_str = details.doturl.chain_str();
 
 								// bun.insert(details)
 								// .insert(Name::new("Block"))
@@ -1384,13 +1384,13 @@ fn render_block(
 								block_num,
 								fun,
 								&mut commands,
-								&mut materials,
+								// &mut materials,
 								BuildDirection::Up,
 								&links,
 								&mut polyline_materials,
 								&mut polylines,
 								&encoded,
-								&mut handles,
+								// &mut handles,
 								&mut extrinsic_instances,
 								&mut event_instances,
 							);
@@ -1400,13 +1400,13 @@ fn render_block(
 								block_num,
 								boring,
 								&mut commands,
-								&mut materials,
+								// &mut materials,
 								BuildDirection::Down,
 								&links,
 								&mut polyline_materials,
 								&mut polylines,
 								&encoded,
-								&mut handles,
+								// &mut handles,
 								&mut extrinsic_instances,
 								&mut event_instances,
 							);
@@ -1415,9 +1415,9 @@ fn render_block(
 						DataUpdate::NewChain(chain_info) => {
 							for mut chain_instances in chain_instances.iter_mut() {
 								draw_chain_rect(
-									handles.as_ref(),
+									// handles.as_ref(),
 									&chain_info,
-									&mut commands,
+									// &mut commands,
 									&mut chain_instances,
 								)
 							}
@@ -1436,13 +1436,13 @@ fn add_blocks(
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
 	commands: &mut Commands,
-	materials: &mut ResMut<Assets<StandardMaterial>>,
+	// materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
-	handles: &mut ResMut<ResourceHandles>,
+	// handles: &mut ResMut<ResourceHandles>,
 	extrinsic_instances: &mut InstanceMaterialData,
 	event_instances: &mut InstanceMaterialData,
 ) {
@@ -1472,13 +1472,13 @@ fn add_blocks(
 
 		let (px, py, pz) = (base_x + x as f32, rain_height[event_num % 81], (base_z + z as f32));
 
-		let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
+		// let transform = Transform::from_translation(Vec3::new(px, py * build_dir, pz * rflip));
 
 		if let Some(block @ DataEntity::Extrinsic { .. }) = block {
 			for block in std::iter::once(block).chain(block.contains().iter()) {
 				let target_y = next_y[event_num % 81];
 				next_y[event_num % 81] += DOT_HEIGHT;
-				let dark = block.details().doturl.is_darkside();
+				// let dark = block.details().doturl.is_darkside();
 				let style = style::style_event(block);
 				// let material = mat_map.entry(style.clone()).or_insert_with(|| {
 				// 	materials.add(if dark {
@@ -1775,12 +1775,12 @@ macro_rules! min {
 
 fn rain(
 	time: Res<Time>,
-	mut drops: Query<(Entity, &mut InstanceMaterialData)>,
+	mut drops: Query<&mut InstanceMaterialData>,
 	mut timer: ResMut<UpdateTimer>,
 ) {
 	let delta = 1.;
 	if timer.timer.tick(time.delta()).just_finished() {
-		for (entity, mut rainable) in drops.iter_mut() {
+		for mut rainable in drops.iter_mut() {
 			for r in rainable.0.iter_mut() {
 				let dest = r.scale;
 				if dest != 0. {
@@ -1931,21 +1931,21 @@ static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
 fn update_visibility(
-	mut entity_low_midfi: Query<(
-		&mut Visibility,
-		&GlobalTransform,
-		With<ClearMe>,
-		Without<HiFi>,
-		Without<MedFi>,
-	)>,
-	mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
-	mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
-	player_query: Query<&Transform, With<Viewport>>,
+	// mut entity_low_midfi: Query<(
+	// 	&mut Visibility,
+	// 	&GlobalTransform,
+	// 	With<ClearMe>,
+	// 	Without<HiFi>,
+	// 	Without<MedFi>,
+	// )>,
+	// mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
+	// mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
+	// player_query: Query<&Transform, With<Viewport>>,
 	frustum: Query<&Frustum, With<Viewport>>,
 	mut instances: Query<&mut InstanceMaterialData, Without<ChainInstances>>,
 	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
-	#[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
-	#[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
+	// #[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
+	// #[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
 

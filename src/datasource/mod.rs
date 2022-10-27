@@ -393,7 +393,7 @@ where
 					end_link: vec![],
 					details: Details {
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-						flattern: "can't yet decode.".to_string(),
+						// flattern: "can't yet decode.".to_string(),
 						url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
@@ -1032,7 +1032,7 @@ async fn process_extrinsic<'a, 'scale>(
 		details: Details {
 			// hover: "".to_string(),
 			doturl: extrinsic_url,
-			flattern: "".to_string(), // format!("{results:#?}"),
+			// flattern: "".to_string(), // format!("{results:#?}"),
 			url: url.to_string(),
 			parent: None,
 			success: crate::ui::details::Success::Happy,

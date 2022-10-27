@@ -22,12 +22,13 @@ pub struct Details
 //<'scale> - would require details being stored somewhere with ids.
 {
 	pub pallet: String,
+	pub variant: String,
+
 	pub doturl: DotUrl,
 	pub parent: Option<u32>,
-	pub variant: String,
 	pub success: Success,
 	// pub hover: String,
-	pub flattern: String,
+	// pub flattern: String,
 	// #[inspectable(label = "Url:")]
 	pub url: String,
 	// pub chain_name: String,
