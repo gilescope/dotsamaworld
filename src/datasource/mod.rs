@@ -267,7 +267,6 @@ where
 								block_number: Some(block_number),
 								..chain_info.chain_url.clone()
 							},
-							blockhash: H256::default(),
 							extrinsics: vec![],
 							events: vec![],
 						})]);
@@ -307,7 +306,7 @@ where
 				loop {
 					let next = source.fetch_block_hash(block_num).await;
 					if let Ok(Some(block_hash)) = next {
-						log!("found new block on {}", source.url());
+						// log!("found new block on {}", source.url());
 						let _ = process_extrinsics(
 							&tx,
 							chain_info.chain_url.clone(),
@@ -448,7 +447,6 @@ where
 			timestamp,
 			timestamp_parent,
 			blockurl,
-			blockhash: block_hash,
 			extrinsics: exts,
 			events,
 		};
@@ -1200,7 +1198,6 @@ pub struct PolkaBlock {
 	pub timestamp: Option<i64>,
 	pub timestamp_parent: Option<i64>,
 	pub blockurl: DotUrl,
-	pub blockhash: H256,
 	pub extrinsics: Vec<DataEntity>,
 	pub events: Vec<DataEvent>,
 }

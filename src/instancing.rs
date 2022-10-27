@@ -164,7 +164,7 @@ impl SpecializedMeshPipeline for CustomPipeline {
 					offset: VertexFormat::Float32x4.size(),
 					shader_location: 4,
 				},
-                VertexAttribute {
+				VertexAttribute {
 					format: VertexFormat::Uint32,
 					offset: VertexFormat::Float32x4.size() + VertexFormat::Uint32.size(),
 					shader_location: 5,

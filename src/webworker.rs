@@ -71,13 +71,10 @@ impl Worker for IOWorker {
 				// 		}
 			},
 			BridgeMessage::GetNewBlocks => {
-				// let t = async move || {
 				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
 				let mut results = vec![];
 				core::mem::swap(vec, &mut results);
 				scope.respond(id, results);
-				// };
-				// async_std::task::block_on(t());
 			},
 		}
 

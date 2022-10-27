@@ -5,7 +5,7 @@
 #![feature(option_get_or_insert_default)]
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
-// #![feature(let_chains)]
+#![feature(let_chains)]
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
 // use core::slice::SlicePattern;
@@ -112,7 +112,7 @@ use lazy_static::lazy_static;
 
 // The time by which all times should be placed relative to each other on the x axis.
 lazy_static! { // This line needs rust 1.63+: and then some
-static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
+	static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
 }
 
 lazy_static! { // This line needs rust 1.63+: and then some
@@ -696,7 +696,7 @@ fn source_data(
 
 			loop {
 				bridge.send(BridgeMessage::GetNewBlocks);
-				async_std::task::sleep(Duration::from_secs(1)).await;
+				async_std::task::sleep(Duration::from_millis(15)).await;
 			}
 		};
 
@@ -1120,24 +1120,11 @@ fn render_block(
 			for mut block_instances in block_instances.iter_mut() {
 				let mut data_update: Option<DataUpdate> = None;
 				if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-					// let is_self_sovereign = false; //TODO
-					//todo this can be 1 queue
-					//for msg in relays.relays.iter().flattern() {
-					//	 for rrelay in &relays.relays {
-					//	 	for cchain in rrelay.iter() {
-					// for DataSourceStreamEvent(chain_info, data_update) in reader.iter() {
-					// for chain in relay.iter() {
-					//	 if let Ok(ref mut block_events) = cchain.shared.try_lock() {
-					//		let chain_info = &cchain.info;
 					data_update = (*block_events).pop();
 				}
 				if let Some(data_update) = data_update {
-					// web_sys::console::log_1(&format!("got results").into());
 					match data_update {
 						DataUpdate::NewBlock(block) => {
-							// web_sys::console::log_1(&format!("got results on main
-							// rendere").into());
-
 							//TODO optimise!
 							let mut chain_info = None;
 							'outer: for r in &relays.relays {
@@ -1154,7 +1141,6 @@ fn render_block(
 							}
 
 							let chain_info = chain_info.unwrap();
-							// log!("got results on main rendere with chain info");
 
 							// println!( - can see from instance counts now if needed.
 							// 	"chains {} blocks {} txs {} events {}",
@@ -1179,7 +1165,7 @@ fn render_block(
 							let mut base_time = *BASETIME.lock().unwrap();
 							if base_time == 0 {
 								base_time = block.timestamp.unwrap_or(0);
-								log!("BASETIME set to {}", base_time);
+								//log!("BASETIME set to {}", base_time);
 								*BASETIME.lock().unwrap() = base_time;
 							}
 
@@ -1224,9 +1210,9 @@ fn render_block(
 								},
 
 								url: format!(
-									"https://polkadot.js.org/apps/?{}#/explorer/query/0x{}",
+									"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
 									&encoded,
-									hex::encode(block.blockhash)
+									block.blockurl.block_number.unwrap()
 								),
 								..default()
 							};
@@ -1239,6 +1225,13 @@ fn render_block(
 							// Add the new block as a large square on the ground:
 							{
 								let timestamp_color = if chain_info.chain_url.is_relay() {
+									log!(
+										"skiping relay block from {} as has no timestamp",
+										details.doturl
+									);
+									if block.timestamp.is_none() {
+										return
+									}
 									block.timestamp.unwrap()
 								} else {
 									if block.timestamp_parent.is_none() && block.timestamp.is_none()
@@ -1391,10 +1384,8 @@ fn render_block(
 								block_num,
 								fun,
 								&mut commands,
-								// &mut meshes,
 								&mut materials,
 								BuildDirection::Up,
-								&block.blockhash,
 								&links,
 								&mut polyline_materials,
 								&mut polylines,
@@ -1409,10 +1400,8 @@ fn render_block(
 								block_num,
 								boring,
 								&mut commands,
-								// &mut meshes,
 								&mut materials,
 								BuildDirection::Down,
-								&block.blockhash,
 								&links,
 								&mut polyline_materials,
 								&mut polylines,
@@ -1449,7 +1438,6 @@ fn add_blocks(
 	commands: &mut Commands,
 	materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
-	block_hash: &H256,
 	links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
 	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	polylines: &mut ResMut<Assets<Polyline>>,
@@ -1475,8 +1463,6 @@ fn add_blocks(
 	const HIGH: f32 = 100.;
 	let mut rain_height: [f32; 81] = [HIGH; 81];
 	let mut next_y: [f32; 81] = [0.5; 81]; // Always positive.
-
-	let hex_block_hash = format!("0x{}", hex::encode(block_hash.as_bytes()));
 
 	for (event_num, (block, events)) in block_events.iter().enumerate() {
 		let z = event_num % 9;
@@ -1642,17 +1628,13 @@ fn add_blocks(
 		//     } else {
 		//         vec![&annoying]
 		//     };
+		let blocklink =
+			format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, block_num);
 
 		for event in events {
-			let details = Details {
-				url: format!(
-					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-					&encoded, &hex_block_hash
-				),
-				..event.details.clone()
-			};
-			// let dark = details.doturl.is_darkside();
-			let entity = DataEvent { details, ..event.clone() };
+			let mut entity = event;
+			entity.details.url = blocklink.clone();
+
 			let style = style::style_data_event(&entity);
 			//TODO: map should be a resource.
 			// let material = mat_map.entry(style.clone()).or_insert_with(|| {
@@ -1678,11 +1660,6 @@ fn add_blocks(
 			let target_y = next_y[event_num % 81];
 			next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
-			// let t = Transform::from_translation(Vec3::new(
-			// 	px,
-			// 	rain_height[event_num % 81] * build_dir,
-			// 	pz * rflip,
-			// ));
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
 			event_instances.0.push(InstanceData {
@@ -1768,12 +1745,6 @@ fn rainbow(vertices: &mut Vec<Vec3>, points: usize) {
 		vertices.push(Vec3::new(x, y, z));
 	}
 }
-
-// #[derive(Component)]
-// pub struct Rainable {
-// 	dest: f32,
-// 	build_direction: BuildDirection,
-// }
 
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
