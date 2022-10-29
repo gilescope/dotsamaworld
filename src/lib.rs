@@ -390,7 +390,8 @@ const fn cube_indicies(offset: u16) ->  [u16;36] {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Instance {
-    position: [f32;3], //[[f32; 4]; 4],
+    position: Vec3, //[[f32; 4]; 4],
+	color: u32,
 }
 
 impl Instance {
@@ -413,11 +414,11 @@ impl Instance {
                 // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
                 // for each vec4. We'll have to reassemble the mat4 in
                 // the shader.
-                // wgpu::VertexAttribute {
-                //     offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                //     shader_location: 6,
-                //     format: wgpu::VertexFormat::Float32x4,
-                // },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Uint32,
+                },
                 // wgpu::VertexAttribute {
                 //     offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
                 //     shader_location: 7,
@@ -610,7 +611,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	//  app.add_system(get_mouse_movement )
 	//     .init_resource::<WasmMouseTracker>();
 
-	app.add_system(render_block);
+	// app.add_system(render_block);
 	app.add_system_to_stage(CoreStage::PostUpdate, print_events);
 
 	// #[cfg(target_arch = "wasm32")]
@@ -812,29 +813,27 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         usage: wgpu::BufferUsages::INDEX,
     });
 
-    let mut instance_data_queue = (0..NUM_INSTANCES_PER_ROW)
-        .flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let position = cgmath::Vector3 {
-                    x: x as f32,
-                    y: 0.0,
-                    z: z as f32,
-                } - INSTANCE_DISPLACEMENT;
+    // let mut instance_data_queue = (0..NUM_INSTANCES_PER_ROW)
+    //     .flat_map(|z| {
+    //         (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+    //             let position = cgmath::Vector3 {
+    //                 x: x as f32,
+    //                 y: 0.0,
+    //                 z: z as f32,
+    //             } - INSTANCE_DISPLACEMENT;
 
 
-                Instance { position:position.into() }
-            })
-        })
-        .collect::<Vec<_>>();
+    //             Instance { position:position.into() }
+    //         })
+    //     })
+    //     .collect::<Vec<_>>();
 
-    let mut instance_data = vec![instance_data_queue.pop().unwrap()];
+    let mut chain_instance_data = vec![];
+    let mut block_instance_data = vec![];
+    let mut cube_instance_data = vec![];
     //let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
-    let mut instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Instance Buffer"),
-        contents: bytemuck::cast_slice(&instance_data),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
@@ -937,6 +936,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 redraw = input(&mut camera_controller, &event);
             }
             Event::RedrawRequested(window_id) if window_id == window.id() => {
+
+
+
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
@@ -954,6 +956,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         }
 
         if redraw {
+			render_block(&sovereigns,&mut cube_instance_data, &mut block_instance_data, &mut chain_instance_data);
+
+			// TODO don't create each time!!!
+		    let mut chain_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some("Instance Buffer"),
+				contents: bytemuck::cast_slice(&chain_instance_data),
+				usage: wgpu::BufferUsages::VERTEX,
+			});
+			let mut block_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some("Instance Buffer"),
+				contents: bytemuck::cast_slice(&block_instance_data),
+				usage: wgpu::BufferUsages::VERTEX,
+			});
+			let mut cube_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some("Instance Buffer"),
+				contents: bytemuck::cast_slice(&cube_instance_data),
+				usage: wgpu::BufferUsages::VERTEX,
+			});
+			
             let output = surface.get_current_texture().unwrap();
             let view = output
                 .texture
@@ -991,32 +1012,38 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     }),
                 });
 
-                if instance_data_queue.len() > 100 {
-                    //warn!("added {}", instance_data.len());
-                    for i in 1..100 {
-                        let instance = instance_data_queue.pop().unwrap();
-                        instance_data.push(instance);
-                    }
-                    // instance_buffer.drop();
-                    instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Instance Buffer"),
-                        contents: bytemuck::cast_slice(&instance_data),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
-                    //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-                }
+                // if instance_data_queue.len() > 100 {
+                //     //warn!("added {}", instance_data.len());
+                  
+                //     // instance_buffer.drop();
+                //     instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                //         label: Some("Instance Buffer"),
+                //         contents: bytemuck::cast_slice(&instance_data),
+                //         usage: wgpu::BufferUsages::VERTEX,
+                //     });
+                //     //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                // }
                 
                 render_pass.set_pipeline(&render_pipeline); // 2.
                 render_pass.set_bind_group(0, &camera_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
                 // Clip window:
                 // set_scissor_rect(&mut self, x: u32, y: u32, w: u32, h: u32)
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-                render_pass.draw_indexed((0)..( (36) as u32), 0, 0..instance_data.len() as _);
-                render_pass.draw_indexed((36 )..( (36 + 36) as u32), 0, 0..instance_data.len() as _);
-                render_pass.draw_indexed((36 + 36)..( (36+ 36 + 36) as u32), 0, 0..instance_data.len() as _);
+				// Draw chains
+                render_pass.set_vertex_buffer(1, chain_instance_buffer.slice(..));
+                render_pass.draw_indexed((36 + 36)..( (36+ 36 + 36) as u32), 0, 0..chain_instance_data.len() as _);
+
+				// Draw blocks
+                render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
+                render_pass.draw_indexed((36 )..( (36 + 36) as u32), 0, 0..block_instance_data.len() as _);
+
+				// Draw cubes
+                render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
+                render_pass.draw_indexed((0)..( (36) as u32), 0, 0..cube_instance_data.len() as _);
+
+
                 //render_pass.draw(0..(VERTICES.len() as u32), 0..1);
             }
             queue.submit(std::iter::once(encoder.finish()));
@@ -1589,7 +1616,7 @@ fn draw_chain_rect(
 	// handles: &ResourceHandles,
 	chain_info: &ChainInfo,
 	// commands: &mut Commands,
-	chain_instances: &mut InstanceMaterialData,
+	chain_instances: &mut Vec<Instance>,
 ) {
 	let rfip = chain_info.chain_url.rflip();
 	let chain_index = chain_info.chain_index.unsigned_abs();
@@ -1631,22 +1658,22 @@ fn draw_chain_rect(
 	// 	handles.lightside_rect_material.clone()
 	// };
 
-	chain_instances.0.push(InstanceData {
+	chain_instances.push(Instance {
 		position: Vec3::new(
 			(10000. / 2.) - 35.,
 			if is_relay { 0. } else { LAYER_GAP },
 			((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 				rfip,
 		),
-		scale: 0.,
+		// scale: 0.,
 		color: if chain_info.chain_url.is_darkside() {
 			Color::Rgba { red: 0.2, green: 0.2, blue: 0.2, alpha: 1. }.as_rgba_u32()
 		} else {
 			Color::Rgba { red: 0.4, green: 0.4, blue: 0.4, alpha: 1. }.as_rgba_u32()
 		},
-		flags: 0,
+		// flags: 0,
 	});
-	chain_instances.1.push(true);
+	// chain_instances.1.push(true);
 }
 
 fn clear_world(
@@ -1849,55 +1876,23 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 }
 
 fn render_block(
-	mut commands: Commands,
+	// mut commands: Commands,
 	// mut materials: ResMut<Assets<StandardMaterial>>,
-	relays: Res<Sovereigns>,
+	relays: &Sovereigns,
 	// asset_server: Res<AssetServer>,
-	links: Query<(Entity, &MessageSource, &GlobalTransform)>,
-	mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
-	mut polylines: ResMut<Assets<Polyline>>,
-	mut event: EventWriter<RequestRedraw>,
+	// links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+	// mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
+	// mut polylines: ResMut<Assets<Polyline>>,
+	// mut event: EventWriter<RequestRedraw>,
 	// mut handles: ResMut<ResourceHandles>,
-	mut event_instances: Query<
-		&mut InstanceMaterialData,
-		(
-			With<EventInstances>,
-			Without<ExtrinsicInstances>,
-			Without<BlockInstances>,
-			Without<ChainInstances>,
-		),
-	>,
-	mut extrinsic_instances: Query<
-		&mut InstanceMaterialData,
-		(
-			With<ExtrinsicInstances>,
-			Without<EventInstances>,
-			Without<BlockInstances>,
-			Without<ChainInstances>,
-		),
-	>,
-	mut block_instances: Query<
-		&mut InstanceMaterialData,
-		(
-			With<BlockInstances>,
-			Without<EventInstances>,
-			Without<ExtrinsicInstances>,
-			Without<ChainInstances>,
-		),
-	>,
-	mut chain_instances: Query<
-		&mut InstanceMaterialData,
-		(
-			With<ChainInstances>,
-			Without<EventInstances>,
-			Without<ExtrinsicInstances>,
-			Without<BlockInstances>,
-		),
-	>,
+	mut event_instances: &mut Vec<Instance>,
+	// mut extrinsic_instances: &mut Vec<Instance>,
+	mut block_instances: &mut Vec<Instance>,
+	mut chain_instances: &mut Vec<Instance>,
 ) {
-	for mut extrinsic_instances in extrinsic_instances.iter_mut() {
-		for mut event_instances in event_instances.iter_mut() {
-			for mut block_instances in block_instances.iter_mut() {
+	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
+	// 	for mut event_instances in event_instances.iter_mut() {
+	// 		for mut block_instances in block_instances.iter_mut() {
 				let mut data_update: Option<DataUpdate> = None;
 				if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
 					data_update = (*block_events).pop();
@@ -2055,7 +2050,7 @@ fn render_block(
 								// });
 								// bun.insert(ClearMe);
 
-								block_instances.0.push(InstanceData {
+								block_instances.push(Instance {
 									position: Vec3::new(
 										0. + (block_num as f32),
 										if is_relay { 0. } else { LAYER_GAP },
@@ -2063,15 +2058,15 @@ fn render_block(
 											BLOCK_AND_SPACER *
 												chain_info.chain_index.abs() as f32) * rflip,
 									),
-									scale: 0.,
+									// scale: 0.,
 									color: style::color_block_number(
 										timestamp_color,
 										chain_info.chain_url.is_darkside(),
 									)
 									.as_rgba_u32(),
-									flags: 0,
+									// flags: 0,
 								});
-								block_instances.1.push(false);
+								// block_instances.1.push(false);
 
 								// let chain_str = details.doturl.chain_str();
 
@@ -2159,54 +2154,54 @@ fn render_block(
 									}
 								});
 
-							add_blocks(
-								chain_info,
-								block_num,
-								fun,
-								&mut commands,
-								// &mut materials,
-								BuildDirection::Up,
-								&links,
-								&mut polyline_materials,
-								&mut polylines,
-								&encoded,
-								// &mut handles,
-								&mut extrinsic_instances,
-								&mut event_instances,
-							);
+							// add_blocks(
+							// 	chain_info,
+							// 	block_num,
+							// 	fun,
+							// 	&mut commands,
+							// 	// &mut materials,
+							// 	BuildDirection::Up,
+							// 	&links,
+							// 	&mut polyline_materials,
+							// 	&mut polylines,
+							// 	&encoded,
+							// 	// &mut handles,
+							// 	&mut extrinsic_instances,
+							// 	&mut event_instances,
+							// );
 
-							add_blocks(
-								chain_info,
-								block_num,
-								boring,
-								&mut commands,
-								// &mut materials,
-								BuildDirection::Down,
-								&links,
-								&mut polyline_materials,
-								&mut polylines,
-								&encoded,
-								// &mut handles,
-								&mut extrinsic_instances,
-								&mut event_instances,
-							);
-							event.send(RequestRedraw);
+							// add_blocks(
+							// 	chain_info,
+							// 	block_num,
+							// 	boring,
+							// 	&mut commands,
+							// 	// &mut materials,
+							// 	BuildDirection::Down,
+							// 	&links,
+							// 	&mut polyline_materials,
+							// 	&mut polylines,
+							// 	&encoded,
+							// 	// &mut handles,
+							// 	&mut extrinsic_instances,
+							// 	&mut event_instances,
+							// );
+							//event.send(RequestRedraw);
 						},
 						DataUpdate::NewChain(chain_info) => {
-							for mut chain_instances in chain_instances.iter_mut() {
+							// for mut chain_instances in chain_instances.iter_mut() {
 								draw_chain_rect(
 									// handles.as_ref(),
 									&chain_info,
 									// &mut commands,
 									&mut chain_instances,
 								)
-							}
+							// }
 						},
 					}
 				}
-			}
-		}
-	}
+	// 		}
+	// 	}
+	// }
 }
 
 // TODO allow different block building strategies. maybe dependent upon quantity of blocks in the
@@ -2370,7 +2365,7 @@ fn add_blocks(
 					position: Vec3::new(px, py * build_dir, pz * rflip),
 					scale: base_y + target_y * build_dir,
 					color: style.color.as_rgba_u32(),
-					flags: 0,
+					// flags: 0,
 				});
 				extrinsic_instances.1.push(false);
 
@@ -2446,7 +2441,7 @@ fn add_blocks(
 				position: Vec3::new(x, y, z),
 				scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
-				flags: 0,
+				// flags: 0,
 			});
 			event_instances.1.push(false);
 
