@@ -516,17 +516,13 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
 	app.add_event::<DataSourceChangedEvent>();
 	app.add_event::<DataSourceStreamEvent>();
-	app.insert_resource(MovementSettings {
-		sensitivity: 0.00020, // default: 0.00012
-		speed: 12.0,          // default: 12.0
-		boost: 5.,
-	});
-	app.insert_resource(ui::UrlBar::new(
-		"dotsama:/1//10504599".to_string(),
-		Utc::now().naive_utc(),
-		Env::Local,
-	));
-	app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. });
+	// app.insert_resource(MovementSettings {
+	// 	sensitivity: 0.00020, // default: 0.00012
+	// 	speed: 12.0,          // default: 12.0
+	// 	boost: 5.,
+	// });
+
+	// app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. })
 
 	#[cfg(target_family = "wasm")]
 	app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
@@ -590,7 +586,8 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	});
 	app.add_system(movement::player_move_arrows)
 		.add_system(rain)
-		.add_system(source_data);
+		// .add_system(source_data)
+		;
 	// // .add_system(pad_system)
 	// // .add_plugin(LogDiagnosticsPlugin::default())
 	app.add_plugin(FrameTimeDiagnosticsPlugin::default());
@@ -658,6 +655,19 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
+	let movement_settings = MovementSettings {
+		sensitivity: 0.00020, // default: 0.00012
+		speed: 12.0,          // default: 12.0
+		boost: 5.,
+	};
+	let mut urlbar = ui::UrlBar::new(
+		"dotsama:/1//10504599".to_string(),
+		Utc::now().naive_utc(),
+		Env::Local,
+	);
+	// app.insert_resource();
+	let mut sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. }; 
+
     let instance = wgpu::Instance::new(wgpu::Backends::all()); //wgpu::Instance::new(wgpu::Backends::BROWSER_WEBGPU);//PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
 
@@ -883,6 +893,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut last_render_time = instant::Instant::now();
 
     let mut frames = 0u64;
+
+	let initial_event = DataSourceChangedEvent {
+		//source: "dotsama:/1//10504599".to_string(),
+		// source: "local:live".to_string(),
+		source: "dotsama:live".to_string(),
+		timestamp: None,
+	};
+
+
+	source_data(
+		initial_event,
+		&mut sovereigns,
+		// details: Query<Entity, With<ClearMeAlwaysVisible>>,
+		// clean_me: Query<Entity, With<ClearMe>>,
+		&mut urlbar
+		// handles: Res<ResourceHandles>,
+		// #[cfg(not(target_arch="wasm32"))]
+		// writer: EventWriter<DataSourceStreamEvent>,
+	);
 
     event_loop.run(move |event, _, _control_flow| {
         // Pass the winit events to the platform integration.
@@ -1194,122 +1223,122 @@ struct ChainInstances;
 // }
 
 fn source_data(
-	mut datasource_events: EventReader<DataSourceChangedEvent>,
-	mut commands: Commands,
-	mut sovereigns: ResMut<Sovereigns>,
-	details: Query<Entity, With<ClearMeAlwaysVisible>>,
-	clean_me: Query<Entity, With<ClearMe>>,
-	mut spec: ResMut<UrlBar>,
-	handles: Res<ResourceHandles>,
+	mut event: DataSourceChangedEvent,
+	// mut commands: Commands,
+	mut sovereigns: &mut Sovereigns,
+	// details: Query<Entity, With<ClearMeAlwaysVisible>>,
+	// clean_me: Query<Entity, With<ClearMe>>,
+	mut spec: &mut UrlBar,
+	// handles: Res<ResourceHandles>,
 	// #[cfg(not(target_arch="wasm32"))]
 	// writer: EventWriter<DataSourceStreamEvent>,
 ) {
-	for event in datasource_events.iter() {
+	// for event in datasource_events.iter() {
 		log!("data source changes to {} {:?}", event.source, event.timestamp);
 
-		clear_world(&details, &mut commands, &clean_me);
+		// clear_world(&details, &mut commands, &clean_me);
 
-		commands
-			.spawn()
-			.insert_bundle((
-				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-				InstanceMaterialData(vec![], vec![]),
-				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-				// lines
-				Transform::from_xyz(0., 0., 0.),
-				GlobalTransform::default(),
-				Visibility::default(),
-				ComputedVisibility::default(),
-				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-				// view frustum, all the instanced cubes will be culled.
-				// The InstanceMaterialData contains the 'GlobalTransform' information for this
-				// custom instancing, and that is not taken into account with the built-in frustum
-				// culling. We must disable the built-in frustum culling by adding the
-				// `NoFrustumCulling` marker component to avoid incorrect culling.
-				NoFrustumCulling,
-			))
-			//	.insert_bundle(PickableBundle::default())
-			.insert(Name::new("BlockEvent"))
-			.insert(ClearMe)
-			.insert(HiFi)
-			.insert(EventInstances);
+		// commands
+		// 	.spawn()
+		// 	.insert_bundle((
+		// 		handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
+		// 		InstanceMaterialData(vec![], vec![]),
+		// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+		// 		// lines
+		// 		Transform::from_xyz(0., 0., 0.),
+		// 		GlobalTransform::default(),
+		// 		Visibility::default(),
+		// 		ComputedVisibility::default(),
+		// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+		// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+		// 		// view frustum, all the instanced cubes will be culled.
+		// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
+		// 		// custom instancing, and that is not taken into account with the built-in frustum
+		// 		// culling. We must disable the built-in frustum culling by adding the
+		// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
+		// 		NoFrustumCulling,
+		// 	))
+		// 	//	.insert_bundle(PickableBundle::default())
+		// 	.insert(Name::new("BlockEvent"))
+		// 	.insert(ClearMe)
+		// 	.insert(HiFi)
+		// 	.insert(EventInstances);
 
-		commands
-			.spawn()
-			.insert_bundle((
-				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-				InstanceMaterialData(vec![], vec![]),
-				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-				// lines
-				Transform::from_xyz(0., 0., 0.),
-				GlobalTransform::default(),
-				Visibility::default(),
-				ComputedVisibility::default(),
-				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-				// view frustum, all the instanced cubes will be culled.
-				// The InstanceMaterialData contains the 'GlobalTransform' information for this
-				// custom instancing, and that is not taken into account with the built-in frustum
-				// culling. We must disable the built-in frustum culling by adding the
-				// `NoFrustumCulling` marker component to avoid incorrect culling.
-				NoFrustumCulling,
-			))
-			//			.insert_bundle(PickableBundle::default())
-			.insert(Name::new("BlockExtrinsic"))
-			.insert(ClearMe)
-			.insert(MedFi)
-			.insert(ExtrinsicInstances);
+		// commands
+		// 	.spawn()
+		// 	.insert_bundle((
+		// 		handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
+		// 		InstanceMaterialData(vec![], vec![]),
+		// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+		// 		// lines
+		// 		Transform::from_xyz(0., 0., 0.),
+		// 		GlobalTransform::default(),
+		// 		Visibility::default(),
+		// 		ComputedVisibility::default(),
+		// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+		// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+		// 		// view frustum, all the instanced cubes will be culled.
+		// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
+		// 		// custom instancing, and that is not taken into account with the built-in frustum
+		// 		// culling. We must disable the built-in frustum culling by adding the
+		// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
+		// 		NoFrustumCulling,
+		// 	))
+		// 	//			.insert_bundle(PickableBundle::default())
+		// 	.insert(Name::new("BlockExtrinsic"))
+		// 	.insert(ClearMe)
+		// 	.insert(MedFi)
+		// 	.insert(ExtrinsicInstances);
 
-		commands
-			.spawn()
-			.insert_bundle((
-				handles.block_mesh.clone(), //todo xcm different? block_mesh
-				InstanceMaterialData(vec![], vec![]),
-				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-				// lines
-				Transform::from_xyz(0., 0., 0.),
-				GlobalTransform::default(),
-				Visibility::default(),
-				ComputedVisibility::default(),
-				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-				// view frustum, all the instanced cubes will be culled.
-				// The InstanceMaterialData contains the 'GlobalTransform' information for this
-				// custom instancing, and that is not taken into account with the built-in frustum
-				// culling. We must disable the built-in frustum culling by adding the
-				// `NoFrustumCulling` marker component to avoid incorrect culling.
-				NoFrustumCulling,
-			))
-			.insert(Name::new("Block"))
-			.insert(ClearMe)
-			.insert(BlockInstances);
+		// commands
+		// 	.spawn()
+		// 	.insert_bundle((
+		// 		handles.block_mesh.clone(), //todo xcm different? block_mesh
+		// 		InstanceMaterialData(vec![], vec![]),
+		// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+		// 		// lines
+		// 		Transform::from_xyz(0., 0., 0.),
+		// 		GlobalTransform::default(),
+		// 		Visibility::default(),
+		// 		ComputedVisibility::default(),
+		// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+		// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+		// 		// view frustum, all the instanced cubes will be culled.
+		// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
+		// 		// custom instancing, and that is not taken into account with the built-in frustum
+		// 		// culling. We must disable the built-in frustum culling by adding the
+		// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
+		// 		NoFrustumCulling,
+		// 	))
+		// 	.insert(Name::new("Block"))
+		// 	.insert(ClearMe)
+		// 	.insert(BlockInstances);
 
-		commands
-			.spawn()
-			.insert_bundle((
-				handles.chain_rect_mesh.clone(), //todo xcm different? block_mesh
-				InstanceMaterialData(vec![], vec![]),
-				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-				// lines
-				Transform::from_xyz(0., 0., 0.),
-				GlobalTransform::default(),
-				Visibility::default(),
-				ComputedVisibility::default(),
-				// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-				// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-				// view frustum, all the instanced cubes will be culled.
-				// The InstanceMaterialData contains the 'GlobalTransform' information for this
-				// custom instancing, and that is not taken into account with the built-in frustum
-				// culling. We must disable the built-in frustum culling by adding the
-				// `NoFrustumCulling` marker component to avoid incorrect culling.
-				NoFrustumCulling,
-			))
-			//			.insert_bundle(PickableBundle::default())
-			.insert(Name::new("Chain"))
-			.insert(ClearMe)
-			// .insert(LoFi)
-			.insert(ChainInstances);
+		// commands
+		// 	.spawn()
+		// 	.insert_bundle((
+		// 		handles.chain_rect_mesh.clone(), //todo xcm different? block_mesh
+		// 		InstanceMaterialData(vec![], vec![]),
+		// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
+		// 		// lines
+		// 		Transform::from_xyz(0., 0., 0.),
+		// 		GlobalTransform::default(),
+		// 		Visibility::default(),
+		// 		ComputedVisibility::default(),
+		// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
+		// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
+		// 		// view frustum, all the instanced cubes will be culled.
+		// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
+		// 		// custom instancing, and that is not taken into account with the built-in frustum
+		// 		// culling. We must disable the built-in frustum culling by adding the
+		// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
+		// 		NoFrustumCulling,
+		// 	))
+		// 	//			.insert_bundle(PickableBundle::default())
+		// 	.insert(Name::new("Chain"))
+		// 	.insert(ClearMe)
+		// 	// .insert(LoFi)
+		// 	.insert(ChainInstances);
 
 		if event.source.is_empty() {
 			log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
@@ -1454,7 +1483,7 @@ fn source_data(
 		wasm_bindgen_futures::spawn_local(t());
 		#[cfg(target_arch = "wasm32")]
 		log!("sent to bridge");
-	}
+	// }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
