@@ -36,7 +36,7 @@ use bevy::{
 	window::RequestRedraw,
 };
 use bevy_ecs::prelude::Component;
-use bevy_egui::EguiPlugin;
+// use bevy_egui::EguiPlugin;
 use bevy_mod_picking::*;
 use bevy_polyline::{prelude::*, PolylinePlugin};
 use chrono::prelude::*;
@@ -54,7 +54,23 @@ use std::{
 	},
 	time::Duration,
 };
-
+use crate::camera::CameraUniform;
+use ::egui::FontDefinitions;
+// use cgmath::prelude::*;
+use chrono::prelude::*;
+use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
+use egui_winit_platform::{Platform, PlatformDescriptor};
+use log::warn;
+use std::iter;
+use wasm_bindgen::JsCast;
+use wgpu::util::DeviceExt;
+use wgpu::TextureFormat;
+use winit::event::WindowEvent;
+use winit::event::*;
+use winit::platform::web::WindowBuilderExtWebSys;
+use winit::{event_loop::EventLoop, window::Window};
+mod camera;
+mod texture;
 #[cfg(feature = "atmosphere")]
 use bevy_atmosphere::prelude::*;
 
@@ -210,6 +226,230 @@ pub fn main() {
 pub const SHADER_HANDLE: HandleUntyped =
 	HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
 
+
+
+// use crate::camera::Camera;
+use crate::camera::CameraController;
+
+const NUM_INSTANCES_PER_ROW: u32 = 1;
+const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+    0.0,
+    NUM_INSTANCES_PER_ROW as f32 * 0.5,
+);
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Vertex {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
+}
+
+/// https://www.researchgate.net/profile/John-Sheridan-7/publication/253573419/figure/fig1/AS:298229276135426@1448114808488/A-volume-is-subdivided-into-cubes-The-vertices-are-numbered-0-7.png
+
+ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g:f32, b:f32) -> [Vertex;8] {
+[
+    Vertex {
+        position: [0.0, y_height, 0.0],
+        color: [r + 0.5, g + 0.0, b + 0.3],
+    }, // C
+    Vertex {
+        position: [0.0, y_height, z_width],
+        color: [r + 0.5, g + 0.0, b + 0.4],
+    }, // D
+    Vertex {
+        position: [0., 0., z_width],
+        color: [r + 0.5, g + 0.0, b + 0.5],
+    }, // B
+    Vertex {
+        position: [0., 0.0, 0.0],
+        color: [r + 0.5, g + 0.0, b + 0.6],
+    }, // A
+    Vertex {
+        position: [x_depth, y_height, 0.0],
+        color: [r + 0.5, g+ 0.0, b+ 0.7],
+    }, // C
+    Vertex {
+        position: [x_depth, y_height, z_width],
+        color: [r+ 0.5, g+ 0.0, b+ 0.8],
+    }, // D
+    Vertex {
+        position: [x_depth, 0., z_width],
+        color: [r+ 0.5, g+ 0.0, b+ 0.9],
+    }, // B
+    Vertex {
+        position: [x_depth, 0.0, 0.0],
+        color: [r +0.5, g+ 0.0, b+ 1.0],
+    }, // A
+]
+}
+
+/*
+        1,1,0    1,1,1       6 7
+
+        1,0,0  1,0,1//MIN    4  5
+
+0,1,0    0,1,1               2  3
+
+0,0,0  0,0,1//MIN            0  1
+
+*/
+
+/// Counter clockwise to show up as looking from outside at cube.
+const INDICES: &[u16] = &cube_indicies(0);
+// &[
+//     //TOP
+//     // 6,5,4,
+//     // 4,7,6,
+//     6, 7, 4, //TODO only need external faces
+//     4, 5, 6, // // //BOTTOM
+//     // 0,1,2,
+//     // 2,3,0,
+//     0, 3, 2, 2, 1, 0, //right
+//     // 5,6,2,
+//     // 2,1,5,
+//     5, 1, 2, 2, 6, 5, // //left
+//     // 7,4,0,
+//     // 0,3,7,
+//     7, 3, 0, 0, 4, 7, // //front
+//     // 7,3,2,
+//     // 2,6,7,
+//     7, 6, 2, 2, 3, 7, //back
+//     4, 0, 1, 1, 5, 4,
+//     // 4,5,1,
+//     // 1,0,4,
+// ];
+
+const fn cube_indicies(offset: u16) ->  [u16;36] {
+    [
+        //TOP
+        // 6,5,4,
+        // 4,7,6,
+        offset + 6, offset + 7, offset + 4, //TODO only need external faces
+        offset + 4, offset + 5, offset + 6, // // //BOTTOM
+        // 0,1,2,
+        // 2,3,0,
+        offset + 0, offset + 3, offset + 2, 
+        offset + 2, offset + 1, offset + 0, //right
+        // 5,6,2,
+        // 2,1,5,
+        offset + 5, offset + 1, offset + 2, 
+        offset + 2, offset + 6, offset +5, // //left
+        // 7,4,0,
+        // 0,3,7,
+        offset + 7, offset + 3, offset + 0, 
+        offset + 0, offset + 4, offset + 7, // //front
+        
+        // 7,3,2,
+        // 2,6,7,
+        offset + 7, offset + 6, offset + 2, 
+        offset + 2, offset + 3, offset + 7, 
+        
+        //back
+        offset + 4, offset + 0, offset + 1, 
+        offset + 1, offset + 5, offset + 4,
+        // 4,5,1,
+        // 1,0,4,
+    ]
+}
+
+// struct Instance {
+//     position: cgmath::Vector3<f32>,
+//     //color: u32,
+//     //flags: u32,
+// }
+// impl Instance {
+//     fn to_raw(&self) -> InstanceRaw {
+//         InstanceRaw {
+//             model: self.position.into()
+//         }
+//     }
+// }
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Instance {
+    position: [f32;3], //[[f32; 4]; 4],
+}
+
+impl Instance {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Instance>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
+                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+                // for each vec4. We'll have to reassemble the mat4 in
+                // the shader.
+                // wgpu::VertexAttribute {
+                //     offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                //     shader_location: 6,
+                //     format: wgpu::VertexFormat::Float32x4,
+                // },
+                // wgpu::VertexAttribute {
+                //     offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                //     shader_location: 7,
+                //     format: wgpu::VertexFormat::Float32x4,
+                // },
+                // wgpu::VertexAttribute {
+                //     offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                //     shader_location: 8,
+                //     format: wgpu::VertexFormat::Float32x4,
+                // },
+            ],
+        }
+    }
+}
+
+
+// /// A custom event type for the winit app.
+// enum Event {
+//     RequestRedraw,
+// }
+
+// /// This is the repaint signal type that egui needs for requesting a repaint from another thread.
+// /// It sends the custom RequestRedraw event to the winit event loop.
+// struct ExampleRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<Event>>);
+
+// impl epi::backend::RepaintSignal for ExampleRepaintSignal {
+//     fn request_repaint(&self) {
+//         self.0.lock().unwrap().send_event(Event::RequestRedraw).ok();
+//     }
+// }
+
+
 async fn async_main() -> color_eyre::eyre::Result<()> {
 	// color_eyre::install()?;
 	//   console_log!("Hello {}!", "world");
@@ -338,7 +578,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	// .register_inspectable::<Details>()
 	// .add_plugin(DebugEventsPickingPlugin)
 	app.add_plugin(PolylinePlugin);
-	app.add_plugin(EguiPlugin);
+	// app.add_plugin(EguiPlugin);
 	app.insert_resource(ui::OccupiedScreenSpace::default());
 
 	app.add_startup_system(setup);
@@ -355,7 +595,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	// // .add_plugin(LogDiagnosticsPlugin::default())
 	app.add_plugin(FrameTimeDiagnosticsPlugin::default());
 	// // .add_system(ui::update_camera_transform_system)
-	app.add_system(right_click_system);
+	// app.add_system(right_click_system);
 	app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
 	app.add_startup_system(ui::details::configure_visuals);
 
@@ -379,9 +619,514 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 	// #[cfg(target_arch = "wasm32")]
 	// html_body::get().request_pointer_lock();
 
-	app.run();
+
+//	app.run();
+
+
+
+
+
+
+
+
+    let event_loop = winit::event_loop::EventLoopBuilder::<()>::with_user_event().build();
+
+
+    let mut winit_window_builder = winit::window::WindowBuilder::new();
+
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let canvas = document
+        .query_selector(&"canvas")
+        .expect("Cannot query for canvas element.");
+    if let Some(canvas) = canvas {
+        let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok();
+        winit_window_builder = winit_window_builder.with_canvas(canvas);
+    } else {
+        panic!("Cannot find element: {}.", "canvas");
+    }
+
+    let window = winit_window_builder.build(&event_loop).unwrap();
+    wasm_bindgen_futures::spawn_local(run(event_loop, window));
+
+
+
+
 
 	Ok(())
+}
+
+
+async fn run(event_loop: EventLoop<()>, window: Window) {
+    let instance = wgpu::Instance::new(wgpu::Backends::all()); //wgpu::Instance::new(wgpu::Backends::BROWSER_WEBGPU);//PRIMARY);
+    let surface = unsafe { instance.create_surface(&window) };
+
+    // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::default(),
+        compatible_surface: Some(&surface),
+        force_fallback_adapter: false,
+    }))
+    .unwrap();
+
+    let (device, queue) = pollster::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            features: wgpu::Features::default(),
+            limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+            label: None,
+        },
+        None,
+    ))
+    .unwrap();
+
+    let size = window.inner_size();
+    let surface_format = surface.get_supported_formats(&adapter)[0];
+    let surface_config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: surface_format,
+        width: size.width as u32,
+        height: size.height as u32,
+        present_mode: wgpu::PresentMode::Fifo, //Immediate not supported on web
+    };
+    surface.configure(&device, &surface_config);
+
+    assert!(size.width > 0);
+    // We use the egui_winit_platform crate as the platform.
+    let mut platform = Platform::new(PlatformDescriptor {
+        physical_width: size.width as u32,
+        physical_height: size.height as u32,
+        scale_factor: window.scale_factor(),
+        font_definitions: FontDefinitions::default(),
+        style: Default::default(),
+    });
+
+    // We use the egui_wgpu_backend crate as the render backend.
+    let mut egui_rpass = RenderPass::new(&device, surface_format, 1);
+
+    // Display the application
+
+    let mut frame_time = Utc::now().timestamp();
+    let mut frames = 0;
+    // let instance_buffer: wgpu::Buffer;
+
+    // let instance_buffer = device.create_buffer_init(
+    //     &wgpu::util::BufferInitDescriptor {
+    //         label: Some("Instance Buffer"),
+    //         contents: bytemuck::cast_slice(&instance_data),
+    //         usage: wgpu::BufferUsages::VERTEX,
+    //     }
+    // )
+    // let    render_pipeline: wgpu::RenderPipeline = ;
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+    });
+
+    // let mut camera = Camera {
+    //     // position the camera one unit up and 2 units back
+    //     // +z is out of the screen
+    //     eye: (0.0, 1.0, 2.0).into(),
+    //     // have it look at the origin
+    //     target: (0.0, 0.0, 0.0).into(),
+    //     // which way is "up"
+    //     up: cgmath::Vector3::unit_y(),
+    //     aspect: size.width as f32 / size.height as f32,
+    //     fovy: 45.0,
+    //     znear: 0.1,
+    //     zfar: 100.0,
+    // };
+    let mut camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+    let projection = camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 100.0);
+    let mut camera_controller = camera::CameraController::new(4.0, 0.4);
+
+    let mut camera_uniform = CameraUniform::new();
+    camera_uniform.update_view_proj(&camera, &projection);
+
+    let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Camera Buffer"),
+        contents: bytemuck::cast_slice(&[camera_uniform]),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+
+    let camera_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
+        });
+
+    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &camera_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: camera_buffer.as_entire_binding(),
+        }],
+        label: Some("camera_bind_group"),
+    });
+    
+
+    let depth_texture =
+        texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+
+    let mut vertices = vec![];
+    vertices.extend(rectangle(0.5, 0.5, 0.5, 0.,0.,0.));
+    let offset1 = vertices.len();
+    vertices.extend(rectangle(5., 0.2, 5., 0.,0.5,0.));
+    let offset2 = vertices.len();
+    vertices.extend(rectangle(50000., 0.1, 5., 0.1,0.2,0.));
+    
+    let mut indicies: Vec<u16> = vec![];
+    indicies.extend(&cube_indicies(0));
+    indicies.extend(&cube_indicies(offset1 as u16));
+    indicies.extend(&cube_indicies(offset2 as u16));
+    
+//    const INDICES: &[u16] = &cube_indicies(0);
+
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(&vertices[..]),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Index Buffer"),
+        contents: bytemuck::cast_slice(&indicies[..]),
+        usage: wgpu::BufferUsages::INDEX,
+    });
+
+    let mut instance_data_queue = (0..NUM_INSTANCES_PER_ROW)
+        .flat_map(|z| {
+            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                let position = cgmath::Vector3 {
+                    x: x as f32,
+                    y: 0.0,
+                    z: z as f32,
+                } - INSTANCE_DISPLACEMENT;
+
+
+                Instance { position:position.into() }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut instance_data = vec![instance_data_queue.pop().unwrap()];
+    //let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
+
+    let mut instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Instance Buffer"),
+        contents: bytemuck::cast_slice(&instance_data),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Render Pipeline Layout"),
+        bind_group_layouts: &[&camera_bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(&render_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main", // 1.
+            buffers: &[Vertex::desc(), Instance::desc()],
+        },
+        fragment: Some(wgpu::FragmentState {
+            // 3.
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                // 4.
+                format: TextureFormat::Rgba8UnormSrgb,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw, // 2.
+            cull_mode: Some(wgpu::Face::Back),
+            // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+            polygon_mode: wgpu::PolygonMode::Fill,
+            // Requires Features::DEPTH_CLIP_CONTROL
+            unclipped_depth: false,
+            // Requires Features::CONSERVATIVE_RASTERIZATION
+            conservative: false,
+        },
+
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: texture::Texture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less, // 1.
+            stencil: wgpu::StencilState::default(),     // 2.
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState {
+            count: 1,                         // 2.
+            mask: !0,                         // 3.
+            alpha_to_coverage_enabled: false, // 4.
+        },
+        multiview: None, // 5.
+    });
+
+    let mut last_render_time = instant::Instant::now();
+
+    let mut frames = 0u64;
+
+    event_loop.run(move |event, _, _control_flow| {
+        // Pass the winit events to the platform integration.
+        platform.handle_event(&event);
+
+        frames += 1;
+
+        //if frames % 10 == 1 
+       
+
+        let mut redraw = true;
+        match event {
+            //  Event::DeviceEvent {
+            //     event: DeviceEvent::MouseMotion{ delta, },
+            //     .. // We're not using device_id currently
+            // } => if state.mouse_pressed {
+            //     state.camera_controller.process_mouse(delta.0, delta.1)
+            // }
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == window.id() => {
+                redraw = input(&mut camera_controller, &event);
+            }
+            Event::RedrawRequested(window_id) if window_id == window.id() => {
+                let now = instant::Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+
+                camera_controller.update_camera(&mut camera, dt);
+                camera_uniform.update_view_proj(&camera, &projection);
+                queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
+            }
+            Event::MainEventsCleared => {
+                // RedrawRequested will only trigger once, unless we manually
+                // request it.
+                window.request_redraw();
+            }
+            _ => {}
+        }
+
+        if redraw {
+            let output = surface.get_current_texture().unwrap();
+            let view = output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("encoder"),
+            });
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[
+                        // This is what @location(0) in the fragment shader targets
+                        Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: 0.1,
+                                    g: 0.2,
+                                    b: 0.3,
+                                    a: 1.0,
+                                }),
+                                store: true,
+                            },
+                        }),
+                    ],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
+                    }),
+                });
+
+                if instance_data_queue.len() > 100 {
+                    //warn!("added {}", instance_data.len());
+                    for i in 1..100 {
+                        let instance = instance_data_queue.pop().unwrap();
+                        instance_data.push(instance);
+                    }
+                    // instance_buffer.drop();
+                    instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Instance Buffer"),
+                        contents: bytemuck::cast_slice(&instance_data),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+                    //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                }
+                
+                render_pass.set_pipeline(&render_pipeline); // 2.
+                render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                // Clip window:
+                // set_scissor_rect(&mut self, x: u32, y: u32, w: u32, h: u32)
+                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+                render_pass.draw_indexed((0)..( (36) as u32), 0, 0..instance_data.len() as _);
+                render_pass.draw_indexed((36 )..( (36 + 36) as u32), 0, 0..instance_data.len() as _);
+                render_pass.draw_indexed((36 + 36)..( (36+ 36 + 36) as u32), 0, 0..instance_data.len() as _);
+                //render_pass.draw(0..(VERTICES.len() as u32), 0..1);
+            }
+            queue.submit(std::iter::once(encoder.finish()));
+            output.present();
+
+            // match event {
+            //     RedrawRequested(..) => {
+            frames += 1;
+            // platform.update_time(start_time.elapsed().as_secs_f64());
+            if Utc::now().timestamp() - frame_time > 1 {
+                warn!("fps {}", frames);
+                frames = 0;
+                frame_time = Utc::now().timestamp();
+            }
+
+            let output_frame = match surface.get_current_texture() {
+                Ok(frame) => frame,
+                Err(wgpu::SurfaceError::Outdated) => {
+                    // This error occurs when the app is minimized on Windows.
+                    // Silently return here to prevent spamming the console with:
+                    // "The underlying surface has changed, and therefore the swap chain must be updated"
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("Dropped frame with error: {}", e);
+                    return;
+                }
+            };
+            let output_view = output_frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+
+            // Begin to draw the UI frame.
+            platform.begin_frame();
+
+            // Draw the demo application.
+            egui::CentralPanel::default().show(&platform.context(), |ui| {
+                ui.heading("This is a rotated image with a tint:");
+            });
+
+            // End the UI frame. We could now handle the output and draw the UI with the backend.
+            let full_output = platform.end_frame(Some(&window));
+            let paint_jobs = platform.context().tessellate(full_output.shapes);
+
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("encoder"),
+            });
+
+            // Upload all resources for the GPU.
+            let screen_descriptor = ScreenDescriptor {
+                physical_width: surface_config.width,
+                physical_height: surface_config.height,
+                scale_factor: window.scale_factor() as f32,
+            };
+            let tdelta: egui::TexturesDelta = full_output.textures_delta;
+            egui_rpass
+                .add_textures(&device, &queue, &tdelta)
+                .expect("add texture ok");
+            egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
+
+            // Record all render passes.
+            egui_rpass
+                .execute(
+                    &mut encoder,
+                    &output_view,
+                    &paint_jobs,
+                    &screen_descriptor,
+                    Some(wgpu::Color::TRANSPARENT),
+                )
+                .unwrap();
+            // Submit the commands.
+
+            queue.submit(iter::once(encoder.finish()));
+
+            // Redraw egui
+            // output_frame.present();
+
+            egui_rpass
+                .remove_textures(tdelta)
+                .expect("remove texture ok");
+
+            // Support reactive on windows only, but not on linux.
+            // if _output.needs_repaint {
+            //     *control_flow = ControlFlow::Poll;
+            // } else {
+            //     *control_flow = ControlFlow::Wait;
+            // }
+            // window.request_redraw();
+            // }
+            // MainEventsCleared | UserEvent(Event::RequestRedraw) => {
+            //     window.request_redraw();
+            // }
+            //     WindowEvent { event, .. } => match event {
+            //         winit::event::WindowEvent::Resized(size) => {
+            //             // Resize with 0 width and height is used by winit to signal a minimize event on Windows.
+            //             // See: https://github.com/rust-windowing/winit/issues/208
+            //             // This solves an issue where the app would panic when minimizing on Windows.
+            //             if size.width > 0 && size.height > 0 {
+            //                 surface_config.width = size.width;
+            //                 surface_config.height = size.height;
+            //                 surface.configure(&device, &surface_config);
+            //             }
+            //         }
+            //         winit::event::WindowEvent::CloseRequested => {
+            //             *control_flow = ControlFlow::Exit;
+            //         }
+            //         _ => {}
+            //     },
+            //     _ => (),
+            // }
+        }
+    });
+}
+
+fn input(camera_controller: &mut CameraController, event: &WindowEvent) -> bool {
+    match event {
+        WindowEvent::KeyboardInput {
+            input:
+                KeyboardInput {
+                    virtual_keycode: Some(key),
+                    state,
+                    ..
+                },
+            ..
+        } => camera_controller.process_keyboard(*key, *state),
+        WindowEvent::MouseWheel { delta, .. } => {
+            camera_controller.process_scroll(delta);
+            true
+        }
+        WindowEvent::MouseInput {
+            button: winit::event::MouseButton::Left,
+            state,
+            ..
+        } => {
+            let mouse_pressed = *state == ElementState::Pressed;
+            true
+        }
+        _ => false,
+    }
 }
 
 struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
@@ -1820,7 +2565,7 @@ fn rain(
 pub struct UpdateTimer {
 	timer: Timer,
 }
-use bevy_egui::EguiContext;
+// use bevy_egui::EguiContext;
 pub fn print_events(
 	mut events: EventReader<PickingEvent>,
 	mut query2: Query<(Entity, &Details, &GlobalTransform)>,
@@ -1831,104 +2576,104 @@ pub fn print_events(
 	mut anchor: ResMut<Anchor>,
 
 	// Is egui using the mouse?
-	mut egui_context: ResMut<EguiContext>, // TODO: this doesn't need to be mut.
+	// mut egui_context: ResMut<EguiContext>, // TODO: this doesn't need to be mut.
 ) {
-	let ctx = &mut egui_context.ctx_mut();
-	// If we're over an egui area we should not be trying to select anything.
-	if ctx.is_pointer_over_area() {
-		return
-	}
-	if urlbar.changed() {
-		urlbar.reset_changed();
-		let timestamp = urlbar.timestamp();
+	// let ctx = &mut egui_context.ctx_mut();
+	// // If we're over an egui area we should not be trying to select anything.
+	// if ctx.is_pointer_over_area() {
+	// 	return
+	// }
+	// if urlbar.changed() {
+	// 	urlbar.reset_changed();
+	// 	let timestamp = urlbar.timestamp();
 
-		custom.send(DataSourceChangedEvent { source: urlbar.location.clone(), timestamp });
-	}
-	for event in events.iter() {
-		match event {
-			PickingEvent::Selection(selection) => {
-				if let SelectionEvent::JustSelected(_entity) = selection {
-					//  let mut inspector_window_data = inspector_windows.window_data::<Details>();
-					//   let window_size =
-					// &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
+	// 	custom.send(DataSourceChangedEvent { source: urlbar.location.clone(), timestamp });
+	// }
+	// for event in events.iter() {
+	// 	match event {
+	// 		PickingEvent::Selection(selection) => {
+	// 			if let SelectionEvent::JustSelected(_entity) = selection {
+	// 				//  let mut inspector_window_data = inspector_windows.window_data::<Details>();
+	// 				//   let window_size =
+	// 				// &world.get_resource::<ExtractedWindowSizes>().unwrap().0[&self.window_id];
 
-					// let selection = query.get_mut(*entity).unwrap();
+	// 				// let selection = query.get_mut(*entity).unwrap();
 
-					// Unspawn the previous text:
-					// query3.for_each_mut(|(entity, _)| {
-					//     commands.entity(entity).despawn();
-					// });
+	// 				// Unspawn the previous text:
+	// 				// query3.for_each_mut(|(entity, _)| {
+	// 				//     commands.entity(entity).despawn();
+	// 				// });
 
-					// if inspector.active == Some(details) {
-					//     print!("deselected current selection");
-					//     inspector.active = None;
-					// } else {
+	// 				// if inspector.active == Some(details) {
+	// 				//     print!("deselected current selection");
+	// 				//     inspector.active = None;
+	// 				// } else {
 
-					// }
+	// 				// }
 
-					// info!("{}", details.hover.as_str());
-					// decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived,
-					// value, details);
-				}
-			},
-			PickingEvent::Hover(e) => {
-				// info!("Egads! A hover event!? {:?}", e)
+	// 				// info!("{}", details.hover.as_str());
+	// 				// decode_ex!(events, crate::polkadot::ump::events::UpwardMessagesReceived,
+	// 				// value, details);
+	// 			}
+	// 		},
+	// 		PickingEvent::Hover(e) => {
+	// 			// info!("Egads! A hover event!? {:?}", e)
 
-				match e {
-					HoverEvent::JustEntered(entity) => {
-						let (_entity, details, _global_location) = query2.get_mut(*entity).unwrap();
-						inspector.hovered = Some(if details.doturl.extrinsic.is_some() {
-							format!("{} - {} ({})", details.doturl, details.variant, details.pallet)
-						} else {
-							format!("{}", details.doturl)
-						});
-					},
-					HoverEvent::JustLeft(_) => {
-						//	inspector.hovered = None;
-					},
-				}
-			},
-			PickingEvent::Clicked(entity) => {
-				let now = Utc::now().timestamp_millis() as i32;
-				let prev = LAST_CLICK_TIME.swap(now as i32, Ordering::Relaxed);
-				let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
-				if let Some(selected) = &inspector.selected {
-					if selected.doturl == details.doturl && now - prev >= 400 {
-						inspector.selected = None;
-						return
-					}
-				}
-				inspector.selected = Some(details.clone());
-				inspector.texture = None;
+	// 			match e {
+	// 				HoverEvent::JustEntered(entity) => {
+	// 					let (_entity, details, _global_location) = query2.get_mut(*entity).unwrap();
+	// 					inspector.hovered = Some(if details.doturl.extrinsic.is_some() {
+	// 						format!("{} - {} ({})", details.doturl, details.variant, details.pallet)
+	// 					} else {
+	// 						format!("{}", details.doturl)
+	// 					});
+	// 				},
+	// 				HoverEvent::JustLeft(_) => {
+	// 					//	inspector.hovered = None;
+	// 				},
+	// 			}
+	// 		},
+	// 		PickingEvent::Clicked(entity) => {
+	// 			let now = Utc::now().timestamp_millis() as i32;
+	// 			let prev = LAST_CLICK_TIME.swap(now as i32, Ordering::Relaxed);
+	// 			let (_entity, details, global_location) = query2.get_mut(*entity).unwrap();
+	// 			if let Some(selected) = &inspector.selected {
+	// 				if selected.doturl == details.doturl && now - prev >= 400 {
+	// 					inspector.selected = None;
+	// 					return
+	// 				}
+	// 			}
+	// 			inspector.selected = Some(details.clone());
+	// 			inspector.texture = None;
 
-				// info!("Gee Willikers, it's a click! {:?}", e)
+	// 			// info!("Gee Willikers, it's a click! {:?}", e)
 
-				// use async_std::task::block_on;
-				// 				use serde_json::json;
-				// 				let metad = block_on(datasource::get_desub_metadata(&url, &mut source,
-				// None)).unwrap(); 				if let Ok(extrinsic) =
-				// 					decoder::decode_unwrapped_extrinsic(&metad, &mut details.raw.as_slice())
-				// 				{
-				// 					println!("{:#?}", extrinsic);
-				// 				} else {
-				// 					println!("could not decode.");
-				// 				}
-				// 				serde_json::to_value(&value);
+	// 			// use async_std::task::block_on;
+	// 			// 				use serde_json::json;
+	// 			// 				let metad = block_on(datasource::get_desub_metadata(&url, &mut source,
+	// 			// None)).unwrap(); 				if let Ok(extrinsic) =
+	// 			// 					decoder::decode_unwrapped_extrinsic(&metad, &mut details.raw.as_slice())
+	// 			// 				{
+	// 			// 					println!("{:#?}", extrinsic);
+	// 			// 				} else {
+	// 			// 					println!("could not decode.");
+	// 			// 				}
+	// 			// 				serde_json::to_value(&value);
 
-				if now - prev < 400 {
-					println!("double click {}", now - prev);
-					// if you double clicked on just a chain then you really don't want to get sent
-					// to the middle of nowhere!
-					if details.doturl.block_number.is_some() {
-						println!("double clicked to {}", details.doturl);
-						anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away
-							 // from it.
-						dest.location = Some(global_location.translation());
-					}
-				}
-			},
-		}
-	}
+	// 			if now - prev < 400 {
+	// 				println!("double click {}", now - prev);
+	// 				// if you double clicked on just a chain then you really don't want to get sent
+	// 				// to the middle of nowhere!
+	// 				if details.doturl.block_number.is_some() {
+	// 					println!("double clicked to {}", details.doturl);
+	// 					anchor.follow_chain = false; // otherwise when we get to the destination then we will start moving away
+	// 						 // from it.
+	// 					dest.location = Some(global_location.translation());
+	// 				}
+	// 			}
+	// 		},
+	// 	}
+	// }
 }
 
 struct Width(f32);
@@ -2035,35 +2780,35 @@ fn update_visibility(
 	// println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
 }
 
-pub fn right_click_system(
-	mouse_button_input: Res<Input<MouseButton>>,
-	touches_input: Res<Touches>,
-	// hover_query: Query<
-	//     (Entity, &Hover, ChangeTrackers<Hover>),
-	//     (Changed<Hover>, With<PickableMesh>),
-	// >,
-	// selection_query: Query<
-	//     (Entity, &Selection, ChangeTrackers<Selection>),
-	//     (Changed<Selection>, With<PickableMesh>),
-	// >,
-	// _query_details: Query<&Details>,
-	click_query: Query<(Entity, &Hover)>,
-) {
-	if mouse_button_input.just_pressed(MouseButton::Right) ||
-		touches_input.iter_just_pressed().next().is_some()
-	{
-		for (_entity, hover) in click_query.iter() {
-			if hover.hovered() {
-				// Open browser.
-				// #[cfg(not(target_arch = "wasm32"))]
-				// let details = query_details.get(entity).unwrap();
-				// #[cfg(not(target_arch = "wasm32"))]
-				// open::that(&details.url).unwrap();
-				// picking_events.send(PickingEvent::Clicked(entity));
-			}
-		}
-	}
-}
+// pub fn right_click_system(
+// 	mouse_button_input: Res<Input<MouseButton>>,
+// 	touches_input: Res<Touches>,
+// 	// hover_query: Query<
+// 	//     (Entity, &Hover, ChangeTrackers<Hover>),
+// 	//     (Changed<Hover>, With<PickableMesh>),
+// 	// >,
+// 	// selection_query: Query<
+// 	//     (Entity, &Selection, ChangeTrackers<Selection>),
+// 	//     (Changed<Selection>, With<PickableMesh>),
+// 	// >,
+// 	// _query_details: Query<&Details>,
+// 	click_query: Query<(Entity, &Hover)>,
+// ) {
+// 	if mouse_button_input.just_pressed(MouseButton::Right) ||
+// 		touches_input.iter_just_pressed().next().is_some()
+// 	{
+// 		for (_entity, hover) in click_query.iter() {
+// 			if hover.hovered() {
+// 				// Open browser.
+// 				// #[cfg(not(target_arch = "wasm32"))]
+// 				// let details = query_details.get(entity).unwrap();
+// 				// #[cfg(not(target_arch = "wasm32"))]
+// 				// open::that(&details.url).unwrap();
+// 				// picking_events.send(PickingEvent::Clicked(entity));
+// 			}
+// 		}
+// 	}
+// }
 
 // struct BlockHandles {
 

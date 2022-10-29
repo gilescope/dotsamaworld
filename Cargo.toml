@@ -15,6 +15,14 @@ normalmouse = ["bevy_flycam"]
 adaptive-fps = []
 
 [dependencies]
+winit = { version = "0.27.3", features = ["x11"] }
+instant = "0.1" # TODO: remove
+cgmath = "0.18"
+
+pollster = "0.2"
+egui_wgpu_backend = "0.19"
+egui_winit_platform = "0.16"
+wgpu = { version = "0.13", features = ["webgl"] }
 primitive-types = { version = "0.11", default-features = false, features = [
     "serde_no_std",
 ] } # alt serde_no_std 
@@ -82,8 +90,8 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "1da872d87bfe3
 #
 # Bevy Dependencies
 #
-egui = { version = "0.18", default-features = false }
-egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
+egui = { version = "0.19", default-features = false }
+# egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
 # image = { version = "0.24", features = ["jpeg"] }
@@ -101,7 +109,7 @@ bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git"
 # bevy-inspector-egui = "0.10"
 
 bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
-bevy_egui = { version = "0.15", default-features = false }
+# bevy_egui = { version = "0.15", default-features = false }
 # bevy_pkv = "*"
 bevy_polyline = "0.3"
 # bevy_hanabi = "0.2"
@@ -143,7 +151,7 @@ async-tungstenite = { version = "0.15.0", default-features = true, features = [
 # rexie = "0.4"
 # console_log = "*"
 console_error_panic_hook = "0.1"
-chrono = { version = "*", default-features = false, features = ["wasmbind"] }
+chrono = { version = "*", default-features = false, features = ["wasmbind","clock"] }
 getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 #tracing-wasm = "*"
 wasm-bindgen = "*"

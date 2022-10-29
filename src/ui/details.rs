@@ -2,7 +2,7 @@
 use super::DotUrl;
 use bevy::{ecs as bevy_ecs, prelude::*};
 use bevy_ecs::prelude::Component;
-use bevy_egui::EguiSettings;
+// use bevy_egui::EguiSettings;
 use serde::{Deserialize, Serialize};
 // use bevy_inspector_egui::{
 // 	options::{NumberAttributes, StringAttributes},
@@ -85,7 +85,7 @@ pub struct Details
 
 pub fn configure_visuals(
 	// egui_ctx: ResMut<EguiContext>,
-	mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
+	// mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
 ) {
 	// egui_ctx.ctx_mut().set_visuals(egui::Visuals {
 	//     window_rounding: 0.0.into(),
@@ -108,6 +108,6 @@ pub fn configure_visuals(
 	//  .desired_width(f32::INFINITY)
 	// if let Some(window) = windows.get_primary().is_some()
 	{
-		egui_settings.scale_factor = 1.5;
+		// egui_settings.scale_factor = 1.5;
 	}
 }
