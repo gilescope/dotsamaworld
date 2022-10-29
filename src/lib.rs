@@ -586,7 +586,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 		scale.translate_scale = 0.004;
 	});
 	app.add_system(movement::player_move_arrows)
-		.add_system(rain)
+		// .add_system(rain)
 		// .add_system(source_data)
 		;
 	// // .add_system(pad_system)
@@ -646,10 +646,6 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 
     let window = winit_window_builder.build(&event_loop).unwrap();
     wasm_bindgen_futures::spawn_local(run(event_loop, window));
-
-
-
-
 
 	Ok(())
 }
@@ -746,8 +742,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     //     znear: 0.1,
     //     zfar: 100.0,
     // };
-    let mut camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
-    let projection = camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 100.0);
+    let mut camera = camera::Camera::new((0.0, 100.0, 10.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
+    let projection = camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 4000.0);
     let mut camera_controller = camera::CameraController::new(4.0, 0.4);
 
     let mut camera_uniform = CameraUniform::new();
@@ -788,11 +784,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
 
     let mut vertices = vec![];
-    vertices.extend(rectangle(0.5, 0.5, 0.5, 0.,0.,0.));
+    vertices.extend(rectangle(0.8, 0.8, 0.8, 0.,0.,0.));
     let offset1 = vertices.len();
-    vertices.extend(rectangle(5., 0.2, 5., 0.,0.5,0.));
+    vertices.extend(rectangle(10., 0.5, 10., 0.,0.5,0.));
     let offset2 = vertices.len();
-    vertices.extend(rectangle(50000., 0.1, 5., 0.1,0.2,0.));
+    vertices.extend(rectangle(10., 0.001, 10000., 0.1,0.2,0.));
     
     let mut indicies: Vec<u16> = vec![];
     indicies.extend(&cube_indicies(0));
@@ -831,9 +827,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut chain_instance_data = vec![];
     let mut block_instance_data = vec![];
     let mut cube_instance_data = vec![];
+	let mut cube_target_heights : Vec<f32> = vec![];
     //let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
-
-
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
@@ -955,8 +950,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             _ => {}
         }
 
-        if redraw {
-			render_block(&sovereigns,&mut cube_instance_data, &mut block_instance_data, &mut chain_instance_data);
+        if redraw {			
+			render_block(&sovereigns,&mut cube_instance_data, &mut block_instance_data, &mut chain_instance_data, &mut cube_target_heights);
+
+			rain(&mut cube_instance_data, &mut cube_target_heights);
 
 			// TODO don't create each time!!!
 		    let mut chain_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1047,6 +1044,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 //render_pass.draw(0..(VERTICES.len() as u32), 0..1);
             }
             queue.submit(std::iter::once(encoder.finish()));
+
+
+			
+
             output.present();
 
             // match event {
@@ -1660,7 +1661,7 @@ fn draw_chain_rect(
 
 	chain_instances.push(Instance {
 		position: Vec3::new(
-			(10000. / 2.) - 35.,
+			0. - 35., //(1000. / 2.) - 35.,
 			if is_relay { 0. } else { LAYER_GAP },
 			((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 				rfip,
@@ -1889,6 +1890,7 @@ fn render_block(
 	// mut extrinsic_instances: &mut Vec<Instance>,
 	mut block_instances: &mut Vec<Instance>,
 	mut chain_instances: &mut Vec<Instance>,
+	mut event_dest: &mut Vec<f32>,
 ) {
 	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	// 	for mut event_instances in event_instances.iter_mut() {
@@ -2052,7 +2054,7 @@ fn render_block(
 
 								block_instances.push(Instance {
 									position: Vec3::new(
-										0. + (block_num as f32),
+										0. + (block_num as f32) - 5.,
 										if is_relay { 0. } else { LAYER_GAP },
 										(RELAY_CHAIN_CHASM_WIDTH +
 											BLOCK_AND_SPACER *
@@ -2167,6 +2169,7 @@ fn render_block(
 								&encoded,
 								// &mut handles,
 								&mut event_instances,
+								&mut event_dest
 								// &mut event_instances,
 							);
 
@@ -2183,6 +2186,7 @@ fn render_block(
 								&encoded,
 								// &mut handles,
 								&mut event_instances,
+								&mut event_dest
 								// &mut event_instances,
 							);
 							//event.send(RequestRedraw);
@@ -2220,6 +2224,7 @@ fn add_blocks(
 	// handles: &mut ResMut<ResourceHandles>,
 	extrinsic_instances: &mut Vec<Instance>,
 	// event_instances: &mut InstanceMaterialData,
+	event_dest: &mut Vec<f32>
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
@@ -2362,11 +2367,12 @@ fn add_blocks(
 				// 	.insert(MedFi);
 
 				extrinsic_instances.push(Instance {
-					position: Vec3::new(px, py * build_dir, pz * rflip),
+					position: Vec3::new(px, py * build_dir, 5. +  pz * rflip),
 					// scale: base_y + target_y * build_dir,
 					color: style.color.as_rgba_u32(),
 					// flags: 0,
 				});
+				event_dest.push(base_y + target_y * build_dir);
 				// extrinsic_instances.1.push(false);
 
 				// for source in create_source {
@@ -2438,11 +2444,12 @@ fn add_blocks(
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
 			extrinsic_instances.push(Instance {
-				position: Vec3::new(x, y, z),
+				position: Vec3::new(x, (5. * build_dir) + y, 5. + z),
 				// scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
 				// flags: 0,
 			});
+			event_dest.push(base_y + target_y * build_dir);
 			// extrinsic_instances.1.push(false);
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
@@ -2549,15 +2556,16 @@ macro_rules! min {
 }
 
 fn rain(
-	time: Res<Time>,
-	mut drops: Query<&mut InstanceMaterialData>,
-	mut timer: ResMut<UpdateTimer>,
+	// time: Res<Time>,
+	mut drops: &mut Vec<Instance>,
+	mut drops_target: &mut Vec<f32>
+	// mut timer: ResMut<UpdateTimer>,
 ) {
 	let delta = 1.;
-	if timer.timer.tick(time.delta()).just_finished() {
-		for mut rainable in drops.iter_mut() {
-			for r in rainable.0.iter_mut() {
-				let dest = r.scale;
+	// if timer.timer.tick(time.delta()).just_finished() {
+		// for mut rainable in drops.iter_mut() {
+			for (i,r) in drops.iter_mut().enumerate() {
+				let dest = drops_target[i]; //TODO zip
 				if dest != 0. {
 					if dest > 0. {
 						if r.position.y > dest {
@@ -2567,7 +2575,7 @@ fn rain(
 							r.position.y = max!(dest, r.position.y - delta);
 							// Stop raining...
 							if delta < f32::EPSILON {
-								r.scale = 0.;
+								drops_target[i] = 0.;
 							}
 						}
 					} else {
@@ -2576,13 +2584,12 @@ fn rain(
 							r.position.y = min!(dest, r.position.y + delta);
 							// Stop raining...
 							if delta < f32::EPSILON {
-								r.scale = 0.;
+								drops_target[i] = 0.;
 							}
 						}
 					}
 				}
-			}
-		}
+					
 	}
 }
 
