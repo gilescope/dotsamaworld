@@ -2154,37 +2154,37 @@ fn render_block(
 									}
 								});
 
-							// add_blocks(
-							// 	chain_info,
-							// 	block_num,
-							// 	fun,
-							// 	&mut commands,
-							// 	// &mut materials,
-							// 	BuildDirection::Up,
-							// 	&links,
-							// 	&mut polyline_materials,
-							// 	&mut polylines,
-							// 	&encoded,
-							// 	// &mut handles,
-							// 	&mut extrinsic_instances,
-							// 	&mut event_instances,
-							// );
+							add_blocks(
+								chain_info,
+								block_num,
+								fun,
+								// &mut commands,
+								// &mut materials,
+								BuildDirection::Up,
+								// &links,
+								// &mut polyline_materials,
+								// &mut polylines,
+								&encoded,
+								// &mut handles,
+								&mut event_instances,
+								// &mut event_instances,
+							);
 
-							// add_blocks(
-							// 	chain_info,
-							// 	block_num,
-							// 	boring,
-							// 	&mut commands,
-							// 	// &mut materials,
-							// 	BuildDirection::Down,
-							// 	&links,
-							// 	&mut polyline_materials,
-							// 	&mut polylines,
-							// 	&encoded,
-							// 	// &mut handles,
-							// 	&mut extrinsic_instances,
-							// 	&mut event_instances,
-							// );
+							add_blocks(
+								chain_info,
+								block_num,
+								boring,
+								// &mut commands,
+								// &mut materials,
+								BuildDirection::Down,
+								// &links,
+								// &mut polyline_materials,
+								// &mut polylines,
+								&encoded,
+								// &mut handles,
+								&mut event_instances,
+								// &mut event_instances,
+							);
 							//event.send(RequestRedraw);
 						},
 						DataUpdate::NewChain(chain_info) => {
@@ -2210,16 +2210,16 @@ fn add_blocks(
 	chain_info: &ChainInfo,
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
-	commands: &mut Commands,
+	// commands: &mut Commands,
 	// materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
-	links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
-	polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
-	polylines: &mut ResMut<Assets<Polyline>>,
+	// links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
+	// polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
+	// polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
 	// handles: &mut ResMut<ResourceHandles>,
-	extrinsic_instances: &mut InstanceMaterialData,
-	event_instances: &mut InstanceMaterialData,
+	extrinsic_instances: &mut Vec<Instance>,
+	// event_instances: &mut InstanceMaterialData,
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
@@ -2278,57 +2278,57 @@ fn add_blocks(
 
 				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
-				let mut create_source = vec![];
-				for (link, _link_type) in block.end_link() {
-					//if this id already exists then this is the destination, not the source...
-					for (entity, id, source_global) in links.iter() {
-						if id.id == *link {
-							// println!("creating rainbow!");
+				// let mut create_source = vec![];
+				// for (link, _link_type) in block.end_link() {
+				// 	//if this id already exists then this is the destination, not the source...
+				// 	for (entity, id, source_global) in links.iter() {
+				// 		if id.id == *link {
+				// 			// println!("creating rainbow!");
 
-							let mut vertices = vec![
-								source_global.translation(),
-								Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
-							];
-							rainbow(&mut vertices, 50);
+				// 			let mut vertices = vec![
+				// 				source_global.translation(),
+				// 				Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
+				// 			];
+				// 			rainbow(&mut vertices, 50);
 
-							let colors = vec![
-								Color::PURPLE,
-								Color::BLUE,
-								Color::CYAN,
-								Color::YELLOW,
-								Color::RED,
-							];
-							for color in colors.into_iter() {
-								// Create rainbow from entity to current extrinsic location.
-								commands
-									.spawn_bundle(PolylineBundle {
-										polyline: polylines
-											.add(Polyline { vertices: vertices.clone() }),
-										material: polyline_materials.add(PolylineMaterial {
-											width: 10.0,
-											color,
-											perspective: true,
-											..default()
-										}),
-										..default()
-									})
-									.insert(ClearMe);
+				// 			let colors = vec![
+				// 				Color::PURPLE,
+				// 				Color::BLUE,
+				// 				Color::CYAN,
+				// 				Color::YELLOW,
+				// 				Color::RED,
+				// 			];
+				// 			for color in colors.into_iter() {
+				// 				// Create rainbow from entity to current extrinsic location.
+				// 				// commands
+				// 				// 	.spawn_bundle(PolylineBundle {
+				// 				// 		polyline: polylines
+				// 				// 			.add(Polyline { vertices: vertices.clone() }),
+				// 				// 		material: polyline_materials.add(PolylineMaterial {
+				// 				// 			width: 10.0,
+				// 				// 			color,
+				// 				// 			perspective: true,
+				// 				// 			..default()
+				// 				// 		}),
+				// 				// 		..default()
+				// 				// 	})
+				// 				// 	.insert(ClearMe);
 
-								for v in vertices.iter_mut() {
-									v.y += 0.5;
-								}
-							}
+				// 				for v in vertices.iter_mut() {
+				// 					v.y += 0.5;
+				// 				}
+				// 			}
 
-							commands.entity(entity).remove::<MessageSource>();
-						}
-					}
-				}
+				// 			// commands.entity(entity).remove::<MessageSource>();
+				// 		}
+				// 	}
+				// }
 
-				for (link, link_type) in block.start_link() {
-					// println!("inserting source of rainbow!");
-					create_source
-						.push(MessageSource { id: link.to_string(), link_type: *link_type });
-				}
+				// for (link, link_type) in block.start_link() {
+				// 	// println!("inserting source of rainbow!");
+				// 	create_source
+				// 		.push(MessageSource { id: link.to_string(), link_type: *link_type });
+				// }
 
 				// let mut bun = commands.spawn_bundle(PbrBundle {
 				// 	mesh,
@@ -2361,13 +2361,13 @@ fn add_blocks(
 				// 	.insert(Name::new("Extrinsic"))
 				// 	.insert(MedFi);
 
-				extrinsic_instances.0.push(InstanceData {
+				extrinsic_instances.push(Instance {
 					position: Vec3::new(px, py * build_dir, pz * rflip),
-					scale: base_y + target_y * build_dir,
+					// scale: base_y + target_y * build_dir,
 					color: style.color.as_rgba_u32(),
 					// flags: 0,
 				});
-				extrinsic_instances.1.push(false);
+				// extrinsic_instances.1.push(false);
 
 				// for source in create_source {
 				// 	bun.insert(source);
@@ -2437,13 +2437,13 @@ fn add_blocks(
 
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
-			event_instances.0.push(InstanceData {
+			extrinsic_instances.push(Instance {
 				position: Vec3::new(x, y, z),
-				scale: base_y + target_y * build_dir,
+				// scale: base_y + target_y * build_dir,
 				color: style.color.as_rgba_u32(),
 				// flags: 0,
 			});
-			event_instances.1.push(false);
+			// extrinsic_instances.1.push(false);
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
 			// 	mesh,
