@@ -57,6 +57,16 @@ use std::{
 
 #[cfg(feature = "atmosphere")]
 use bevy_atmosphere::prelude::*;
+
+
+// Define macros
+
+macro_rules! log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
+
 // use rayon::prelude::*;
 // use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 // use ui::doturl;
@@ -196,11 +206,6 @@ pub fn main() {
 	async_std::task::block_on(async_main()).unwrap();
 }
 
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
 
 pub const SHADER_HANDLE: HandleUntyped =
 	HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
@@ -225,7 +230,7 @@ async fn async_main() -> color_eyre::eyre::Result<()> {
 
 	let mut app = App::new();
 	// app
-	app.insert_resource(Msaa { samples: 4 });
+	// app.insert_resource(Msaa { samples: 4 });
 
 	#[cfg(target_family = "wasm")]
 	app.insert_resource(WindowDescriptor {
@@ -462,7 +467,7 @@ fn source_data(
 		commands
 			.spawn()
 			.insert_bundle((
-				handles.sphere_mesh.clone(), //todo xcm different? block_mesh
+				handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
 				InstanceMaterialData(vec![], vec![]),
 				// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
 				// lines
@@ -1010,13 +1015,13 @@ impl DataEntity {
 		}
 	}
 
-	pub fn as_bytes(&self) -> &[u8] {
-		self.details().raw.as_slice()
-		// match self {
-		// 	Self::Event(DataEvent { .. }) => EMPTY_BYTE_SLICE.as_slice(),
-		// 	Self::Extrinsic { raw, .. } => raw.as_slice(),
-		// }
-	}
+	// pub fn as_bytes(&self) -> &[u8] {
+	// 	self.details().raw.as_slice()
+	// 	// match self {
+	// 	// 	Self::Event(DataEvent { .. }) => EMPTY_BYTE_SLICE.as_slice(),
+	// 	// 	Self::Extrinsic { raw, .. } => raw.as_slice(),
+	// 	// }
+	// }
 
 	pub fn start_link(&self) -> &Vec<(String, LinkType)> {
 		match self {
@@ -1024,6 +1029,7 @@ impl DataEntity {
 			Self::Event(DataEvent { .. }) => &EMPTY_VEC,
 		}
 	}
+
 	pub fn end_link(&self) -> &Vec<(String, LinkType)> {
 		match self {
 			Self::Extrinsic { end_link, .. } => end_link,
@@ -1943,7 +1949,7 @@ fn update_visibility(
 	// player_query: Query<&Transform, With<Viewport>>,
 	frustum: Query<&Frustum, With<Viewport>>,
 	mut instances: Query<&mut InstanceMaterialData, Without<ChainInstances>>,
-	#[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
+	// #[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
 	// #[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
 	// #[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
 ) {
@@ -1951,12 +1957,19 @@ fn update_visibility(
 
 	let frustum: &Frustum = frustum.get_single().unwrap();
 	for mut instance_data in instances.iter_mut() {
-		//let mut instance_data = instances.get_single_mut().unwrap().1;
+		let mut new_vis = Vec::with_capacity(instance_data.0.len());
 
-		let mut new_vis = vec![];
+		//HOT!
 		for instance in instance_data.0.iter() {
-			let vis = frustum
-				.intersects_sphere(&Sphere { center: instance.position.into(), radius: 5. }, false);
+			let mut vis = true;
+			for plane in &frustum.planes {
+				if plane.normal_d().dot(instance.position.extend(1.0)) //+ sphere.radius
+				 <= 0.0 {
+					vis = false;
+					break;
+				}
+			}
+			
 			new_vis.push(vis);
 		}
 		instance_data.1 = new_vis;
@@ -2109,7 +2122,7 @@ fn setup(
 			unlit: true,
 			..default()
 		}),
-		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.))),
+		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.1))),
 	};
 
 	commands.insert_resource(handles);
@@ -2171,7 +2184,7 @@ fn setup(
 	// #[cfg(feature = "spacemouse")]
 	// entity_comands.insert(SpaceMouseRelativeControllable);
 
-	commands.insert_resource(UpdateTimer { timer: Timer::new(Duration::from_millis(50), true) });
+	commands.insert_resource(UpdateTimer { timer: Timer::new(Duration::from_millis(15), true) });
 
 	// light
 

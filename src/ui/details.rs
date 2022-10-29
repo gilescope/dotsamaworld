@@ -32,7 +32,7 @@ pub struct Details
 	// #[inspectable(label = "Url:")]
 	pub url: String,
 	// pub chain_name: String,
-	pub raw: Vec<u8>,
+	// pub raw: Vec<u8>,
 	// pub value: Option<scale_value::Value>
 }
 

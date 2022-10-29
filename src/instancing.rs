@@ -21,6 +21,7 @@ use bevy::{
 };
 use bevy_ecs::prelude::Component;
 use bytemuck::{Pod, Zeroable};
+use super::log;
 
 #[derive(Component)]
 pub(super) struct InstanceMaterialData(pub(super) Vec<InstanceData>, pub(super) Vec<bool>);
@@ -108,11 +109,14 @@ pub struct InstanceBuffer {
 	length: usize,
 }
 
+
+
 fn prepare_instance_buffers(
 	mut commands: Commands,
 	query: Query<(Entity, &InstanceMaterialData)>,
 	render_device: Res<RenderDevice>,
 ) {
+	//TODO: reuse same instance buffer!!!!
 	for (entity, instance_data) in &query {
 		let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
 			label: Some("instance data buffer"),
@@ -122,6 +126,7 @@ fn prepare_instance_buffers(
 		commands
 			.entity(entity)
 			.insert(InstanceBuffer { buffer, length: instance_data.0.len() });
+	//	log!("data size: {}", instance_data.0.len());
 	}
 }
 

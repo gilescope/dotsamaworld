@@ -399,7 +399,7 @@ where
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
 						variant: "?".to_string(),
-						raw: encoded_extrinsic,
+						// raw: encoded_extrinsic,
 						// value: None,
 					},
 				},
@@ -624,7 +624,7 @@ async fn process_extrinsic<'a, 'scale>(
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
-												raw: bytes.to_vec(),
+												// raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
@@ -649,7 +649,7 @@ async fn process_extrinsic<'a, 'scale>(
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
-												raw: bytes.to_vec(),
+												// raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
@@ -676,7 +676,7 @@ async fn process_extrinsic<'a, 'scale>(
 												pallet: "Instruction".to_string(),
 												variant: instruction.to_string(),
 												doturl: extrinsic_url.clone(),
-												raw: bytes.to_vec(),
+												// raw: bytes.to_vec(),
 												..Details::default()
 											},
 										});
@@ -960,7 +960,7 @@ async fn process_extrinsic<'a, 'scale>(
 									start_link: vec![],
 									end_link: vec![],
 									details: Details {
-										raw: ex_slice.to_vec(), //TODO reference not own.
+										// raw: ex_slice.to_vec(), //TODO reference not own.
 										pallet: inner_pallet.to_string(),
 										variant: inner_variant.to_string(),
 										doturl: extrinsic_url.clone(),
@@ -1038,7 +1038,7 @@ async fn process_extrinsic<'a, 'scale>(
 			success: crate::ui::details::Success::Happy,
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
-			raw: ex_slice.to_vec(),
+			// raw: ex_slice.to_vec(),
 			// value: None
 		},
 	})

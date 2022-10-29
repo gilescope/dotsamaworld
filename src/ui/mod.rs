@@ -104,12 +104,13 @@ pub fn ui_bars_system(
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
 					ui.label("RAW Scale:");
 
-					if ui.button("📋").clicked() {
-						let s = hex::encode(&selected.raw);
-						log!("{}", &s);
-						ui.output().copied_text = s; //TODO not working...
-					};
-					ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+					// if ui.button("📋").clicked() {
+					// 	let s = hex::encode(&selected.raw);
+					// 	log!("{}", &s);
+					// 	ui.output().copied_text = s; //TODO not working...
+					// };
+					//TODO: request raw from webworker!!!
+					// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
 					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
 						if let Some(hand) = inspector.texture.as_ref() {
