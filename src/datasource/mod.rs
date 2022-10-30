@@ -6,11 +6,12 @@ use crate::{
 	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
 	PAUSE_DATA_FETCH,
 };
+use log::warn;
 // use async_std::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 // #[cfg(not(target_arch = "wasm32"))]
 // use async_tungstenite::tungstenite::util::NonBlockingResult;
-use bevy::{prelude::warn, utils::default};
+// use bevy::{prelude::warn, utils::default};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use std::{
@@ -1245,7 +1246,7 @@ async fn get_events_for_block(
 						url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
 						// value: Some(event_val.clone()),
-						..default()
+						..Default::default()
 					};
 
 					if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {

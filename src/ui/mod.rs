@@ -1,18 +1,17 @@
-use bevy::diagnostic::Diagnostics;
+// use bevy::diagnostic::Diagnostics;
 
 pub mod details;
 pub mod doturl;
 pub mod toggle;
 //  use egui::ImageData;
 use crate::{log, Anchor, Env, Inspector, Viewport};
-use bevy::prelude::*;
+// use bevy::prelude::*;
 // use bevy_egui::EguiContext;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
-use egui::ComboBox;
 // use egui::ComboBox;
 // use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
@@ -29,18 +28,18 @@ macro_rules! log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
-pub struct OriginalCameraTransform(pub Transform);
+// pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
 	// mut egui_context: ResMut<EguiContext>,
-	mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
-	mut spec: ResMut<UrlBar>,
-	mut anchor: ResMut<Anchor>,
-	mut inspector: ResMut<Inspector>,
-	entities: Query<(&GlobalTransform, &Details)>,
-	mut destination: ResMut<Destination>,
-	diagnostics: Res<Diagnostics>,
+	// mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
+	// viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
+	mut spec: &mut UrlBar,
+	mut anchor: &mut Anchor,
+	mut inspector: &mut Inspector,
+	// entities: Query<(&GlobalTransform, &Details)>,
+	mut destination: &mut Destination,
+	// diagnostics: Res<Diagnostics>,
 ) {
 	// if inspector.selected.is_some() {
 	// 	occupied_screen_space.left = egui::SidePanel::left("left_panel")

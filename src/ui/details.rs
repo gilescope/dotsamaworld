@@ -1,7 +1,7 @@
 //! This mod contains all the egui code for 2d that powers the details screen.
 use super::DotUrl;
-use bevy::{ecs as bevy_ecs, prelude::*};
-use bevy_ecs::prelude::Component;
+// use bevy::{ecs as bevy_ecs, prelude::*};
+// use bevy_ecs::prelude::Component;
 // use bevy_egui::EguiSettings;
 use serde::{Deserialize, Serialize};
 // use bevy_inspector_egui::{
@@ -17,7 +17,7 @@ pub enum Success {
 	Sad,
 }
 
-#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Details
 //<'scale> - would require details being stored somewhere with ids.
 {
@@ -83,8 +83,7 @@ pub struct Details
 // 	}
 // }
 
-pub fn configure_visuals(
-	// egui_ctx: ResMut<EguiContext>,
+pub fn configure_visuals(// egui_ctx: ResMut<EguiContext>,
 	// mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
 ) {
 	// egui_ctx.ctx_mut().set_visuals(egui::Visuals {

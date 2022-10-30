@@ -10,13 +10,13 @@ default-run = "app"
 [features]
 default = ["normalmouse"]
 # 3d mouse support (it's best not to have both features enabled at once).
-spacemouse = ["bevy_spacemouse"]
-normalmouse = ["bevy_flycam"]
+spacemouse = []
+normalmouse = []
 adaptive-fps = []
 
 [dependencies]
+glam = "*"
 winit = { version = "0.27.3", features = ["x11"] }
-instant = "0.1" # TODO: remove
 cgmath = "0.18"
 
 pollster = "0.2"
@@ -37,7 +37,7 @@ async-recursion = "*"
 bytemuck = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
-futures = { version = "0.3.13", default-features = false, features = [] }
+# futures = { version = "0.3.13", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
@@ -53,11 +53,12 @@ fastrand = { version = "*", default-features = false }
 #serde_bytes = "0.11"
 serde = { version = "*", default-features = false }
 serde_json = { version = "*", default-features = false }
-url = { version = "*", default-features = false }
+# url = { version = "*", default-features = false }
+form_urlencoded = "*"
 # async-tungstenite = "*"
-async-tls = { version = "*", default-features = false }
-color-eyre = { version = "0.5", default-features = false }
-dashmap = { version = "*" }
+# async-tls = { version = "*", default-features = false }
+# color-eyre = { version = "0.5", default-features = false }
+# dashmap = { version = "*" }
 open = { git = "https://github.com/gilescope/open-rs.git", rev = "255025b420dbfec81d0c28e67055402e14295921" }
 #
 # substrate deps
@@ -98,20 +99,20 @@ egui = { version = "0.19", default-features = false }
 
 # bevy_instancing = { git= "https://github.com/Shfty/bevy_instancing.git" }
 # bevy_instancing = { path = "/home/gilescope/git/bevy_instancing" }
-bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
+# bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
 # bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }
-bevy_mod_picking = "0.8"
+# bevy_mod_picking = "0.8"
 # bevy-inspector-egui-derive = "*"
 #bevy_rapier3d = { version = "*", features = [ "simd-nightly", "parallel" ] }
 
 # will be published monday
-bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git" }
+# bevy_atmosphere = { git = "https://github.com/JonahPlusPlus/bevy_atmosphere.git" }
 # bevy-inspector-egui = "0.10"
 
-bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
+# bevy_spacemouse = { git = "https://github.com/gilescope/bevy_spacemouse.git", rev = "8f460d2", optional = true }
 # bevy_egui = { version = "0.15", default-features = false }
 # bevy_pkv = "*"
-bevy_polyline = "0.3"
+# bevy_polyline = "0.3"
 # bevy_hanabi = "0.2"
 # bevy_kira_audio = "*"
 # dolly = "0.3"
@@ -125,12 +126,12 @@ tikv-jemallocator = "0.5"
 #
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 chrono = { version = "*", default-features = false }
-bevy = { version = "0.8.1", default-features = false, features = [
-    "bevy_winit",
-    "render",
-    "jpeg",
-    "dynamic",
-] }
+# bevy = { version = "0.8.1", default-features = false, features = [
+#     "bevy_winit",
+#     "render",
+#     "jpeg",
+#     "dynamic",
+# ] }
 
 polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791d468b7ed1387feee81c54473e608a", features = [
     "wss",
@@ -167,15 +168,15 @@ polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791
 # wee_alloc = "0.4.5"
 gloo-worker = "0.2.1"
 wasm-bindgen-futures = "*"
-bevy_web_asset = "0.4"
-bevy_tasks = "0.8"
-bevy = { version = "0.8.1", default-features = false, features = [
-    "bevy_winit",
-    "render",
-    "jpeg",
-] }
+# bevy_web_asset = "0.4"
+# bevy_tasks = "0.8"
+# bevy = { version = "0.8.1", default-features = false, features = [
+#     "bevy_winit",
+#     "render",
+#     "jpeg",
+# ] }
 # bevy_webgl2 = "*"
-bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen.git" }
+# bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen.git" }
 
 # [patch.'https://github.com/bevyengine/bevy']
 # bevy = {git = "https://github.com/bevyengine/bevy//", rev="841755aaf23acfd55b375c37390daeb302c5b30b", default-features=false}
