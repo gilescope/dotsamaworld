@@ -190,9 +190,9 @@ pub struct Anchor {
 }
 
 // #[derive(Component)]
-pub struct HiFi;
+// pub struct HiFi;
 // #[derive(Component)]
-pub struct MedFi;
+// pub struct MedFi;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -893,6 +893,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		              * #[cfg(not(target_arch="wasm32"))]
 		              * writer: EventWriter<DataSourceStreamEvent>, */
 	);
+	
+	// let mut ctx = egui::Context::default();
 
 	event_loop.run(move |event, _, _control_flow| {
 		// Pass the winit events to the platform integration.
@@ -964,108 +966,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			let output = surface.get_current_texture().unwrap();
 			let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-			let mut encoder = device
-				.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("encoder") });
-			{
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass"),
-					color_attachments: &[
-						// This is what @location(0) in the fragment shader targets
-						Some(wgpu::RenderPassColorAttachment {
-							view: &view,
-							resolve_target: None,
-							ops: wgpu::Operations {
-								load: wgpu::LoadOp::Clear(wgpu::Color {
-									r: 0.1,
-									g: 0.2,
-									b: 0.3,
-									a: 1.0,
-								}),
-								store: true,
-							},
-						}),
-					],
-					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &depth_texture.view,
-						depth_ops: Some(wgpu::Operations {
-							load: wgpu::LoadOp::Clear(1.0),
-							store: true,
-						}),
-						stencil_ops: None,
-					}),
-				});
+			//platform.begin_frame();
+			// let raw_input: egui::RawInput = gather_input();
 
-				// if instance_data_queue.len() > 100 {
-				//     //warn!("added {}", instance_data.len());
+			//  let full_output = ctx.run(raw_input, |ctx| {
+			// 	egui::CentralPanel::default().show(&ctx, |ui| {
+			// 		ui.label("Hello world!");
+			// 		if ui.button("Click me").clicked() {
+			// 			// take some action here
+			// 		}
+			// 	});
+			// });
+			// handle_platform_output(full_output.platform_output);
+			// let clipped_primitives = ctx.tessellate(full_output.shapes); // create triangles to paint
+			// paint(full_output.textures_delta, clipped_primitives);
+			
 
-				//     // instance_buffer.drop();
-				//     instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor
-				// {         label: Some("Instance Buffer"),
-				//         contents: bytemuck::cast_slice(&instance_data),
-				//         usage: wgpu::BufferUsages::VERTEX,
-				//     });
-				//     //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-				// }
-
-				render_pass.set_pipeline(&render_pipeline); // 2.
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-				// Clip window:
-				// set_scissor_rect(&mut self, x: u32, y: u32, w: u32, h: u32)
-				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-
-				// Draw chains
-				render_pass.set_vertex_buffer(1, chain_instance_buffer.slice(..));
-				render_pass.draw_indexed(
-					(36 + 36)..((36 + 36 + 36) as u32),
-					0,
-					0..chain_instance_data.len() as _,
-				);
-
-				// Draw blocks
-				render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
-				render_pass.draw_indexed(
-					(36)..((36 + 36) as u32),
-					0,
-					0..block_instance_data.len() as _,
-				);
-
-				// Draw cubes
-				render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
-				render_pass.draw_indexed((0)..((36) as u32), 0, 0..cube_instance_data.len() as _);
-
-				//render_pass.draw(0..(VERTICES.len() as u32), 0..1);
-			}
-			queue.submit(std::iter::once(encoder.finish()));
-
-			output.present();
-
-			// match event {
-			//     RedrawRequested(..) => {
-			frames += 1;
-			// platform.update_time(start_time.elapsed().as_secs_f64());
-			if Utc::now().timestamp() - frame_time > 1 {
-				log!("fps {}", frames);
-				frames = 0;
-				frame_time = Utc::now().timestamp();
-			}
-
-			let output_frame = match surface.get_current_texture() {
-				Ok(frame) => frame,
-				Err(wgpu::SurfaceError::Outdated) => {
-					// This error occurs when the app is minimized on Windows.
-					// Silently return here to prevent spamming the console with:
-					// "The underlying surface has changed, and therefore the swap chain must be
-					// updated"
-					return
-				},
-				Err(e) => {
-					eprintln!("Dropped frame with error: {}", e);
-					return
-				},
-			};
-			let output_view =
-				output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+			let output_frame = output;// 
+			
+			let output_view = view;
 
 			// Begin to draw the UI frame.
 			platform.begin_frame();
@@ -1105,6 +1024,90 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			// Submit the commands.
 
 			queue.submit(iter::once(encoder.finish()));
+
+
+			let mut encoder = device
+				.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("encoder") });
+			{
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass"),
+					color_attachments: &[
+						// This is what @location(0) in the fragment shader targets
+						Some(wgpu::RenderPassColorAttachment {
+							view: &output_view,
+							resolve_target: None,
+							ops: wgpu::Operations {
+								load: wgpu::LoadOp::Load,								
+								store: true,
+							},
+						}),
+					],
+					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+						view: &depth_texture.view,
+						depth_ops: Some(wgpu::Operations {
+							load: wgpu::LoadOp::Clear(1.0),
+							store: true,
+						}),
+						stencil_ops: None,
+					}),
+				});
+
+				// if instance_data_queue.len() > 100 {
+				//     //warn!("added {}", instance_data.len());
+
+				//     // instance_buffer.drop();
+				//     instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor
+				// {         label: Some("Instance Buffer"),
+				//         contents: bytemuck::cast_slice(&instance_data),
+				//         usage: wgpu::BufferUsages::VERTEX,
+				//     });
+				//     //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+				// }
+
+				render_pass.set_pipeline(&render_pipeline); // 2.
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+				// Clip window:
+				render_pass.set_scissor_rect(20,20, 1500,1500);
+				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+				// Draw chains
+				render_pass.set_vertex_buffer(1, chain_instance_buffer.slice(..));
+				render_pass.draw_indexed(
+					(36 + 36)..((36 + 36 + 36) as u32),
+					0,
+					0..chain_instance_data.len() as _,
+				);
+
+				// Draw blocks
+				render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
+				render_pass.draw_indexed(
+					(36)..((36 + 36) as u32),
+					0,
+					0..block_instance_data.len() as _,
+				);
+
+				// Draw cubes
+				render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
+				render_pass.draw_indexed((0)..((36) as u32), 0, 0..cube_instance_data.len() as _);
+
+				//render_pass.draw(0..(VERTICES.len() as u32), 0..1);
+			}
+			queue.submit(std::iter::once(encoder.finish()));
+
+			output_frame.present();
+
+			// match event {
+			//     RedrawRequested(..) => {
+			frames += 1;
+			// platform.update_time(start_time.elapsed().as_secs_f64());
+			if Utc::now().timestamp() - frame_time > 1 {
+				log!("fps {}", frames);
+				frames = 0;
+				frame_time = Utc::now().timestamp();
+			}
+
+		
 
 			// Redraw egui
 			// output_frame.present();
