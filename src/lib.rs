@@ -8,6 +8,8 @@
 #![feature(let_chains)]
 #[cfg(target_arch = "wasm32")]
 use core::future::Future;
+use winit::dpi::PhysicalSize;
+use winit::dpi::LogicalSize;
 
 // use core::slice::SlicePattern;
 // use bevy::winit::WinitSettings;
@@ -22,7 +24,6 @@ use core::future::Future;
 use gloo_worker::Spawnable;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 //instancing::CustomMaterialPlugin,
-// ,
 use crate::{movement::Destination, ui::UrlBar};
 // #[cfg(feature = "adaptive-fps")]
 // use bevy::diagnostic::Diagnostics;
@@ -637,7 +638,7 @@ async fn async_main() -> std::result::Result<(),()> {
 	Ok::<(),()>(())
 }
 
-async fn run(event_loop: EventLoop<()>, window: Window) {
+async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	// let movement_settings = MovementSettings {
 	// 	sensitivity: 0.00020, // default: 0.00012
 	// 	speed: 12.0,          // default: 12.0
@@ -676,7 +677,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	))
 	.unwrap();
 
-	let size = window.inner_size();
+	let mut size = window.inner_size();
+
+	let channel = std::sync::mpsc::channel();
+	let resize_sender: OnResizeSender = channel.0;
+	let resize_receiver = Mutex::new(channel.1);
+	setup_viewport_resize_system(Mutex::new(resize_sender));
+
 	let surface_format = surface.get_supported_formats(&adapter)[0];
 	let surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -733,7 +740,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	//     zfar: 100.0,
 	// };
 	let mut camera = camera::Camera::new((0.0, 100.0, 10.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
-	let projection =
+	let mut projection =
 		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 4000.0);
 	let mut camera_controller = camera::CameraController::new(4.0, 0.4);
 
@@ -770,7 +777,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		label: Some("camera_bind_group"),
 	});
 
-	let depth_texture =
+	let mut depth_texture =
 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
 
 	let mut vertices = vec![];
@@ -901,6 +908,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		platform.handle_event(&event);
 
 		frames += 1;
+
+		if let Some(new_size) = viewport_resize_system(&resize_receiver) {
+			window.set_inner_size(new_size);       
+			window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+			projection.resize(new_size.width, new_size.height);
+			size = new_size;
+			surface.configure(&device, &surface_config);
+			depth_texture =
+				texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+		}
 
 		//if frames % 10 == 1
 
@@ -1068,7 +1085,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 				// Clip window:
-				render_pass.set_scissor_rect(20,20, 1500,1500);
+				// render_pass.set_scissor_rect(20,20, 1500,1500);
 				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
 				// Draw chains
@@ -3032,4 +3049,54 @@ pub mod html_body {
 pub enum BridgeMessage {
 	SetDatasource(Vec<Vec<ChainInfo>>, Option<DotUrl>, u32), //data epoc
 	GetNewBlocks,
+}
+
+//from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE
+
+fn get_viewport_size() -> (i32, i32) {
+    let web_window = web_sys::window().expect("could not get window");
+    let document_element = web_window
+        .document()
+        .expect("could not get document")
+        .document_element()
+        .expect("could not get document element");
+
+    let width = document_element.client_width();
+    let height = document_element.client_height();
+
+    (width, height)
+}
+
+use std::sync::{
+    mpsc::{Receiver, Sender},
+};
+type OnResizeSender = Sender<()>;
+type OnResizeReceiver = Receiver<()>;
+
+//todo: needs to be in a mutex really?
+fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
+    let web_window = web_sys::window().expect("could not get window");
+    let local_sender = resize_sender.lock().unwrap().clone();
+
+    local_sender.send(()).unwrap();
+
+    gloo_events::EventListener::new(&web_window, "resize", move |_event| {
+        local_sender.send(()).unwrap();
+    })
+    .forget();
+}
+fn viewport_resize_system(
+    // mut window: &mut Window,
+    resize_receiver: &Mutex<OnResizeReceiver>,
+) -> Option<winit::dpi::PhysicalSize<u32>> {
+    if resize_receiver.lock().unwrap().try_recv().is_ok() {
+		let size = get_viewport_size();
+		//TODO: bugout if window size is already this.
+		let new_size: winit::dpi::PhysicalSize<u32> = PhysicalSize::new(size.0 as u32, size.1 as u32);
+		if new_size.width > 0 && new_size.height > 0 {
+			return Some(new_size);
+			// log!("I GOT CALLED with {}, {}", size.0, size.1);// width, height
+		}
+    }
+	return None;
 }
