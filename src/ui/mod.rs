@@ -3,42 +3,39 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
+use cgmath::Point3;
 //  use egui::ImageData;
 use crate::{log, Anchor, Env, Inspector, Viewport};
 // use bevy::prelude::*;
-// use bevy_egui::EguiContext;
+use egui::Context;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
-// use egui::ComboBox;
+use egui::ComboBox;
 // use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
-	left: f32,
-	top: f32,
-	// right: f32,
-	bottom: f32,
-}
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+	pub left: f32,
+	pub top: f32,
+	//pub right: f32,
+	pub bottom: f32,
 }
 
 // pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
-	// mut egui_context: ResMut<EguiContext>,
-	// mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-	// viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
+	mut egui_context: &mut egui::Context,
+	mut occupied_screen_space: &mut OccupiedScreenSpace,
+	viewpoint: &Point3<f32>,
 	mut spec: &mut UrlBar,
 	mut anchor: &mut Anchor,
 	mut inspector: &mut Inspector,
 	// entities: Query<(&GlobalTransform, &Details)>,
 	mut destination: &mut Destination,
+	fps: u32
 	// diagnostics: Res<Diagnostics>,
 ) {
 	// if inspector.selected.is_some() {
@@ -125,14 +122,14 @@ pub fn ui_bars_system(
 	// 		.rect
 	// 		.width();
 	// }
-	// // occupied_screen_space.right = egui::SidePanel::right("right_panel")
-	// //     .resizable(true)
-	// //     .show(egui_context.ctx_mut(), |ui| {
-	// //         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-	// //     })
-	// //     .response
-	// //     .rect
-	// //     .width();
+	// occupied_screen_space.right = egui::SidePanel::right("right_panel")
+	//     .resizable(true)
+	//     .show(egui_context.ctx_mut(), |ui| {
+	//         ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+	//     })
+	//     .response
+	//     .rect
+	//     .width();
 
 	// let mut fps = 0.;
 	// for diag in diagnostics.iter() {
@@ -142,105 +139,105 @@ pub fn ui_bars_system(
 	// 	}
 	// }
 
-	// occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
-	// 	.resizable(false)
-	// 	.show(egui_context.ctx_mut(), |ui| {
-	// 		// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-	// 		ui.horizontal(|ui| {
-	// 			let _combo = ComboBox::from_label("Env")
-	// 				.selected_text(format!("{}", spec.env))
-	// 				.show_ui(ui, |ui| {
-	// 					ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
-	// 					// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
-	// 					// ui.selectable_value(&mut spec.env, Env::Test, "test");
-	// 					ui.selectable_value(&mut spec.env, Env::Local, "local");
-	// 				});
+	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
+		.resizable(false)
+		.show(egui_context, |ui| {
+			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+			ui.horizontal(|ui| {
+				let _combo = ComboBox::from_label("Env")
+					.selected_text(format!("{}", spec.env))
+					.show_ui(ui, |ui| {
+						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
+						// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
+						// ui.selectable_value(&mut spec.env, Env::Test, "test");
+						ui.selectable_value(&mut spec.env, Env::Local, "local");
+					});
 
-	// 			// ui.add(
-	// 			// 	DatePicker::<std::ops::Range<NaiveDateTime>>::new(
-	// 			// 		"noweekendhighlight",
-	// 			// 		&mut spec.timestamp,
-	// 			// 	)
-	// 			// 	.highlight_weekend(false),
-	// 			// );
+				// ui.add(
+				// 	DatePicker::<std::ops::Range<NaiveDateTime>>::new(
+				// 		"noweekendhighlight",
+				// 		&mut spec.timestamp,
+				// 	)
+				// 	.highlight_weekend(false),
+				// );
 
-	// 			//TODO: location = alpha blend to 10% everything but XXXX
-	// 			let response = ui.text_edit_singleline(&mut spec.find);
-	// 			let mut found = 0;
-	// 			if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
-	// 				if spec.find.len() <= 4 {
-	// 					if let Ok(para_id) = spec.find.parse() {
-	// 						for (loc, details) in entities.iter() {
-	// 							if details.doturl.para_id == Some(para_id) &&
-	// 								details.doturl.block_number.is_some()
-	// 							{
-	// 								destination.location = Some(loc.translation());
-	// 								inspector.selected = Some(details.clone());
-	// 								found += 1;
-	// 							}
-	// 						}
-	// 					}
-	// 				}
-	// 				for (loc, details) in entities.iter() {
-	// 					if spec.find.len() <= details.pallet.len() &&
-	// 						spec.find.as_bytes().eq_ignore_ascii_case(
-	// 							&details.pallet.as_bytes()[..spec.find.len()],
-	// 						)
-	// 					// if details.pallet.contains(&spec.find) ||
-	// 					// details.variant.contains(&spec.find)
-	// 					{
-	// 						destination.location = Some(loc.translation());
-	// 						inspector.selected = Some(details.clone());
-	// 						found += 1;
-	// 					}
-	// 				}
+				//TODO: location = alpha blend to 10% everything but XXXX
+				let response = ui.text_edit_singleline(&mut spec.find);
+				let mut found = 0;
+				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
+					if spec.find.len() <= 4 {
+						// if let Ok(para_id) = spec.find.parse() {
+							// for (loc, details) in entities.iter() {
+							// 	if details.doturl.para_id == Some(para_id) &&
+							// 		details.doturl.block_number.is_some()
+							// 	{
+							// 		destination.location = Some(loc.translation());
+							// 		inspector.selected = Some(details.clone());
+							// 		found += 1;
+							// 	}
+							// }
+						// }
+					}
+					// for (loc, details) in entities.iter() {
+					// 	if spec.find.len() <= details.pallet.len() &&
+					// 		spec.find.as_bytes().eq_ignore_ascii_case(
+					// 			&details.pallet.as_bytes()[..spec.find.len()],
+					// 		)
+					// 	// if details.pallet.contains(&spec.find) ||
+					// 	// details.variant.contains(&spec.find)
+					// 	{
+					// 		destination.location = Some(loc.translation());
+					// 		inspector.selected = Some(details.clone());
+					// 		found += 1;
+					// 	}
+					// }
 
-	// 				println!("find {}", spec.find);
-	// 			}
-	// 			if !spec.find.is_empty() {
-	// 				ui.heading(format!("found: {}", found));
-	// 			}
-	// 			ui.with_layout(egui::Layout::right_to_left(), |ui| {
-	// 				ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
-	// 				ui.heading("Follow:");
-	// 				// spec.location.deref_mut().ui(ui, StringAttributes { multiline: false },
-	// 				// egui_context);
-	// 			});
-	// 		});
-	// 	})
-	// 	.response
-	// 	.rect
-	// 	.height();
-	// occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
-	// 	.resizable(false)
-	// 	.show(egui_context.ctx_mut(), |ui| {
-	// 		ui.horizontal(|ui| {
-	// 			if let Some(selected) = &inspector.hovered {
-	// 				ui.heading(selected);
-	// 			}
-	// 			ui.with_layout(egui::Layout::right_to_left(), |ui| {
-	// 				let x = viewpoint_query.get_single().unwrap().translation().x;
-	// 				let y = viewpoint_query.get_single().unwrap().translation().x;
-	// 				let z = viewpoint_query.get_single().unwrap().translation().z;
+					println!("find {}", spec.find);
+				}
+				if !spec.find.is_empty() {
+					ui.heading(format!("found: {}", found));
+				}
+				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
+					ui.heading("Follow:");
+					// spec.location.deref_mut().ui(ui, StringAttributes { multiline: false },
+					// egui_context);
+				});
+			});
+		})
+		.response
+		.rect
+		.height();
+	occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
+		.resizable(false)
+		.show(egui_context, |ui| {
+			ui.horizontal(|ui| {
+				if let Some(selected) = &inspector.hovered {
+					ui.heading(selected);
+				}
+				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+					let x = viewpoint.x;
+					let y = viewpoint.y;// WAS x? assumed this was a bug.
+					let z = viewpoint.z;
 
-	// 				let timestamp = super::x_to_timestamp(
-	// 					viewpoint_query.get_single().unwrap().translation().x,
-	// 				);
-	// 				let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
-	// 				let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
-	// 				let datetime: DateTime<chrono::Local> = datetime.into();
+					let timestamp = super::x_to_timestamp(
+						viewpoint.x,
+					);
+					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
+					let datetime: DateTime<chrono::Local> = datetime.into();
 
-	// 				let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-	// 				ui.heading(format!(
-	// 					"x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}",
-	// 					x, y, z, fps, newdate
-	// 				));
-	// 			});
-	// 		});
-	// 	})
-	// 	.response
-	// 	.rect
-	// 	.height();
+					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
+					ui.heading(format!(
+						"x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}",
+						x, y, z, fps, newdate
+					));
+				});
+			});
+		})
+		.response
+		.rect
+		.height();
 }
 use egui::Ui;
 

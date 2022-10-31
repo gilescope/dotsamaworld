@@ -22,6 +22,7 @@ use winit::dpi::LogicalSize;
 
 #[cfg(target_arch = "wasm32")]
 use gloo_worker::Spawnable;
+ use crate::ui::ui_bars_system;
 // use bevy::diagnostic::LogDiagnosticsPlugin;
 //instancing::CustomMaterialPlugin,
 use crate::{movement::Destination, ui::UrlBar};
@@ -60,8 +61,6 @@ use std::{
 	},
 	time::Duration,
 };
-// use cgmath::prelude::*;
-use chrono::prelude::*;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use log::warn;
@@ -226,18 +225,8 @@ pub fn main() {
 	async_std::task::block_on(async_main()).unwrap();
 }
 
-// pub const SHADER_HANDLE: HandleUntyped =
-// 	HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 3253086872234592509);
-
-// use crate::camera::Camera;
 use crate::camera::CameraController;
 
-const NUM_INSTANCES_PER_ROW: u32 = 1;
-const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
-	NUM_INSTANCES_PER_ROW as f32 * 0.5,
-	0.0,
-	NUM_INSTANCES_PER_ROW as f32 * 0.5,
-);
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -650,8 +639,10 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	let mut sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
 	// let mouse_capture = movement::MouseCapture::default();
-	let anchor = Anchor::default();
-	// let destination = movement::Destination::default();
+	let mut anchor = Anchor::default();
+	let mut destination = movement::Destination::default();
+	let mut inspector = Inspector::default();
+	let mut occupied_screen_space = ui::OccupiedScreenSpace::default();
 
 	ui::details::configure_visuals();
 
@@ -678,6 +669,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	.unwrap();
 
 	let mut size = window.inner_size();
+	log!("Initial size: width:{} height:{}", size.width as u32, size.height as u32);
 
 	let channel = std::sync::mpsc::channel();
 	let resize_sender: OnResizeSender = channel.0;
@@ -710,7 +702,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	// Display the application
 
 	let mut frame_time = Utc::now().timestamp();
-	let mut frames = 0;
+	let frames = 0;
 	// let instance_buffer: wgpu::Buffer;
 
 	// let instance_buffer = device.create_buffer_init(
@@ -883,6 +875,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	let mut last_render_time = Utc::now();
 
 	let mut frames = 0u64;
+	let mut fps = 0;
 
 	let initial_event = DataSourceChangedEvent {
 		//source: "dotsama:/1//10504599".to_string(),
@@ -902,35 +895,49 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	);
 	
 	// let mut ctx = egui::Context::default();
+	let mut old_width = 0u32;
+	let mut mouse_pressed = false;
 
 	event_loop.run(move |event, _, _control_flow| {
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
 
+
 		frames += 1;
 
-		if let Some(new_size) = viewport_resize_system(&resize_receiver) {
-			window.set_inner_size(new_size);       
-			window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
-			projection.resize(new_size.width, new_size.height);
-			size = new_size;
-			surface.configure(&device, &surface_config);
-			depth_texture =
-				texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
-		}
+		// viewport_resize_system(&resize_receiver);
+		// if let Some(new_size) = viewport_resize_system(&resize_receiver) {
+		// 	log!("set new size width: {} height: {}", new_size.width, new_size.height);
+		// 	window.set_inner_size(new_size);       
+		// 	window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+		// 	projection.resize(new_size.width, new_size.height);
+		// 	size = new_size;
+		// 	surface.configure(&device, &surface_config);
+		// 	depth_texture =
+		// 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+		// }
 
 		//if frames % 10 == 1
-
 		let mut redraw = true;
 		match event {
-			//  Event::DeviceEvent {
-			//     event: DeviceEvent::MouseMotion{ delta, },
-			//     .. // We're not using device_id currently
-			// } => if state.mouse_pressed {
-			//     state.camera_controller.process_mouse(delta.0, delta.1)
-			// }
+			 Event::DeviceEvent {
+			    event: DeviceEvent::MouseMotion{ delta, },
+			    .. // We're not using device_id currently
+			} => if mouse_pressed {
+			    camera_controller.process_mouse(delta.0, delta.1)
+			}
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
-				redraw = input(&mut camera_controller, &event);
+				redraw = input(&mut camera_controller, &event, &mut mouse_pressed);
+				if let WindowEvent::Resized(new_size) = event {
+					log!("WINIT: set new size width: {} height: {}", new_size.width, new_size.height);
+					window.set_inner_size(*new_size);       
+					window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+					projection.resize(new_size.width, new_size.height);
+					size = new_size.clone();
+					surface.configure(&device, &surface_config);
+					depth_texture =
+					texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+				}
 			},
 			Event::RedrawRequested(window_id) if window_id == window.id() => {
 				let now = Utc::now();
@@ -1006,10 +1013,8 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 			// Begin to draw the UI frame.
 			platform.begin_frame();
 
-			// Draw the demo application.
-			egui::CentralPanel::default().show(&platform.context(), |ui| {
-				ui.heading("This is a rotated image with a tint:");
-			});
+			ui_bars_system(&mut platform.context(), &mut occupied_screen_space, &camera.position, &mut urlbar, &mut anchor, &mut inspector, &mut destination, fps);
+
 
 			// End the UI frame. We could now handle the output and draw the UI with the backend.
 			let full_output = platform.end_frame(Some(&window));
@@ -1084,8 +1089,18 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 				render_pass.set_pipeline(&render_pipeline); // 2.
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-				// Clip window:
-				// render_pass.set_scissor_rect(20,20, 1500,1500);
+				// Clip window: 
+				let (x, y) = (0,occupied_screen_space.top as u32);
+				let (width, height) = (size.width - x, size.height - y - (occupied_screen_space.bottom as u32));
+
+				if old_width != width as u32 {
+					log!("set scissor rect: x: {} y: {}, width: {} height: {}, was {}",x,y,  width, height, old_width);
+					old_width = width as u32;
+				}
+
+				//render_pass.set_scissor_rect(x, y, width, height);
+
+				// render_pass.set_viewport(x as f32,y as f32,width as f32, height as f32, 0., 1.);
 				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
 				// Draw chains
@@ -1119,7 +1134,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 			frames += 1;
 			// platform.update_time(start_time.elapsed().as_secs_f64());
 			if Utc::now().timestamp() - frame_time > 1 {
-				log!("fps {}", frames);
+				fps = frames as u32;
 				frames = 0;
 				frame_time = Utc::now().timestamp();
 			}
@@ -1164,7 +1179,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	});
 }
 
-fn input(camera_controller: &mut CameraController, event: &WindowEvent) -> bool {
+fn input(camera_controller: &mut CameraController, event: &WindowEvent, mouse_pressed: &mut bool) -> bool {
 	match event {
 		WindowEvent::KeyboardInput {
 			input: KeyboardInput { virtual_keycode: Some(key), state, .. },
@@ -1175,8 +1190,12 @@ fn input(camera_controller: &mut CameraController, event: &WindowEvent) -> bool 
 			true
 		},
 		WindowEvent::MouseInput { button: winit::event::MouseButton::Left, state, .. } => {
-			let mouse_pressed = *state == ElementState::Pressed;
+			*mouse_pressed = *state == ElementState::Pressed;
 			true
+		},
+		WindowEvent::Resized(new_size) => {
+			log!("Window event: new size: width {} height {}", new_size.width, new_size.height);
+			true 
 		},
 		_ => false,
 	}
@@ -1858,10 +1877,10 @@ pub struct Sovereigns {
 }
 
 // #[derive(Component)]
-struct ClearMe;
+// struct ClearMe;
 
 // #[derive(Component)]
-struct ClearMeAlwaysVisible;
+// struct ClearMeAlwaysVisible;
 
 // fn pad_system(gamepads: Res<Gamepads>) {
 //     // iterates every active game pad
@@ -2002,14 +2021,14 @@ fn render_block(
 				// Add the new block as a large square on the ground:
 				{
 					let timestamp_color = if chain_info.chain_url.is_relay() {
-						log!("skiping relay block from {} as has no timestamp", details.doturl);
+						// log!("skiping relay block from {} as has no timestamp", details.doturl);
 						if block.timestamp.is_none() {
 							return
 						}
 						block.timestamp.unwrap()
 					} else {
 						if block.timestamp_parent.is_none() && block.timestamp.is_none() {
-							log!("skiping block from {} as has no timestamp", details.doturl);
+							// log!("skiping block from {} as has no timestamp", details.doturl);
 							return
 						}
 						block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
@@ -2692,7 +2711,7 @@ fn rain(
 // 	// }
 // }
 
-struct Width(f32);
+// struct Width(f32);
 
 static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
 static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
@@ -3053,7 +3072,7 @@ pub enum BridgeMessage {
 
 //from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE
 
-fn get_viewport_size() -> (i32, i32) {
+fn get_viewport_size() -> PhysicalSize<u32> {
     let web_window = web_sys::window().expect("could not get window");
     let document_element = web_window
         .document()
@@ -3064,7 +3083,7 @@ fn get_viewport_size() -> (i32, i32) {
     let width = document_element.client_width();
     let height = document_element.client_height();
 
-    (width, height)
+	PhysicalSize::new(width as u32, height as u32)
 }
 
 use std::sync::{
@@ -3090,9 +3109,8 @@ fn viewport_resize_system(
     resize_receiver: &Mutex<OnResizeReceiver>,
 ) -> Option<winit::dpi::PhysicalSize<u32>> {
     if resize_receiver.lock().unwrap().try_recv().is_ok() {
-		let size = get_viewport_size();
+		let new_size = get_viewport_size();
 		//TODO: bugout if window size is already this.
-		let new_size: winit::dpi::PhysicalSize<u32> = PhysicalSize::new(size.0 as u32, size.1 as u32);
 		if new_size.width > 0 && new_size.height > 0 {
 			return Some(new_size);
 			// log!("I GOT CALLED with {}, {}", size.0, size.1);// width, height
