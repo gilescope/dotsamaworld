@@ -456,11 +456,11 @@ where
 		//FYI: blocks sometimes have no events in them.
 		{
 			//TODO: use Once
-			let mut base_time = *BASETIME.lock().unwrap();
-			if base_time == 0 {
+			let mut base_time = BASETIME.lock().unwrap();
+			if *base_time == 0 {
 				if let Some(time) = timestamp {
 					log!("BASETIME seting to {}", time);
-					*BASETIME.lock().unwrap() = time;
+					*base_time = time;
 				}
 			}
 		}

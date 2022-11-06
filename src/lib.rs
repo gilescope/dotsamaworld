@@ -97,6 +97,7 @@ impl Default for MovementSettings {
 
 /// Distance vertically between layer 0 and layer 1
 const LAYER_GAP: f32 = 0.;
+const CHAIN_HEIGHT: f32 = 0.001;
 
 // The time by which all times should be placed relative to each other on the x axis.
 lazy_static! {
@@ -197,19 +198,22 @@ impl Vertex {
 /// https://www.researchgate.net/profile/John-Sheridan-7/publication/253573419/figure/fig1/AS:298229276135426@1448114808488/A-volume-is-subdivided-into-cubes-The-vertices-are-numbered-0-7.png
 
 fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) -> [Vertex; 8] {
-	let bump = 0.2;
+	let col = |bump: f32| -> [f32; 3] {
+		[(r + bump).clamp(0., 2.), (g + bump).clamp(0., 2.), (b + bump).clamp(0., 2.)]
+	};
+	let r = 0.2;
+	let g = 0.2;
+	let b = 0.2;
+	let bump = 0.10;
 	[
-		Vertex { position: [0.0, y_height, 0.0], color: [r + bump, g + 0.0, b + bump] }, // C
-		Vertex { position: [0.0, y_height, z_width], color: [r + bump, g + 0.0, b + bump] }, // D
-		Vertex { position: [0., 0., z_width], color: [r + bump, g + 0.0, b + bump] },    // B
-		Vertex { position: [0., 0.0, 0.0], color: [r + bump, g + 0.0, b + bump] },       // A
-		Vertex { position: [x_depth, y_height, 0.0], color: [r + bump, g + 0.0, b + bump] }, // C
-		Vertex {
-			position: [x_depth, y_height, z_width],
-			color: [r + bump, g + 0.0, b + bump * 2.],
-		}, // D
-		Vertex { position: [x_depth, 0., z_width], color: [r + bump, g + 0.0, b + bump * 2.] }, // B
-		Vertex { position: [x_depth, 0.0, 0.0], color: [r + bump, g + 0.0, b + bump * 2.] }, // A
+		Vertex { position: [0.0, y_height, 0.0], color: col(bump) }, // C
+		Vertex { position: [0.0, y_height, z_width], color: col(bump) }, // D
+		Vertex { position: [0., 0., z_width], color: col(-bump) },   // B
+		Vertex { position: [0., 0.0, 0.0], color: col(-bump) },      // A
+		Vertex { position: [x_depth, y_height, 0.0], color: col(bump) }, // C
+		Vertex { position: [x_depth, y_height, z_width], color: col(bump) }, // D
+		Vertex { position: [x_depth, 0., z_width], color: col(bump * 2.0) }, // B
+		Vertex { position: [x_depth, 0.0, 0.0], color: col(bump * 2.0) }, // A
 	]
 }
 
@@ -543,6 +547,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// 	speed: 12.0,          // default: 12.0
 	// 	boost: 5.,
 	// };
+	let ground_width = 100000.0f32;
+
 	let mut urlbar =
 		ui::UrlBar::new("dotsama:/1//10504599".to_string(), Utc::now().naive_utc(), Env::Local);
 	// app.insert_resource();
@@ -693,17 +699,20 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let mut depth_texture =
 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
 
-	let mut vertices = vec![];
+	let mut vertices = vec![]; //cube
 	vertices.extend(rectangle(0.8, 0.8, 0.8, 0., 0., 0.));
-	let offset1 = vertices.len();
+	let offset1 = vertices.len(); //block
 	vertices.extend(rectangle(10., 0.5, 10., 0., 0.0, 0.));
-	let offset2 = vertices.len();
-	vertices.extend(rectangle(10., 0.001, 10000., 0.0, 0.0, 0.));
+	let offset2 = vertices.len(); //chain
+	vertices.extend(rectangle(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
+	let offset3 = vertices.len(); //ground
+	vertices.extend(rectangle(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
 	indicies.extend(&cube_indicies(0));
 	indicies.extend(&cube_indicies(offset1 as u16));
 	indicies.extend(&cube_indicies(offset2 as u16));
+	indicies.extend(&cube_indicies(offset3 as u16));
 
 	//    const INDICES: &[u16] = &cube_indicies(0);
 
@@ -733,6 +742,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	//     })
 	//     .collect::<Vec<_>>();
 
+	let mut ground_instance_data: Vec<Instance> = vec![
+	// Instance{ position: [-ground_width/2.0,-10.,-ground_width/2.0], color: 123444 },
+	// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
+
+	];
 	let mut chain_instance_data = vec![];
 	let mut block_instance_data = vec![];
 	let mut cube_instance_data = vec![];
@@ -1062,6 +1076,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			rain(&mut cube_instance_data, &mut cube_target_heights);
 
 			// TODO don't create each time!!!
+			let ground_instance_buffer =
+				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+					label: Some("Instance Buffer"),
+					contents: bytemuck::cast_slice(&ground_instance_data),
+					usage: wgpu::BufferUsages::VERTEX,
+				});
 			let chain_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("Instance Buffer"),
@@ -1207,6 +1227,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 				// render_pass.set_viewport(x as f32,y as f32,width as f32, height as f32, 0., 1.);
 				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+				// Draw ground
+				render_pass.set_vertex_buffer(1, ground_instance_buffer.slice(..));
+				render_pass.draw_indexed(
+					(36 + 36 + 36)..((36 + 36 + 36 + 36) as u32),
+					0,
+					0..ground_instance_data.len() as _,
+				);
 
 				// Draw chains
 				render_pass.set_vertex_buffer(1, chain_instance_buffer.slice(..));
@@ -1788,7 +1816,7 @@ fn draw_chain_rect(
 	chain_instances.push(Instance {
 		position: glam::Vec3::new(
 			0. - 35., //(1000. / 2.) - 35.,
-			if is_relay { 0. } else { LAYER_GAP },
+			if is_relay { 0. } else { LAYER_GAP } - CHAIN_HEIGHT / 2.0,
 			((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 				rfip,
 		)
