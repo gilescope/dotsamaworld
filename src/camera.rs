@@ -1,16 +1,7 @@
 use cgmath::{perspective, prelude::*, Matrix4, Point3, Rad, Vector3};
-// use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 use winit::{dpi::PhysicalPosition, event::*};
-// pub struct Camera {
-//     pub eye: cgmath::Point3<f32>,
-//     pub target: cgmath::Point3<f32>,
-//     pub up: cgmath::Vector3<f32>,
-//     pub aspect: f32,
-//     pub fovy: f32,
-//     pub znear: f32,
-//     pub zfar: f32,
-// }
+
 #[derive(Debug)]
 pub struct Camera {
 	pub position: Point3<f32>,
@@ -18,6 +9,25 @@ pub struct Camera {
 	pitch: Rad<f32>,
 }
 
+/*
+		 width
+		_____
+		|	| height
+		-----
+		  | direction, fnear is distance in that direction..
+		  . <- position (x,y,z model space)
+
+
+		Get aabb of screen space:
+		  create instance width * height
+		 at camera.position + direction * fnear - (width/2, height/2,0)
+
+		at zfar what's the size of box?
+
+		get aabb points of near view - camera.position and then divide by znear, * zfar
+
+
+*/
 impl Camera {
 	pub fn new<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
 		position: V,
@@ -28,17 +38,14 @@ impl Camera {
 	}
 
 	pub fn calc_matrix(&self) -> Matrix4<f32> {
-		        let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
-				let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
-        Matrix4::look_to_rh(
-            self.position,
-            Vector3::new(
-                cos_pitch * cos_yaw,
-                sin_pitch,
-                cos_pitch * sin_yaw
-            ).normalize(),
-            Vector3::unit_y(),
-        )
+		let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
+		let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
+		Matrix4::look_to_rh(
+			self.position,
+			// direction.
+			Vector3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw).normalize(),
+			Vector3::unit_y(),
+		)
 	}
 }
 

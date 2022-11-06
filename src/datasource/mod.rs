@@ -1,10 +1,11 @@
 use self::raw_source::AgnosticBlock;
+use crate::render_block;
 use core::future::Future;
 // use core::slice::SlicePattern;
 // use super::polkadot;
 use crate::{
-	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
-	PAUSE_DATA_FETCH,
+	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, RenderUpdate, BASETIME,
+	DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
 use log::warn;
 // use async_std::stream::StreamExt;
@@ -136,7 +137,7 @@ pub type RelayBlockNumber = u32;
 
 pub struct BlockWatcher<F, R>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn(RenderUpdate) -> R + Send + Sync,
 	R: Future<Output = ()>,
 {
 	pub tx: Option<F>,
@@ -149,7 +150,7 @@ where
 
 impl<F, R> BlockWatcher<F, R>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn(RenderUpdate) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
 	pub async fn watch_blocks(mut self) {
@@ -178,10 +179,9 @@ where
 
 		// Tell renderer to draw a new chain...
 		{
-			// log!("acquiring lock");
-			//let mut handle = tx.lock().unwrap();
-			tx(vec![DataUpdate::NewChain(chain_info.clone())]).await;
-			// log!("got lock");
+			let mut render_update = RenderUpdate::default();
+			render_block(DataUpdate::NewChain(chain_info.clone()), &chain_info, &mut render_update);
+			tx(render_update).await;
 		}
 
 		if let Some(as_of) = as_of {
@@ -196,7 +196,7 @@ where
 				{
 					let _ = process_extrinsics(
 						&tx,
-						chain_info.chain_url.clone(),
+						&chain_info,
 						block_hash,
 						&mut source,
 						&sender,
@@ -259,25 +259,25 @@ where
 							block_number, url
 						);
 						// TODO: timestamp probably incorrect
-						tx(vec![DataUpdate::NewBlock(PolkaBlock {
-							data_epoc: our_data_epoc,
-							// Place it in the approximately right location...
-							timestamp: last_timestamp.map(|t| t + 12_000_000),
-							timestamp_parent: None,
-							blockurl: DotUrl {
-								block_number: Some(block_number),
-								..chain_info.chain_url.clone()
-							},
-							extrinsics: vec![],
-							events: vec![],
-						})]);
+						// tx(vec![DataUpdate::NewBlock(PolkaBlock {
+						// 	data_epoc: our_data_epoc,
+						// 	// Place it in the approximately right location...
+						// 	timestamp: last_timestamp.map(|t| t + 12_000_000),
+						// 	timestamp_parent: None,
+						// 	blockurl: DotUrl {
+						// 		block_number: Some(block_number),
+						// 		..chain_info.chain_url.clone()
+						// 	},
+						// 	extrinsics: vec![],
+						// 	events: vec![],
+						// })]);
 
 						continue
 					}
 					let block_hash = block_hash.unwrap();
 					if let Ok(timestamp) = process_extrinsics(
 						&tx,
-						chain_info.chain_url.clone(),
+						&chain_info,
 						block_hash,
 						&mut source,
 						&sender,
@@ -310,7 +310,7 @@ where
 						// log!("found new block on {}", source.url());
 						let _ = process_extrinsics(
 							&tx,
-							chain_info.chain_url.clone(),
+							&chain_info,
 							block_hash,
 							&mut source,
 							&None,
@@ -346,7 +346,7 @@ struct OwnedScale {
 // Returns the timestamp of the block decoded.
 async fn process_extrinsics<S: Source, F, R>(
 	tx: &F,
-	mut blockurl: DotUrl,
+	chain_info: &ChainInfo,
 	block_hash: H256,
 	source: &mut S,
 	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
@@ -354,13 +354,14 @@ async fn process_extrinsics<S: Source, F, R>(
 	timestamp_parent: Option<i64>,
 ) -> Result<Option<i64>, ()>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn(RenderUpdate) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
 		let got_block_num = block.block_number;
 		let extrinsics = block.extrinsics;
+		let mut blockurl = chain_info.chain_url.clone();
 		blockurl.block_number = Some(got_block_num);
 		// let block_number = blockurl.block_number.unwrap();
 
@@ -453,7 +454,20 @@ where
 		};
 
 		//FYI: blocks sometimes have no events in them.
-		tx(vec![DataUpdate::NewBlock(current)]).await;
+		{
+			//TODO: use Once
+			let mut base_time = *BASETIME.lock().unwrap();
+			if base_time == 0 {
+				if let Some(time) = timestamp {
+					log!("BASETIME seting to {}", time);
+					*BASETIME.lock().unwrap() = time;
+				}
+			}
+		}
+
+		let mut rend = RenderUpdate::default();
+		render_block(DataUpdate::NewBlock(current), chain_info, &mut rend);
+		tx(rend).await;
 	}
 	Ok(timestamp)
 }

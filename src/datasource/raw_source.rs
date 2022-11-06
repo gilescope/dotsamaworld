@@ -1,14 +1,14 @@
 // use async_std::stream::StreamExt;
+use crate::log;
 use async_trait::async_trait;
-#[cfg(not(target_arch = "wasm32"))]
-use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
-
 #[cfg(not(target_arch = "wasm32"))]
-use async_tungstenite::{tungstenite::Message, WebSocketStream};
-#[cfg(not(target_arch = "wasm32"))]
-use futures::{sink::SinkErrInto, stream::SplitSink};
+use {
+	async_tungstenite::{tungstenite::Message, WebSocketStream},
+	futures::{sink::SinkErrInto, stream::SplitSink},
+	parity_scale_codec::Encode,
+};
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -25,12 +25,6 @@ impl AgnosticBlock {
 	pub fn from_bytes(mut bytes: &[u8]) -> Result<Self, parity_scale_codec::Error> {
 		parity_scale_codec::Decode::decode(&mut bytes)
 	}
-}
-
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
 }
 
 /// A way to source untransformed raw data.

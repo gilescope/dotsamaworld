@@ -6,54 +6,32 @@
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
 #![feature(let_chains)]
-#[cfg(target_arch = "wasm32")]
-use core::future::Future;
-use winit::dpi::PhysicalSize;
-use winit::dpi::LogicalSize;
-
-// use core::slice::SlicePattern;
-// use bevy::winit::WinitSettings;
-// #[cfg(feature = "normalmouse")]
-// use bevy_flycam::{FlyCam, MovementSettings, NoCameraPlayerPlugin};
-//use bevy_kira_audio::AudioPlugin;
-// use bevy_inspector_egui::{Inspectable, InspectorPlugin};
-//use bevy_egui::render_systems::ExtractedWindowSizes;
-//use bevy::window::PresentMode;
 
 #[cfg(target_arch = "wasm32")]
-use gloo_worker::Spawnable;
- use crate::ui::ui_bars_system;
-// use bevy::diagnostic::LogDiagnosticsPlugin;
-//instancing::CustomMaterialPlugin,
-use crate::{movement::Destination, ui::UrlBar};
-// #[cfg(feature = "adaptive-fps")]
-// use bevy::diagnostic::Diagnostics;
-// use bevy::{
-// 	// asset::load_internal_asset,
-// 	diagnostic::FrameTimeDiagnosticsPlugin,
-// 	ecs as bevy_ecs,
-// 	prelude::*,
-// 	reflect::TypeUuid,
-// 	render::{
-// 		primitives::{Frustum, Sphere},
-// 		view::{ComputedVisibility, Msaa, NoFrustumCulling, Visibility},
-// 	},
-// 	window::RequestRedraw,
-// };
-// use bevy_ecs::prelude::Component;
-// use bevy_egui::EguiPlugin;
-// use bevy_mod_picking::*;
-// use bevy_polyline::{prelude::*, PolylinePlugin};
-use crate::camera::CameraUniform;
+use {
+	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
+	winit::platform::web::WindowBuilderExtWebSys,
+};
+
+use crate::{
+	camera::CameraUniform,
+	movement::Destination,
+	ui::{ui_bars_system, Details, DotUrl, UrlBar},
+};
 use ::egui::FontDefinitions;
 use chrono::prelude::*;
 use datasource::DataUpdate;
+use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
+use egui_winit_platform::{Platform, PlatformDescriptor};
+use lazy_static::lazy_static;
+use log::warn;
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
 	convert::AsRef,
 	f32::consts::PI,
+	iter,
 	num::NonZeroU32,
 	sync::{
 		atomic::{AtomicI32, AtomicU32, Ordering},
@@ -61,58 +39,40 @@ use std::{
 	},
 	time::Duration,
 };
-use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
-use egui_winit_platform::{Platform, PlatformDescriptor};
-use log::warn;
-use std::iter;
-use wasm_bindgen::JsCast;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
+	dpi::{LogicalSize, PhysicalSize},
 	event::{WindowEvent, *},
 	event_loop::EventLoop,
-	platform::web::WindowBuilderExtWebSys,
 	window::Window,
 };
-mod camera;
-mod texture;
-#[cfg(feature = "atmosphere")]
-use bevy_atmosphere::prelude::*;
 
-// Define macros
-
+// Define macros before mods
 macro_rules! log {
     // Note that this is using the `log` function imported above during
     // `bare_bones`
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
-// use rayon::prelude::*;
-// use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-// use ui::doturl;
-//use bevy_kira_audio::Audio;
+mod camera;
 mod content;
 mod datasource;
-// mod instancing;
 mod movement;
 mod style;
+mod texture;
 mod ui;
-
-// use instancing::{InstanceData, InstanceMaterialData};
 
 #[cfg(target_family = "wasm")]
 pub mod webworker;
 #[cfg(target_family = "wasm")]
 pub use webworker::IOWorker;
 
-use crate::ui::{Details, DotUrl};
-// use bevy_inspector_egui::RegisterInspectable;
-// use bevy_inspector_egui::WorldInspectorPlugin;
-// use bevy::winit::WinitSettings;
-#[cfg(feature = "spacemouse")]
-use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
-// #[subxt::subxt(runtime_metadata_path = "polkadot_metadata.scale")]
-// pub mod polkadot {}
+// #[cfg(feature = "spacemouse")]
+// use bevy_spacemouse::{SpaceMousePlugin, SpaceMouseRelativeControllable};
+
+mod networks;
 pub mod recorder;
+use networks::Env;
 
 /// Pick a faster allocator.
 #[cfg(all(not(target_env = "msvc"), not(target_arch = "wasm32")))]
@@ -137,15 +97,15 @@ impl Default for MovementSettings {
 
 /// Distance vertically between layer 0 and layer 1
 const LAYER_GAP: f32 = 0.;
-use lazy_static::lazy_static;
 
 // The time by which all times should be placed relative to each other on the x axis.
-lazy_static! { // This line needs rust 1.63+: and then some
+lazy_static! {
 	static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
 }
 
-lazy_static! { // This line needs rust 1.63+: and then some
-	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<Vec<datasource::DataUpdate>>> = Arc::new(std::sync::Mutex::new(vec![]));
+lazy_static! {
+	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<RenderUpdate>> =
+		Arc::new(std::sync::Mutex::new(RenderUpdate::default()));
 }
 
 /// Bump this to tell the current datasources to stop.
@@ -155,29 +115,13 @@ static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
 static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 
 /// Immutable once set up.
-#[derive(Clone, Serialize, Deserialize)] //TODO use scale
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ChainInfo {
-	// pub chain_name: String,
 	pub chain_ws: String,
-	// pub chain_id: Option<NonZeroU32>,
-	// pub chain_drawn: bool,
 	// Negative is other direction from center.
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
-	// pub chain_name: String,
 }
-
-// pub type ABlocks = Arc<
-// 	Mutex<
-// 		// Queue of new data to be processed.
-// 		Vec<datasource::DataUpdate>,
-// 	>,
-// >;
-
-// pub type ABlocks = Fn(Vec<datasource::DataUpdate>) -> () + Send + Sync + 'static;
-
-mod networks;
-use networks::Env;
 
 pub struct DataSourceChangedEvent {
 	source: String,
@@ -188,11 +132,6 @@ pub struct DataSourceChangedEvent {
 pub struct Anchor {
 	pub follow_chain: bool,
 }
-
-// #[derive(Component)]
-// pub struct HiFi;
-// #[derive(Component)]
-// pub struct MedFi;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -226,7 +165,6 @@ pub fn main() {
 }
 
 use crate::camera::CameraController;
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -266,9 +204,12 @@ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) 
 		Vertex { position: [0., 0., z_width], color: [r + bump, g + 0.0, b + bump] },    // B
 		Vertex { position: [0., 0.0, 0.0], color: [r + bump, g + 0.0, b + bump] },       // A
 		Vertex { position: [x_depth, y_height, 0.0], color: [r + bump, g + 0.0, b + bump] }, // C
-		Vertex { position: [x_depth, y_height, z_width], color: [r + bump, g + 0.0, b + bump *2.] }, // D
-		Vertex { position: [x_depth, 0., z_width], color: [r + bump, g + 0.0, b + bump*2.] }, // B
-		Vertex { position: [x_depth, 0.0, 0.0], color: [r + bump, g + 0.0, b + bump * 2.] },  // A
+		Vertex {
+			position: [x_depth, y_height, z_width],
+			color: [r + bump, g + 0.0, b + bump * 2.],
+		}, // D
+		Vertex { position: [x_depth, 0., z_width], color: [r + bump, g + 0.0, b + bump * 2.] }, // B
+		Vertex { position: [x_depth, 0.0, 0.0], color: [r + bump, g + 0.0, b + bump * 2.] }, // A
 	]
 }
 
@@ -284,7 +225,7 @@ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) 
 */
 
 /// Counter clockwise to show up as looking from outside at cube.
-const INDICES: &[u16] = &cube_indicies(0);
+// const INDICES: &[u16] = &cube_indicies(0);
 
 const fn cube_indicies(offset: u16) -> [u16; 36] {
 	[
@@ -355,7 +296,7 @@ const fn cube_indicies(offset: u16) -> [u16; 36] {
 // }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Deserialize, Serialize)]
 struct Instance {
 	position: [f32; 3],
 	color: u32,
@@ -402,32 +343,14 @@ impl Instance {
 	}
 }
 
-// /// A custom event type for the winit app.
-// enum Event {
-//     RequestRedraw,
-// }
 
-// /// This is the repaint signal type that egui needs for requesting a repaint from another thread.
-// /// It sends the custom RequestRedraw event to the winit event loop.
-// struct ExampleRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<Event>>);
-
-// impl epi::backend::RepaintSignal for ExampleRepaintSignal {
-//     fn request_repaint(&self) {
-//         self.0.lock().unwrap().send_event(Event::RequestRedraw).ok();
-//     }
-// }
-
-//color_eyre::eyre
-async fn async_main() -> std::result::Result<(),()> {
-	// color_eyre::install()?;
-	//   console_log!("Hello {}!", "world");
+async fn async_main() -> std::result::Result<(), ()> {
 	#[cfg(target_arch = "wasm32")]
 	console_error_panic_hook::set_once();
 	// let error = console_log::init_with_level(Level::Warn);
 	//.expect("Failed to enable logging");
-	//use log::{error, info, Level};
 
-	// App assumes the target dir exists
+	// App assumes the target dir exists for caching data
 	#[cfg(not(feature = "wasm32"))]
 	let _ = std::fs::create_dir_all("target");
 
@@ -590,23 +513,31 @@ async fn async_main() -> std::result::Result<(),()> {
 
 	let mut winit_window_builder = winit::window::WindowBuilder::new();
 
-	let window = web_sys::window().unwrap();
-	let document = window.document().unwrap();
-	let canvas = document.query_selector(&"canvas").expect("Cannot query for canvas element.");
-	if let Some(canvas) = canvas {
-		let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok();
-		winit_window_builder = winit_window_builder.with_canvas(canvas);
-	} else {
-		panic!("Cannot find element: {}.", "canvas");
+	#[cfg(target_family = "wasm")]
+	{
+		let window = web_sys::window().unwrap();
+		let document = window.document().unwrap();
+		let canvas = document.query_selector(&"canvas").expect("Cannot query for canvas element.");
+		if let Some(canvas) = canvas {
+			let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok();
+			winit_window_builder = winit_window_builder.with_canvas(canvas);
+		} else {
+			panic!("Cannot find element: {}.", "canvas");
+		}
 	}
 
+	log!("about to run event loop");
 	let window = winit_window_builder.build(&event_loop).unwrap();
+	#[cfg(target_family = "wasm")]
 	wasm_bindgen_futures::spawn_local(run(event_loop, window));
+	#[cfg(not(target_family = "wasm"))]
+	run(event_loop, window).await;
 
-	Ok::<(),()>(())
+	log!("event loop finished");
+	Ok::<(), ()>(())
 }
 
-async fn run(event_loop: EventLoop<()>, mut window: Window) {
+async fn run(event_loop: EventLoop<()>, window: Window) {
 	// let movement_settings = MovementSettings {
 	// 	sensitivity: 0.00020, // default: 0.00012
 	// 	speed: 12.0,          // default: 12.0
@@ -615,7 +546,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	let mut urlbar =
 		ui::UrlBar::new("dotsama:/1//10504599".to_string(), Utc::now().naive_utc(), Env::Local);
 	// app.insert_resource();
-	let mut sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
+	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
 	// let mouse_capture = movement::MouseCapture::default();
 	let mut anchor = Anchor::default();
@@ -625,18 +556,21 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 
 	ui::details::configure_visuals();
 
-	let instance = wgpu::Instance::new(wgpu::Backends::all()); //wgpu::Instance::new(wgpu::Backends::BROWSER_WEBGPU);//PRIMARY);
-	let surface = unsafe { instance.create_surface(&window) };
+	let instance = wgpu::Instance::new(wgpu::Backends::all());
+	// SAFETY: `window` Handle must be a valid object to create a surface upon
+	// and must remain valid for the lifetime of the returned surface.
+	let mut surface = unsafe { instance.create_surface(&window) };
 
-	// WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or
-	// false (optional).
-	let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-		power_preference: wgpu::PowerPreference::default(),
-		compatible_surface: Some(&surface),
-		force_fallback_adapter: false,
-	}))
-	.unwrap();
+	let adapter = instance
+		.request_adapter(&wgpu::RequestAdapterOptions {
+			power_preference: wgpu::PowerPreference::default(),
+			compatible_surface: Some(&surface),
+			force_fallback_adapter: false,
+		})
+		.await
+		.unwrap();
 
+	//TODO: can we await instead of block_on here?
 	let (device, queue) = pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
 			features: wgpu::Features::default(),
@@ -648,15 +582,23 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	.unwrap();
 
 	let mut size = window.inner_size();
-	log!("Initial size: width:{} height:{}", size.width as u32, size.height as u32);
+	let hidpi_factor = window.scale_factor(); // 2.0 <-- this is why quaters!
+	log!("hidpi factor {:?}", hidpi_factor);
 
-	let channel = std::sync::mpsc::channel();
-	let resize_sender: OnResizeSender = channel.0;
-	let resize_receiver = Mutex::new(channel.1);
-	setup_viewport_resize_system(Mutex::new(resize_sender));
+	// size.width *= hidpi_factor as u32;//todo!
+	// size.height *= hidpi_factor as u32;
+
+	log!("Initial size: width:{} height:{}", size.width as u32, size.height as u32);
+	// size.width = 1024; - seems double this so 4x pixels
+	// size.height = 768;
+
+	// let channel = std::sync::mpsc::channel();
+	// let resize_sender: OnResizeSender = channel.0;
+	// let resize_receiver = Mutex::new(channel.1);
+	// setup_viewport_resize_system(Mutex::new(resize_sender));
 
 	let surface_format = surface.get_supported_formats(&adapter)[0];
-	let surface_config = wgpu::SurfaceConfiguration {
+	let mut surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format: surface_format,
 		width: size.width as u32,
@@ -824,9 +766,9 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 		}),
 
 		primitive: wgpu::PrimitiveState {
-			topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+			topology: wgpu::PrimitiveTopology::TriangleList,
 			strip_index_format: None,
-			front_face: wgpu::FrontFace::Ccw, // 2.
+			front_face: wgpu::FrontFace::Ccw,
 			cull_mode: Some(wgpu::Face::Back),
 			// Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
 			polygon_mode: wgpu::PolygonMode::Fill,
@@ -839,16 +781,16 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 		depth_stencil: Some(wgpu::DepthStencilState {
 			format: texture::Texture::DEPTH_FORMAT,
 			depth_write_enabled: true,
-			depth_compare: wgpu::CompareFunction::Less, // 1.
-			stencil: wgpu::StencilState::default(),     // 2.
+			depth_compare: wgpu::CompareFunction::Less,
+			stencil: wgpu::StencilState::default(),
 			bias: wgpu::DepthBiasState::default(),
 		}),
 		multisample: wgpu::MultisampleState {
-			count: 1,                         // 2.
-			mask: !0,                         // 3.
-			alpha_to_coverage_enabled: false, // 4.
+			count: 1,
+			mask: !0,
+			alpha_to_coverage_enabled: false,
 		},
-		multiview: None, // 5.
+		multiview: None,
 	});
 
 	let mut last_render_time = Utc::now();
@@ -865,49 +807,63 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 
 	source_data(
 		initial_event,
-		&mut sovereigns,
+		sovereigns,
 		// details: Query<Entity, With<ClearMeAlwaysVisible>>,
 		// clean_me: Query<Entity, With<ClearMe>>,
 		&mut urlbar, /* handles: Res<ResourceHandles>,
 		              * #[cfg(not(target_arch="wasm32"))]
 		              * writer: EventWriter<DataSourceStreamEvent>, */
 	);
-	
+
 	// let mut ctx = egui::Context::default();
 	let mut old_width = 0u32;
 	let mut mouse_pressed = false;
 
-	use crate::camera::OPENGL_TO_WGPU_MATRIX;	
-	for x in (0..size.width).step_by(10) {
-		for y in (0..size.height).step_by(10) {
-			let adj_cursor_pos = glam::Vec2::new(x as f32 - (size.width as f32 / 2.0), y as f32 - (size.height as f32 / 2.0));
+	use crate::camera::OPENGL_TO_WGPU_MATRIX;
+
+	for x in 0..1 {
+		let x = (size.width as f32 / 100.) * x as f32;
+		for y in 0..1 {
+			let y = ((size.height as f32 / 100.) * 1.4 as f32) * y as f32;
+			let adj_cursor_pos = glam::Vec2::new(
+				0., //x as f32 - (size.width as f32 / 2.0),
+				0., // y as f32 - (size.height as f32 / 2.0),
+			);
 			// let view = camera_transform.compute_matrix();
+			#[cfg(target_family = "wasm")]
 			let viewport_size = get_viewport_size();
-			let viewport_size = glam::Vec2::new(viewport_size.width as f32, viewport_size.height as f32);
+			#[cfg(not(target_family = "wasm"))]
+			let viewport_size = window.inner_size();
+			let viewport_size =
+				glam::Vec2::new(viewport_size.width as f32, viewport_size.height as f32);
 
 			let matrix = OPENGL_TO_WGPU_MATRIX;
-			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
-			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
-			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
-			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
-			let OPENGL_TO_WGPU_MATRIXmat4 = glam::Mat4::from_cols(x,y,z,w);
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
+			let OPENGL_TO_WGPU_MATRIXmat4 = glam::Mat4::from_cols(x, y, z, w);
 
 			let matrix = camera.calc_matrix();
-			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
-			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
-			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
-			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
-			let view = glam::Mat4::from_cols(x,y,z,w);
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
+			let view = glam::Mat4::from_cols(x, y, z, w);
 			// let ndc_to_world = val.inverse();
 
-
 			// let matrix = projection.calc_matrix();
-			let matrix = cgmath::perspective(projection.fovy, projection.aspect, projection.znear, projection.zfar);
-			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
-			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
-			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
-			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
-			let proj = OPENGL_TO_WGPU_MATRIXmat4 * glam::Mat4::from_cols(x,y,z,w);
+			let matrix = cgmath::perspective(
+				projection.fovy,
+				projection.aspect,
+				projection.znear,
+				projection.zfar,
+			);
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
+			let proj = OPENGL_TO_WGPU_MATRIXmat4 * glam::Mat4::from_cols(x, y, z, w);
 
 			// let matrix = camera.calc_matrix(); // proj; //TODO suspicious
 			// let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
@@ -916,42 +872,46 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 			// let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
 			// let view = glam::Mat4::from_cols(x,y,z,w);
 
-			let far_ndc = proj.project_point3(glam::Vec3::NEG_Z).z;
-			let near_ndc = proj.project_point3(glam::Vec3::Z).z;
-			let cursor_ndc = adj_cursor_pos;// (adj_cursor_pos / viewport_size) * 2.0 - glam::Vec2::ONE;
-			let ndc_to_world: glam::Mat4 = view * proj.inverse();
+			let far_ndc = projection.zfar; //proj.project_point3(glam::Vec3::NEG_Z).z;
+			let near_ndc = projection.znear; //camera.position.z;// proj.project_point3(glam::Vec3::Z).z;
+			let cursor_ndc = adj_cursor_pos; // (adj_cursor_pos / viewport_size) * 2.0 - glam::Vec2::ONE;
+			let ndc_to_world: glam::Mat4 = view.inverse() * proj.inverse();
 			let near = ndc_to_world.project_point3(cursor_ndc.extend(near_ndc));
 			let far = ndc_to_world.project_point3(cursor_ndc.extend(far_ndc));
-			let ray_direction = far - near;
-			//Some(Ray3d::new(near, ray_direction))
-			// log!(" pos3d: {:?}  dir: {:?}", near, ray_direction);
+			let ray_direction = far - near; //model space
+								//Some(Ray3d::new(near, ray_direction))
+								// log!(" pos3d: {:?}  dir: {:?}", near, ray_direction);
 
-			let mut pos : glam::Vec3 = near.into();
-			// for _ in 1..100 {
-				// pos = pos + ray_direction.normalize();// * glam::Vec3::new(100.,100.,100.);
-				cube_instance_data.push(Instance{
-					position: pos.into(),
-					color: as_rgba_u32(0.4, 0.4, 0.4, 1.)
-				});
-				cube_target_heights.push(0.);
-			// }
+			let mut pos: glam::Vec3 = near.into();
+			// for _ in 1..5 {
+
+			cube_instance_data
+				.push(Instance { position: pos.into(), color: as_rgba_u32(0.4, 0.4, 0.4, 1.) });
+			cube_target_heights.push(0.);
+
+			pos = pos + ray_direction;
+
+			cube_instance_data
+				.push(Instance { position: pos.into(), color: as_rgba_u32(0.4, 0.4, 0.4, 1.) });
+			cube_target_heights.push(0.);
+
+			// * glam::Vec3::new(10.,10.,10.);
+			//  }
 			// log!(" pos3d: {:?}  dir: {:?} {}", near, ray_direction, cube_target_heights.len());
 		}
 	}
 
-
 	event_loop.run(move |event, _, _control_flow| {
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
-
 
 		frames += 1;
 
 		// viewport_resize_system(&resize_receiver);
 		// if let Some(new_size) = viewport_resize_system(&resize_receiver) {
 		// 	log!("set new size width: {} height: {}", new_size.width, new_size.height);
-		// 	window.set_inner_size(new_size);       
-		// 	window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+		// 	window.set_inner_size(new_size);
+		// 	window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
 		// 	projection.resize(new_size.width, new_size.height);
 		// 	size = new_size;
 		// 	surface.configure(&device, &surface_config);
@@ -1035,20 +995,24 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 						// log!(" pos3d: {:?}  dir: {:?} {}", near, ray_direction, cube_target_heights.len());
 
 						// create small box that starts at point and goes to destination...
-
-
-
 					}
 				}
 				if let WindowEvent::Resized(new_size) = event {
 					log!("WINIT: set new size width: {} height: {}", new_size.width, new_size.height);
 					// window.set_inner_size(*new_size);       
 					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
-					projection.resize(new_size.width, new_size.height);
-					size = new_size.clone();
-					surface.configure(&device, &surface_config);
-					depth_texture =
-					texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+					// size = new_size.clone();
+					// surface_config.width = size.width;
+					// surface_config.height = size.height;
+					// projection.resize(size.width, size.height);
+					// surface.configure(&device, &surface_config);
+					// depth_texture =
+					// texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+					size = *new_size;
+					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture);
+				} else if let WindowEvent::ScaleFactorChanged { new_inner_size, .. } = event {
+					size = **new_inner_size;
+					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture);
 				}
 			},
 			Event::RedrawRequested(window_id) if window_id == window.id() => {
@@ -1069,30 +1033,48 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 		}
 
 		if redraw {
-			render_block(
-				&sovereigns,
-				&mut cube_instance_data,
-				&mut block_instance_data,
-				&mut chain_instance_data,
-				&mut cube_target_heights,
-			);
+			// let mut data_update: Option<DataUpdate> = None;
+			if let Ok(render_update) = &mut UPDATE_QUEUE.lock() {
+				for (instance, height) in &(**render_update).cube_instances {
+					cube_instance_data.push(instance.clone());
+					cube_target_heights.push(*height);
+				}
+				//TODO: drain not clone!
+				block_instance_data.extend((**render_update).block_instances.clone());
+				chain_instance_data.extend((**render_update).chain_instances.clone());
+
+				//todo: possibly not needed?
+				render_update.chain_instances.truncate(0);
+				render_update.block_instances.truncate(0);
+				render_update.cube_instances.truncate(0);
+			}
+			// if let Some(data_update) = data_update {
+			// 	render_block(
+			// 		data_update,
+			// 		&sovereigns,
+			// 		&mut cube_instance_data,
+			// 		&mut block_instance_data,
+			// 		&mut chain_instance_data,
+			// 		&mut cube_target_heights,
+			// 	);
+			// }
 
 			rain(&mut cube_instance_data, &mut cube_target_heights);
 
 			// TODO don't create each time!!!
-			let mut chain_instance_buffer =
+			let chain_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("Instance Buffer"),
 					contents: bytemuck::cast_slice(&chain_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
-			let mut block_instance_buffer =
+			let block_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("Instance Buffer"),
 					contents: bytemuck::cast_slice(&block_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
-			let mut cube_instance_buffer =
+			let cube_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("Instance Buffer"),
 					contents: bytemuck::cast_slice(&cube_instance_data),
@@ -1114,19 +1096,26 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 			// 	});
 			// });
 			// handle_platform_output(full_output.platform_output);
-			// let clipped_primitives = ctx.tessellate(full_output.shapes); // create triangles to paint
-			// paint(full_output.textures_delta, clipped_primitives);
-			
+			// let clipped_primitives = ctx.tessellate(full_output.shapes); // create triangles to
+			// paint paint(full_output.textures_delta, clipped_primitives);
 
-			let output_frame = output;// 
-			
+			let output_frame = output; //
+
 			let output_view = view;
 
 			// Begin to draw the UI frame.
 			platform.begin_frame();
 
-			ui_bars_system(&mut platform.context(), &mut occupied_screen_space, &camera.position, &mut urlbar, &mut anchor, &mut inspector, &mut destination, fps);
-
+			ui_bars_system(
+				&mut platform.context(),
+				&mut occupied_screen_space,
+				&camera.position,
+				&mut urlbar,
+				&mut anchor,
+				&mut inspector,
+				&mut destination,
+				fps,
+			);
 
 			// End the UI frame. We could now handle the output and draw the UI with the backend.
 			let full_output = platform.end_frame(Some(&window));
@@ -1159,7 +1148,6 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 
 			queue.submit(iter::once(encoder.finish()));
 
-
 			let mut encoder = device
 				.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("encoder") });
 			{
@@ -1170,10 +1158,7 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 						Some(wgpu::RenderPassColorAttachment {
 							view: &output_view,
 							resolve_target: None,
-							ops: wgpu::Operations {
-								load: wgpu::LoadOp::Load,								
-								store: true,
-							},
+							ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
 						}),
 					],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -1198,15 +1183,23 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 				//     //render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 				// }
 
-				render_pass.set_pipeline(&render_pipeline); // 2.
+				render_pass.set_pipeline(&render_pipeline);
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-				// Clip window: 
-				let (x, y) = (0,occupied_screen_space.top as u32);
-				let (width, height) = (size.width - x, size.height - y - (occupied_screen_space.bottom as u32));
+				// Clip window:
+				let (x, y) = (0, occupied_screen_space.top as u32);
+				let (width, height) =
+					(size.width - x, size.height - y - (occupied_screen_space.bottom as u32));
 
 				if old_width != width as u32 {
-					log!("set scissor rect: x: {} y: {}, width: {} height: {}, was {}",x,y,  width, height, old_width);
+					log!(
+						"set scissor rect: x: {} y: {}, width: {} height: {}, was {}",
+						x,
+						y,
+						width,
+						height,
+						old_width
+					);
 					old_width = width as u32;
 				}
 
@@ -1251,8 +1244,6 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 				frame_time = Utc::now().timestamp();
 			}
 
-		
-
 			// Redraw egui
 			// output_frame.present();
 
@@ -1291,7 +1282,28 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	});
 }
 
-fn input(camera_controller: &mut CameraController, event: &WindowEvent, mouse_pressed: &mut bool) -> bool {
+/// Call after changing size.
+fn resize(
+	size: &PhysicalSize<u32>,
+	device: &wgpu::Device,
+	surface_config: &mut wgpu::SurfaceConfiguration,
+	projection: &mut camera::Projection,
+	surface: &mut wgpu::Surface,
+	depth_texture: &mut texture::Texture,
+) {
+	surface_config.width = size.width;
+	surface_config.height = size.height;
+	projection.resize(size.width, size.height);
+	surface.configure(&device, &surface_config);
+	*depth_texture =
+		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+}
+
+fn input(
+	camera_controller: &mut CameraController,
+	event: &WindowEvent,
+	mouse_pressed: &mut bool,
+) -> bool {
 	match event {
 		WindowEvent::KeyboardInput {
 			input: KeyboardInput { virtual_keycode: Some(key), state, .. },
@@ -1307,13 +1319,13 @@ fn input(camera_controller: &mut CameraController, event: &WindowEvent, mouse_pr
 		},
 		WindowEvent::Resized(new_size) => {
 			log!("Window event: new size: width {} height {}", new_size.width, new_size.height);
-			true 
+			true
 		},
 		_ => false,
 	}
 }
 
-struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
+// struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
 
 fn chain_name_to_url(chain_name: &str) -> String {
 	let mut chain_name = chain_name.to_string();
@@ -1349,28 +1361,14 @@ fn chain_name_to_url(chain_name: &str) -> String {
 // struct SourceDataTask(bevy_tasks::FakeTask);
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn send_it_too_desktop(blocks: Vec<datasource::DataUpdate>) {
+async fn send_it_to_desktop(update: RenderUpdate) {
 	// log!("Got some results....! yay they're already in the right place. {}", blocks.len());
-	UPDATE_QUEUE.lock().unwrap().extend(blocks);
+	UPDATE_QUEUE.lock().unwrap().extend(update);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Component)]
-struct SourceDataTask(
-	bevy::tasks::Task<Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>>,
-);
-
 // #[derive(Component)]
-// struct EventInstances;
-
-// #[derive(Component)]
-// struct ExtrinsicInstances;
-
-// #[derive(Component)]
-// struct BlockInstances;
-
-// #[derive(Component)]
-// struct ChainInstances;
+struct SourceDataTask(Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>>);
 
 // fn send_it_to_main(_blocks: Vec<datasource::DataUpdate>) //+ Send + Sync + 'static
 // {
@@ -1378,9 +1376,9 @@ struct SourceDataTask(
 // }
 
 fn source_data(
-	mut event: DataSourceChangedEvent,
+	event: DataSourceChangedEvent,
 	// mut commands: Commands,
-	mut sovereigns: &mut Sovereigns,
+	mut sovereigns: Sovereigns,
 	// details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	// clean_me: Query<Entity, With<ClearMe>>,
 	mut spec: &mut UrlBar,
@@ -1605,25 +1603,25 @@ fn source_data(
 	}
 
 	#[cfg(not(target_arch = "wasm32"))]
-	do_datasources(relays, as_of);
+	do_datasources(sovereigns, as_of);
+	// let sovereigns: Sovereigns = sovereigns;
 
 	#[cfg(target_arch = "wasm32")]
 	let t = async move || {
 		log("send to bridge");
 
-		#[cfg(target_arch = "wasm32")]
-		use gloo_worker::WorkerBridge;
 		#[cfg(target_family = "wasm")]
 		let bridge: WorkerBridge<IOWorker> = crate::webworker::IOWorker::spawner()
 			.callback(|result| {
-				UPDATE_QUEUE.lock().unwrap().extend(result);
+				let mut pending = UPDATE_QUEUE.lock().unwrap();
+				pending.extend(result);
 			})
 			.spawn("./worker.js");
 
 		#[cfg(target_arch = "wasm32")]
 		let bridge = Box::leak(Box::new(bridge));
 		bridge.send(BridgeMessage::SetDatasource(
-			relays,
+			sovereigns.clone(),
 			as_of,
 			DATASOURCE_EPOC.load(Ordering::Relaxed),
 		));
@@ -1642,8 +1640,8 @@ fn source_data(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
-	for relay in relays.into_iter() {
+fn do_datasources(sovereigns: Sovereigns, as_of: Option<DotUrl>) {
+	for relay in sovereigns.relays.into_iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
 			NonZeroU32,
@@ -1668,7 +1666,7 @@ fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
 			let chain_info = chain.clone();
 
 			let block_watcher = datasource::BlockWatcher {
-				tx: Some(send_it_too_desktop),
+				tx: Some(send_it_to_desktop),
 				chain_info,
 				as_of,
 				receive_channel: Some(rc),
@@ -1687,25 +1685,26 @@ fn do_datasources(relays: Vec<Vec<ChainInfo>>, as_of: Option<DotUrl>) {
 
 #[cfg(target_arch = "wasm32")]
 async fn do_datasources<F, R>(
-	relays: Vec<Vec<ChainInfo>>,
+	sovereigns: Sovereigns,
+	// relays: Vec<Vec<ChainInfo>>,
 	as_of: Option<DotUrl>,
 	callback: &'static F,
 ) where
-	F: (Fn(Vec<datasource::DataUpdate>) -> R) + Send + Sync + 'static,
+	F: (Fn(RenderUpdate) -> R) + Send + Sync + 'static,
 	R: Future<Output = ()> + 'static,
 {
-	for relay in relays.into_iter() {
+	for relay in sovereigns.relays.iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
 			NonZeroU32,
 			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
 		> = Default::default();
-		for chain in relay.into_iter() {
+		for chain in relay.iter() {
 			let (tx, rc) = async_std::channel::unbounded();
 			if let Some(para_id) = chain.chain_url.para_id {
 				send_map.insert(para_id, tx);
 			}
-			relay2.push((chain, rc));
+			relay2.push((chain.clone(), rc));
 		}
 
 		let mut send_map = Some(send_map);
@@ -1982,6 +1981,7 @@ const BLOCK: f32 = 10.;
 const BLOCK_AND_SPACER: f32 = BLOCK + 4.;
 const RELAY_CHAIN_CHASM_WIDTH: f32 = 10.;
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Sovereigns {
 	//                            name    para_id             url
 	pub relays: Vec<Vec<ChainInfo>>,
@@ -2012,315 +2012,326 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	(((timestamp - zero) as f64) / 400.) as f32
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct RenderUpdate {
+	chain_instances: Vec<Instance>,
+	block_instances: Vec<Instance>,
+	cube_instances: Vec<(Instance, f32)>,
+}
+
+impl RenderUpdate {
+	fn extend(&mut self, update: RenderUpdate) {
+		self.chain_instances.extend(update.chain_instances);
+		self.block_instances.extend(update.block_instances);
+		self.cube_instances.extend(update.cube_instances);
+	}
+}
+
 fn render_block(
+	data_update: DataUpdate,
 	// mut commands: Commands,
 	// mut materials: ResMut<Assets<StandardMaterial>>,
-	relays: &Sovereigns,
+	chain_info: &ChainInfo,
 	// asset_server: Res<AssetServer>,
 	// links: Query<(Entity, &MessageSource, &GlobalTransform)>,
 	// mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	// mut polylines: ResMut<Assets<Polyline>>,
 	// mut event: EventWriter<RequestRedraw>,
 	// mut handles: ResMut<ResourceHandles>,
-	mut event_instances: &mut Vec<Instance>,
-	// mut extrinsic_instances: &mut Vec<Instance>,
-	mut block_instances: &mut Vec<Instance>,
-	mut chain_instances: &mut Vec<Instance>,
-	mut event_dest: &mut Vec<f32>,
+	render: &mut RenderUpdate,
+	// mut event_instances: &mut Vec<(Instance, f32)>,
+	// mut block_instances: &mut Vec<Instance>,
+	// mut chain_instances: &mut Vec<Instance>,
 ) {
 	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	// 	for mut event_instances in event_instances.iter_mut() {
 	// 		for mut block_instances in block_instances.iter_mut() {
-	let mut data_update: Option<DataUpdate> = None;
-	if let Ok(block_events) = &mut UPDATE_QUEUE.lock() {
-		data_update = (*block_events).pop();
-	}
-	if let Some(data_update) = data_update {
-		match data_update {
-			DataUpdate::NewBlock(block) => {
-				//TODO optimise!
-				let mut chain_info = None;
-				'outer: for r in &relays.relays {
-					for rchain_info in r {
-						if rchain_info.chain_url.contains(&block.blockurl) {
-							// web_sys::console::log_1(&format!("{} contains {}",
-							// rchain_info.chain_url, block.blockurl).into());
-							chain_info = Some(rchain_info);
-							if !rchain_info.chain_url.is_relay() {
-								break 'outer
-							}
-						}
+
+	match data_update {
+		DataUpdate::NewBlock(block) => {
+			//TODO optimise!
+			// let mut chain_info = None;
+			// 'outer: for r in &relays.relays {
+			// 	for rchain_info in r {
+			// 		if rchain_info.chain_url.contains(&block.blockurl) {
+			// 			// web_sys::console::log_1(&format!("{} contains {}",
+			// 			// rchain_info.chain_url, block.blockurl).into());
+			// 			chain_info = Some(rchain_info);
+			// 			if !rchain_info.chain_url.is_relay() {
+			// 				break 'outer
+			// 			}
+			// 		}
+			// 	}
+			// }
+
+			// let chain_info = chain_info.unwrap();
+
+			// println!( - can see from instance counts now if needed.
+			// 	"chains {} blocks {} txs {} events {}",
+			// 	CHAINS.load(Ordering::Relaxed),
+			// 	BLOCKS.load(Ordering::Relaxed),
+			// 	EXTRINSICS.load(Ordering::Relaxed),
+			// 	EVENTS.load(Ordering::Relaxed)
+			// );
+			// log!("block rend chain index {}", chain_info.chain_index);
+
+			// Skip data we no longer care about because the datasource has changed
+			let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
+			if block.data_epoc != now_epoc {
+				log!(
+					"discarding out of date block made at {} but we are at {}",
+					block.data_epoc,
+					now_epoc
+				);
+				return
+			}
+
+			let mut base_time = *BASETIME.lock().unwrap();
+			if base_time == 0 {
+				base_time = block.timestamp.unwrap_or(0);
+				//log!("BASETIME set to {}", base_time);
+				*BASETIME.lock().unwrap() = base_time;
+			}
+
+			// let block_num = if is_self_sovereign {
+			//     block.blockurl.block_number.unwrap() as u32
+			// } else {
+
+			//     if base_time == 0
+			//     if rcount == 0 {
+			//         if chain == 0 &&  {
+			//             //relay
+			//             RELAY_BLOCKS.store(
+			//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
+			//                 Ordering::Relaxed,
+			//             );
+			//         }
+			//         RELAY_BLOCKS.load(Ordering::Relaxed)
+			//     } else {
+			//         if chain == 0 {
+			//             //relay
+			//             RELAY_BLOCKS2.store(
+			//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
+			//                 Ordering::Relaxed,
+			//             );
+			//         }
+			//         RELAY_BLOCKS2.load(Ordering::Relaxed)
+			//     }
+			// };
+
+			let rflip = chain_info.chain_url.rflip();
+			let encoded: String = form_urlencoded::Serializer::new(String::new())
+				.append_pair("rpc", &chain_info.chain_ws)
+				.finish();
+
+			let is_relay = chain_info.chain_url.is_relay();
+			let details = Details {
+				doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
+
+				url: format!(
+					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+					&encoded,
+					block.blockurl.block_number.unwrap()
+				),
+				..Default::default()
+			};
+			// log!("rendering block from {}", details.doturl);
+
+			// println!("block.timestamp {:?}", block.timestamp);
+			// println!("base_time {:?}",base_time);
+			let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+
+			// Add the new block as a large square on the ground:
+			{
+				let timestamp_color = if chain_info.chain_url.is_relay() {
+					// log!("skiping relay block from {} as has no timestamp", details.doturl);
+					if block.timestamp.is_none() {
+						return
 					}
-				}
+					block.timestamp.unwrap()
+				} else {
+					if block.timestamp_parent.is_none() && block.timestamp.is_none() {
+						// log!("skiping block from {} as has no timestamp", details.doturl);
+						return
+					}
+					block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
+				} / 400;
 
-				let chain_info = chain_info.unwrap();
+				// let transform = Transform::from_translation(Vec3::new(
+				// 	0. + (block_num as f32),
+				// 	if is_relay { 0. } else { LAYER_GAP },
+				// 	(RELAY_CHAIN_CHASM_WIDTH +
+				// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+				// 		rflip,
+				// ));
+				// println!("block created at {:?} blocknum {}", transform,
+				// block_num);
 
-				// println!( - can see from instance counts now if needed.
-				// 	"chains {} blocks {} txs {} events {}",
-				// 	CHAINS.load(Ordering::Relaxed),
-				// 	BLOCKS.load(Ordering::Relaxed),
-				// 	EXTRINSICS.load(Ordering::Relaxed),
-				// 	EVENTS.load(Ordering::Relaxed)
-				// );
-				// log!("block rend chain index {}", chain_info.chain_index);
+				// let mut bun = commands.spawn_bundle(PbrBundle {
+				// 	mesh: handles.block_mesh.clone(),
+				// 	material: materials.add(StandardMaterial {
+				// 		base_color: style::color_block_number(
+				// 			timestamp_color, /* TODO: material needs to be cached by
+				// 			                  * color */
+				// 			chain_info.chain_url.is_darkside(),
+				// 		), // Color::rgba(0., 0., 0., 0.7),
+				// 		alpha_mode: AlphaMode::Blend,
+				// 		perceptual_roughness: 0.08,
+				// 		unlit: block.blockurl.is_darkside(),
+				// 		..default()
+				// 	}),
+				// 	transform,
+				// 	..Default::default()
+				// });
+				// bun.insert(ClearMe);
 
-				// Skip data we no longer care about because the datasource has changed
-				let now_epoc = DATASOURCE_EPOC.load(Ordering::Relaxed);
-				if block.data_epoc != now_epoc {
-					log!(
-						"discarding out of date block made at {} but we are at {}",
-						block.data_epoc,
-						now_epoc
-					);
-					return
-				}
-
-				let mut base_time = *BASETIME.lock().unwrap();
-				if base_time == 0 {
-					base_time = block.timestamp.unwrap_or(0);
-					//log!("BASETIME set to {}", base_time);
-					*BASETIME.lock().unwrap() = base_time;
-				}
-
-				// let block_num = if is_self_sovereign {
-				//     block.blockurl.block_number.unwrap() as u32
-				// } else {
-
-				//     if base_time == 0
-				//     if rcount == 0 {
-				//         if chain == 0 &&  {
-				//             //relay
-				//             RELAY_BLOCKS.store(
-				//                 RELAY_BLOCKS.load(Ordering::Relaxed) + 1,
-				//                 Ordering::Relaxed,
-				//             );
-				//         }
-				//         RELAY_BLOCKS.load(Ordering::Relaxed)
-				//     } else {
-				//         if chain == 0 {
-				//             //relay
-				//             RELAY_BLOCKS2.store(
-				//                 RELAY_BLOCKS2.load(Ordering::Relaxed) + 1,
-				//                 Ordering::Relaxed,
-				//             );
-				//         }
-				//         RELAY_BLOCKS2.load(Ordering::Relaxed)
-				//     }
-				// };
-
-				let rflip = chain_info.chain_url.rflip();
-				let encoded: String = form_urlencoded::Serializer::new(String::new())
-					.append_pair("rpc", &chain_info.chain_ws)
-					.finish();
-
-				let is_relay = chain_info.chain_url.is_relay();
-				let details = Details {
-					doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
-
-					url: format!(
-						"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-						&encoded,
-						block.blockurl.block_number.unwrap()
+				render.block_instances.push(Instance {
+					position: glam::Vec3::new(
+						0. + (block_num as f32) - 5.,
+						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
+						(RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							rflip,
+					)
+					.into(),
+					// scale: 0.,
+					color: style::color_block_number(
+						timestamp_color,
+						chain_info.chain_url.is_darkside(),
 					),
-					..Default::default()
-				};
-				// log!("rendering block from {}", details.doturl);
+					// flags: 0,
+				});
+				// block_instances.1.push(false);
 
-				// println!("block.timestamp {:?}", block.timestamp);
-				// println!("base_time {:?}",base_time);
-				let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
+				// let chain_str = details.doturl.chain_str();
 
-				// Add the new block as a large square on the ground:
-				{
-					let timestamp_color = if chain_info.chain_url.is_relay() {
-						// log!("skiping relay block from {} as has no timestamp", details.doturl);
-						if block.timestamp.is_none() {
-							return
-						}
-						block.timestamp.unwrap()
+				// bun.insert(details)
+				// .insert(Name::new("Block"))
+				// .with_children(|parent| {
+				// 	let material_handle =
+				// handles.banner_materials.entry(chain_info.chain_index).
+				// or_insert_with(|| { 		// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
+				// 		// to convert from CID v0 (starts Qm) to CID v1 which most
+				// gateways use. 		#[cfg(target_arch="wasm32")]
+				// 		let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
+				// 		#[cfg(not(target_arch="wasm32"))]
+				// 		let texture_handle =
+				// asset_server.load(&format!("branding/{}.jpeg", chain_str));
+
+				// 		materials.add(StandardMaterial {
+				// 			base_color_texture: Some(texture_handle),
+				// 			alpha_mode: AlphaMode::Blend,
+				// 			unlit: true,
+				// 			..default()
+				// 		})
+				// 	}).clone();
+
+				// 	// textured quad - normal
+				// 	let rot =
+				// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); //
+				// to_radians()
+
+				// 	let transform = Transform {
+				// 		translation: Vec3::new(
+				// 			-7.,
+				// 			0.1,
+				// 			0.,
+				// 		),
+				// 		rotation: rot,
+				// 		..default()
+				// 	};
+
+				// 	parent
+				// 		.spawn_bundle(PbrBundle {
+				// 			mesh: handles.banner_mesh.clone(),
+				// 			material: material_handle.clone(),
+				// 			transform,
+				// 			..default()
+				// 		})
+				// 		.insert(Name::new("BillboardDown"))
+				// 		.insert(ClearMe);
+
+				// 	// textured quad - normal
+				// 	let rot =
+				// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); //
+				// to_radians() 	let transform = Transform {
+				// 		translation: Vec3::new(-7.,0.1,0.),
+				// 		rotation: rot,
+				// 		..default()
+				// 	};
+
+				// 	parent
+				// 		.spawn_bundle(PbrBundle {
+				// 			mesh: handles.banner_mesh.clone(),
+				// 			material: material_handle,
+				// 			transform,
+				// 			..default()
+				// 		})
+				// 		.insert(Name::new("BillboardUp"))
+				// 		.insert(ClearMe);
+				// })
+				// .insert_bundle(PickableBundle::default());
+			}
+			// return;
+			let ext_with_events =
+				datasource::associate_events(block.extrinsics.clone(), block.events.clone());
+
+			// Leave infrastructure events underground and show user activity above
+			// ground.
+			let (boring, fun): (Vec<_>, Vec<_>) =
+				ext_with_events.into_iter().partition(|(e, _)| {
+					if let Some(ext) = e {
+						content::is_utility_extrinsic(ext)
 					} else {
-						if block.timestamp_parent.is_none() && block.timestamp.is_none() {
-							// log!("skiping block from {} as has no timestamp", details.doturl);
-							return
-						}
-						block.timestamp_parent.unwrap_or_else(|| block.timestamp.unwrap())
-					} / 400;
+						true
+					}
+				});
 
-					// let transform = Transform::from_translation(Vec3::new(
-					// 	0. + (block_num as f32),
-					// 	if is_relay { 0. } else { LAYER_GAP },
-					// 	(RELAY_CHAIN_CHASM_WIDTH +
-					// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-					// 		rflip,
-					// ));
-					// println!("block created at {:?} blocknum {}", transform,
-					// block_num);
+			add_blocks(
+				chain_info,
+				block_num,
+				fun,
+				// &mut commands,
+				// &mut materials,
+				BuildDirection::Up,
+				// &links,
+				// &mut polyline_materials,
+				// &mut polylines,
+				&encoded,
+				// &mut handles,
+				&mut render.cube_instances,
+				// &mut event_dest, // &mut event_instances,
+			);
 
-					// let mut bun = commands.spawn_bundle(PbrBundle {
-					// 	mesh: handles.block_mesh.clone(),
-					// 	material: materials.add(StandardMaterial {
-					// 		base_color: style::color_block_number(
-					// 			timestamp_color, /* TODO: material needs to be cached by
-					// 			                  * color */
-					// 			chain_info.chain_url.is_darkside(),
-					// 		), // Color::rgba(0., 0., 0., 0.7),
-					// 		alpha_mode: AlphaMode::Blend,
-					// 		perceptual_roughness: 0.08,
-					// 		unlit: block.blockurl.is_darkside(),
-					// 		..default()
-					// 	}),
-					// 	transform,
-					// 	..Default::default()
-					// });
-					// bun.insert(ClearMe);
-
-					block_instances.push(Instance {
-						position: glam::Vec3::new(
-							0. + (block_num as f32) - 5.,
-							if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
-							(RELAY_CHAIN_CHASM_WIDTH +
-								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-								rflip,
-						)
-						.into(),
-						// scale: 0.,
-						color: style::color_block_number(
-							timestamp_color,
-							chain_info.chain_url.is_darkside(),
-						),
-						// flags: 0,
-					});
-					// block_instances.1.push(false);
-
-					// let chain_str = details.doturl.chain_str();
-
-					// bun.insert(details)
-					// .insert(Name::new("Block"))
-					// .with_children(|parent| {
-					// 	let material_handle =
-					// handles.banner_materials.entry(chain_info.chain_index).
-					// or_insert_with(|| { 		// You can use https://cid.ipfs.tech/#Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe
-					// 		// to convert from CID v0 (starts Qm) to CID v1 which most
-					// gateways use. 		#[cfg(target_arch="wasm32")]
-					// 		let texture_handle = asset_server.load(&format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str));
-					// 		#[cfg(not(target_arch="wasm32"))]
-					// 		let texture_handle =
-					// asset_server.load(&format!("branding/{}.jpeg", chain_str));
-
-					// 		materials.add(StandardMaterial {
-					// 			base_color_texture: Some(texture_handle),
-					// 			alpha_mode: AlphaMode::Blend,
-					// 			unlit: true,
-					// 			..default()
-					// 		})
-					// 	}).clone();
-
-					// 	// textured quad - normal
-					// 	let rot =
-					// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., -PI, PI / 2.); //
-					// to_radians()
-
-					// 	let transform = Transform {
-					// 		translation: Vec3::new(
-					// 			-7.,
-					// 			0.1,
-					// 			0.,
-					// 		),
-					// 		rotation: rot,
-					// 		..default()
-					// 	};
-
-					// 	parent
-					// 		.spawn_bundle(PbrBundle {
-					// 			mesh: handles.banner_mesh.clone(),
-					// 			material: material_handle.clone(),
-					// 			transform,
-					// 			..default()
-					// 		})
-					// 		.insert(Name::new("BillboardDown"))
-					// 		.insert(ClearMe);
-
-					// 	// textured quad - normal
-					// 	let rot =
-					// 		Quat::from_euler(EulerRot::XYZ, -PI / 2., 0., -PI / 2.); //
-					// to_radians() 	let transform = Transform {
-					// 		translation: Vec3::new(-7.,0.1,0.),
-					// 		rotation: rot,
-					// 		..default()
-					// 	};
-
-					// 	parent
-					// 		.spawn_bundle(PbrBundle {
-					// 			mesh: handles.banner_mesh.clone(),
-					// 			material: material_handle,
-					// 			transform,
-					// 			..default()
-					// 		})
-					// 		.insert(Name::new("BillboardUp"))
-					// 		.insert(ClearMe);
-					// })
-					// .insert_bundle(PickableBundle::default());
-				}
-				// return;
-				let ext_with_events =
-					datasource::associate_events(block.extrinsics.clone(), block.events.clone());
-
-				// Leave infrastructure events underground and show user activity above
-				// ground.
-				let (boring, fun): (Vec<_>, Vec<_>) =
-					ext_with_events.into_iter().partition(|(e, _)| {
-						if let Some(ext) = e {
-							content::is_utility_extrinsic(ext)
-						} else {
-							true
-						}
-					});
-
-				add_blocks(
-					chain_info,
-					block_num,
-					fun,
-					// &mut commands,
-					// &mut materials,
-					BuildDirection::Up,
-					// &links,
-					// &mut polyline_materials,
-					// &mut polylines,
-					&encoded,
-					// &mut handles,
-					&mut event_instances,
-					&mut event_dest, // &mut event_instances,
-				);
-
-				add_blocks(
-					chain_info,
-					block_num,
-					boring,
-					// &mut commands,
-					// &mut materials,
-					BuildDirection::Down,
-					// &links,
-					// &mut polyline_materials,
-					// &mut polylines,
-					&encoded,
-					// &mut handles,
-					&mut event_instances,
-					&mut event_dest, // &mut event_instances,
-				);
-				//event.send(RequestRedraw);
-			},
-			DataUpdate::NewChain(chain_info) => {
-				// for mut chain_instances in chain_instances.iter_mut() {
-				draw_chain_rect(
-					// handles.as_ref(),
-					&chain_info,
-					// &mut commands,
-					&mut chain_instances,
-				)
-				// }
-			},
-		}
+			add_blocks(
+				chain_info,
+				block_num,
+				boring,
+				// &mut commands,
+				// &mut materials,
+				BuildDirection::Down,
+				// &links,
+				// &mut polyline_materials,
+				// &mut polylines,
+				&encoded,
+				// &mut handles,
+				&mut render.cube_instances,
+				// &mut event_dest, // &mut event_instances,
+			);
+			//event.send(RequestRedraw);
+		},
+		DataUpdate::NewChain(chain_info) => {
+			// for mut chain_instances in chain_instances.iter_mut() {
+			draw_chain_rect(
+				// handles.as_ref(),
+				&chain_info,
+				// &mut commands,
+				&mut render.chain_instances,
+			)
+			// }
+		},
 	}
+	//}
 	// 		}
 	// 	}
 	// }
@@ -2332,23 +2343,16 @@ fn add_blocks(
 	chain_info: &ChainInfo,
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
-	// commands: &mut Commands,
-	// materials: &mut ResMut<Assets<StandardMaterial>>,
 	build_direction: BuildDirection,
 	// links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
 	// polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	// polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
-	// handles: &mut ResMut<ResourceHandles>,
-	extrinsic_instances: &mut Vec<Instance>,
-	// event_instances: &mut InstanceMaterialData,
-	event_dest: &mut Vec<f32>,
+	extrinsic_instances: &mut Vec<(Instance, f32)>,
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
-
-	// let mut mat_map = HashMap::new();
 
 	let layer = chain_info.chain_url.layer() as f32;
 	let (base_x, base_y, base_z) = (
@@ -2484,13 +2488,15 @@ fn add_blocks(
 				// 	.insert(Name::new("Extrinsic"))
 				// 	.insert(MedFi);
 
-				extrinsic_instances.push(Instance {
-					position: glam::Vec3::new(px, py * build_dir, 5. + pz * rflip).into(),
-					// scale: base_y + target_y * build_dir,
-					color: style.color,
-					// flags: 0,
-				});
-				event_dest.push(base_y + target_y * build_dir);
+				extrinsic_instances.push((
+					Instance {
+						position: glam::Vec3::new(px, py * build_dir, 5. + pz * rflip).into(),
+						// scale: base_y + target_y * build_dir,
+						color: style.color,
+						// flags: 0,
+					},
+					base_y + target_y * build_dir,
+				));
 				// extrinsic_instances.1.push(false);
 
 				// for source in create_source {
@@ -2560,14 +2566,15 @@ fn add_blocks(
 			next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
-			extrinsic_instances.push(Instance {
-				position: glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into(),
-				// scale: base_y + target_y * build_dir,
-				color: style.color,
-				// flags: 0,
-			});
-			event_dest.push(base_y + target_y * build_dir);
-			// extrinsic_instances.1.push(false);
+			extrinsic_instances.push((
+				Instance {
+					position: glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into(),
+					// scale: base_y + target_y * build_dir,
+					color: style.color,
+					// flags: 0,
+				},
+				base_y + target_y * build_dir,
+			));
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
 			// 	mesh,
@@ -2674,7 +2681,7 @@ macro_rules! min {
 
 fn rain(
 	// time: Res<Time>,
-	mut drops: &mut Vec<Instance>,
+	drops: &mut Vec<Instance>,
 	mut drops_target: &mut Vec<f32>, // mut timer: ResMut<UpdateTimer>,
 ) {
 	let delta = 1.;
@@ -3178,55 +3185,58 @@ pub mod html_body {
 
 #[derive(Deserialize, Serialize)]
 pub enum BridgeMessage {
-	SetDatasource(Vec<Vec<ChainInfo>>, Option<DotUrl>, u32), //data epoc
+	SetDatasource(Sovereigns, Option<DotUrl>, u32), //data epoc
 	GetNewBlocks,
 }
 
 //from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE
 
+#[cfg(target_family = "wasm")]
 fn get_viewport_size() -> PhysicalSize<u32> {
-    let web_window = web_sys::window().expect("could not get window");
-    let document_element = web_window
-        .document()
-        .expect("could not get document")
-        .document_element()
-        .expect("could not get document element");
+	let web_window = web_sys::window().expect("could not get window");
+	let document_element = web_window
+		.document()
+		.expect("could not get document")
+		.document_element()
+		.expect("could not get document element");
 
-    let width = document_element.client_width();
-    let height = document_element.client_height();
+	let width = document_element.client_width();
+	let height = document_element.client_height();
 
 	PhysicalSize::new(width as u32, height as u32)
 }
 
-use std::sync::{
-    mpsc::{Receiver, Sender},
-};
+use std::sync::mpsc::{Receiver, Sender};
 type OnResizeSender = Sender<()>;
 type OnResizeReceiver = Receiver<()>;
 
 //todo: needs to be in a mutex really?
 fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
-    let web_window = web_sys::window().expect("could not get window");
-    let local_sender = resize_sender.lock().unwrap().clone();
+	#[cfg(target_family = "wasm")]
+	{
+		let web_window = web_sys::window().expect("could not get window");
+		let local_sender = resize_sender.lock().unwrap().clone();
 
-    local_sender.send(()).unwrap();
+		local_sender.send(()).unwrap();
 
-    gloo_events::EventListener::new(&web_window, "resize", move |_event| {
-        local_sender.send(()).unwrap();
-    })
-    .forget();
+		gloo_events::EventListener::new(&web_window, "resize", move |_event| {
+			local_sender.send(()).unwrap();
+		})
+		.forget();
+	}
 }
-fn viewport_resize_system(
-    // mut window: &mut Window,
-    resize_receiver: &Mutex<OnResizeReceiver>,
-) -> Option<winit::dpi::PhysicalSize<u32>> {
-    if resize_receiver.lock().unwrap().try_recv().is_ok() {
-		let new_size = get_viewport_size();
-		//TODO: bugout if window size is already this.
-		if new_size.width > 0 && new_size.height > 0 {
-			return Some(new_size);
-			// log!("I GOT CALLED with {}, {}", size.0, size.1);// width, height
-		}
-    }
-	return None;
-}
+
+// fn viewport_resize_system(
+// 	// mut window: &mut Window,
+// 	resize_receiver: &Mutex<OnResizeReceiver>,
+// ) -> Option<winit::dpi::PhysicalSize<u32>> {
+// 	if resize_receiver.lock().unwrap().try_recv().is_ok() {
+// 		let new_size = get_viewport_size();
+// 		//TODO: bugout if window size is already this.
+// 		if new_size.width > 0 && new_size.height > 0 {
+// 			return Some(new_size)
+// 			// log!("I GOT CALLED with {}, {}", size.0, size.1);// width, height
+// 		}
+// 	}
+// 	return None
+// }

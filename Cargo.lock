@@ -821,6 +821,7 @@ version = "0.1.1"
 dependencies = [
  "async-recursion",
  "async-std",
+ "async-tls",
  "async-trait",
  "async-tungstenite",
  "bytemuck",
@@ -833,6 +834,7 @@ dependencies = [
  "fastrand",
  "form_urlencoded",
  "frame-metadata",
+ "futures",
  "getrandom",
  "glam",
  "gloo-events",

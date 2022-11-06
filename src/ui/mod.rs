@@ -34,9 +34,8 @@ pub fn ui_bars_system(
 	mut anchor: &mut Anchor,
 	mut inspector: &mut Inspector,
 	// entities: Query<(&GlobalTransform, &Details)>,
-	mut destination: &mut Destination,
-	fps: u32
-	// diagnostics: Res<Diagnostics>,
+	destination: &mut Destination,
+	fps: u32,
 ) {
 	// if inspector.selected.is_some() {
 	// 	occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -167,15 +166,15 @@ pub fn ui_bars_system(
 				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
 					if spec.find.len() <= 4 {
 						// if let Ok(para_id) = spec.find.parse() {
-							// for (loc, details) in entities.iter() {
-							// 	if details.doturl.para_id == Some(para_id) &&
-							// 		details.doturl.block_number.is_some()
-							// 	{
-							// 		destination.location = Some(loc.translation());
-							// 		inspector.selected = Some(details.clone());
-							// 		found += 1;
-							// 	}
-							// }
+						// for (loc, details) in entities.iter() {
+						// 	if details.doturl.para_id == Some(para_id) &&
+						// 		details.doturl.block_number.is_some()
+						// 	{
+						// 		destination.location = Some(loc.translation());
+						// 		inspector.selected = Some(details.clone());
+						// 		found += 1;
+						// 	}
+						// }
 						// }
 					}
 					// for (loc, details) in entities.iter() {
@@ -217,12 +216,10 @@ pub fn ui_bars_system(
 				}
 				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 					let x = viewpoint.x;
-					let y = viewpoint.y;// WAS x? assumed this was a bug.
+					let y = viewpoint.y; // WAS x? assumed this was a bug.
 					let z = viewpoint.z;
 
-					let timestamp = super::x_to_timestamp(
-						viewpoint.x,
-					);
+					let timestamp = super::x_to_timestamp(viewpoint.x);
 					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();
