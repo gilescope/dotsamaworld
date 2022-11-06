@@ -28,11 +28,17 @@ impl Camera {
 	}
 
 	pub fn calc_matrix(&self) -> Matrix4<f32> {
-		Matrix4::look_to_rh(
-			self.position,
-			Vector3::new(self.yaw.0.cos(), self.pitch.0.sin(), self.yaw.0.sin()).normalize(),
-			Vector3::unit_y(),
-		)
+		        let (sin_pitch, cos_pitch) = self.pitch.0.sin_cos();
+				let (sin_yaw, cos_yaw) = self.yaw.0.sin_cos();
+        Matrix4::look_to_rh(
+            self.position,
+            Vector3::new(
+                cos_pitch * cos_yaw,
+                sin_pitch,
+                cos_pitch * sin_yaw
+            ).normalize(),
+            Vector3::unit_y(),
+        )
 	}
 }
 
@@ -57,10 +63,10 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 pub struct Projection {
-	aspect: f32,
-	fovy: Rad<f32>,
-	znear: f32,
-	zfar: f32,
+	pub aspect: f32,
+	pub fovy: Rad<f32>,
+	pub znear: f32,
+	pub zfar: f32,
 }
 
 impl Projection {
@@ -219,7 +225,7 @@ impl CameraController {
 	}
 
 	pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
-		let amount = if state == ElementState::Pressed { 1.0 } else { 0.0 };
+		let amount = if state == ElementState::Pressed { 5.0 } else { 0.0 };
 		match key {
 			VirtualKeyCode::W | VirtualKeyCode::Up => {
 				self.amount_forward = amount;

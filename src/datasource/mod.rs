@@ -299,11 +299,11 @@ where
 				}
 			}
 		} else {
-			log!("listening to live");
+			// log!("listening to live");
 
 			if let Ok(Some(latest_block)) = source.fetch_block(None).await {
 				let mut block_num: u32 = latest_block.block_number;
-				log!("live mode starting at block num {}", block_num);
+				// log!("live mode starting at block num {}", block_num);
 				loop {
 					let next = source.fetch_block_hash(block_num).await;
 					if let Ok(Some(block_hash)) = next {

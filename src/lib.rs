@@ -259,15 +259,16 @@ impl Vertex {
 /// https://www.researchgate.net/profile/John-Sheridan-7/publication/253573419/figure/fig1/AS:298229276135426@1448114808488/A-volume-is-subdivided-into-cubes-The-vertices-are-numbered-0-7.png
 
 fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) -> [Vertex; 8] {
+	let bump = 0.2;
 	[
-		Vertex { position: [0.0, y_height, 0.0], color: [r + 0.5, g + 0.0, b + 0.3] }, // C
-		Vertex { position: [0.0, y_height, z_width], color: [r + 0.5, g + 0.0, b + 0.4] }, // D
-		Vertex { position: [0., 0., z_width], color: [r + 0.5, g + 0.0, b + 0.5] },    // B
-		Vertex { position: [0., 0.0, 0.0], color: [r + 0.5, g + 0.0, b + 0.6] },       // A
-		Vertex { position: [x_depth, y_height, 0.0], color: [r + 0.5, g + 0.0, b + 0.7] }, // C
-		Vertex { position: [x_depth, y_height, z_width], color: [r + 0.5, g + 0.0, b + 0.8] }, // D
-		Vertex { position: [x_depth, 0., z_width], color: [r + 0.5, g + 0.0, b + 0.9] }, // B
-		Vertex { position: [x_depth, 0.0, 0.0], color: [r + 0.5, g + 0.0, b + 1.0] },  // A
+		Vertex { position: [0.0, y_height, 0.0], color: [r + bump, g + 0.0, b + bump] }, // C
+		Vertex { position: [0.0, y_height, z_width], color: [r + bump, g + 0.0, b + bump] }, // D
+		Vertex { position: [0., 0., z_width], color: [r + bump, g + 0.0, b + bump] },    // B
+		Vertex { position: [0., 0.0, 0.0], color: [r + bump, g + 0.0, b + bump] },       // A
+		Vertex { position: [x_depth, y_height, 0.0], color: [r + bump, g + 0.0, b + bump] }, // C
+		Vertex { position: [x_depth, y_height, z_width], color: [r + bump, g + 0.0, b + bump *2.] }, // D
+		Vertex { position: [x_depth, 0., z_width], color: [r + bump, g + 0.0, b + bump*2.] }, // B
+		Vertex { position: [x_depth, 0.0, 0.0], color: [r + bump, g + 0.0, b + bump * 2.] },  // A
 	]
 }
 
@@ -284,28 +285,6 @@ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) 
 
 /// Counter clockwise to show up as looking from outside at cube.
 const INDICES: &[u16] = &cube_indicies(0);
-// &[
-//     //TOP
-//     // 6,5,4,
-//     // 4,7,6,
-//     6, 7, 4, //TODO only need external faces
-//     4, 5, 6, // // //BOTTOM
-//     // 0,1,2,
-//     // 2,3,0,
-//     0, 3, 2, 2, 1, 0, //right
-//     // 5,6,2,
-//     // 2,1,5,
-//     5, 1, 2, 2, 6, 5, // //left
-//     // 7,4,0,
-//     // 0,3,7,
-//     7, 3, 0, 0, 4, 7, // //front
-//     // 7,3,2,
-//     // 2,6,7,
-//     7, 6, 2, 2, 3, 7, //back
-//     4, 0, 1, 1, 5, 4,
-//     // 4,5,1,
-//     // 1,0,4,
-// ];
 
 const fn cube_indicies(offset: u16) -> [u16; 36] {
 	[
@@ -775,9 +754,9 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	let mut vertices = vec![];
 	vertices.extend(rectangle(0.8, 0.8, 0.8, 0., 0., 0.));
 	let offset1 = vertices.len();
-	vertices.extend(rectangle(10., 0.5, 10., 0., 0.5, 0.));
+	vertices.extend(rectangle(10., 0.5, 10., 0., 0.0, 0.));
 	let offset2 = vertices.len();
-	vertices.extend(rectangle(10., 0.001, 10000., 0.1, 0.2, 0.));
+	vertices.extend(rectangle(10., 0.001, 10000., 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
 	indicies.extend(&cube_indicies(0));
@@ -898,6 +877,69 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 	let mut old_width = 0u32;
 	let mut mouse_pressed = false;
 
+	use crate::camera::OPENGL_TO_WGPU_MATRIX;	
+	for x in (0..size.width).step_by(10) {
+		for y in (0..size.height).step_by(10) {
+			let adj_cursor_pos = glam::Vec2::new(x as f32 - (size.width as f32 / 2.0), y as f32 - (size.height as f32 / 2.0));
+			// let view = camera_transform.compute_matrix();
+			let viewport_size = get_viewport_size();
+			let viewport_size = glam::Vec2::new(viewport_size.width as f32, viewport_size.height as f32);
+
+			let matrix = OPENGL_TO_WGPU_MATRIX;
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+			let OPENGL_TO_WGPU_MATRIXmat4 = glam::Mat4::from_cols(x,y,z,w);
+
+			let matrix = camera.calc_matrix();
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+			let view = glam::Mat4::from_cols(x,y,z,w);
+			// let ndc_to_world = val.inverse();
+
+
+			// let matrix = projection.calc_matrix();
+			let matrix = cgmath::perspective(projection.fovy, projection.aspect, projection.znear, projection.zfar);
+			let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+			let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+			let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+			let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+			let proj = OPENGL_TO_WGPU_MATRIXmat4 * glam::Mat4::from_cols(x,y,z,w);
+
+			// let matrix = camera.calc_matrix(); // proj; //TODO suspicious
+			// let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+			// let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+			// let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+			// let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+			// let view = glam::Mat4::from_cols(x,y,z,w);
+
+			let far_ndc = proj.project_point3(glam::Vec3::NEG_Z).z;
+			let near_ndc = proj.project_point3(glam::Vec3::Z).z;
+			let cursor_ndc = adj_cursor_pos;// (adj_cursor_pos / viewport_size) * 2.0 - glam::Vec2::ONE;
+			let ndc_to_world: glam::Mat4 = view * proj.inverse();
+			let near = ndc_to_world.project_point3(cursor_ndc.extend(near_ndc));
+			let far = ndc_to_world.project_point3(cursor_ndc.extend(far_ndc));
+			let ray_direction = far - near;
+			//Some(Ray3d::new(near, ray_direction))
+			// log!(" pos3d: {:?}  dir: {:?}", near, ray_direction);
+
+			let mut pos : glam::Vec3 = near.into();
+			// for _ in 1..100 {
+				// pos = pos + ray_direction.normalize();// * glam::Vec3::new(100.,100.,100.);
+				cube_instance_data.push(Instance{
+					position: pos.into(),
+					color: as_rgba_u32(0.4, 0.4, 0.4, 1.)
+				});
+				cube_target_heights.push(0.);
+			// }
+			// log!(" pos3d: {:?}  dir: {:?} {}", near, ray_direction, cube_target_heights.len());
+		}
+	}
+
+
 	event_loop.run(move |event, _, _control_flow| {
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
@@ -921,17 +963,87 @@ async fn run(event_loop: EventLoop<()>, mut window: Window) {
 		let mut redraw = true;
 		match event {
 			 Event::DeviceEvent {
-			    event: DeviceEvent::MouseMotion{ delta, },
+			    event: DeviceEvent::MouseMotion{ delta },
 			    .. // We're not using device_id currently
 			} => if mouse_pressed {
+				// log!("mouse click at screen: {:?}", delta);
 			    camera_controller.process_mouse(delta.0, delta.1)
 			}
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
 				redraw = input(&mut camera_controller, &event, &mut mouse_pressed);
+				if let WindowEvent::CursorMoved{ position, .. } = event {
+					if mouse_pressed {
+						use crate::camera::OPENGL_TO_WGPU_MATRIX;
+						log!("new pos: {:?}", position);
+						//adjust to viewport....
+						// use winit::dpi::PhysicalPosition;
+						// let adj_cursor_pos = glam::Vec2::new(position.x as f32, position.y as f32);
+						// // let view = camera_transform.compute_matrix();
+						// let viewport_size = get_viewport_size();
+						// let viewport_size = glam::Vec2::new(viewport_size.width as f32, viewport_size.height as f32);
+
+						// let matrix = OPENGL_TO_WGPU_MATRIX;
+						// let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+						// let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+						// let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+						// let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+						// let OPENGL_TO_WGPU_MATRIXmat4 = glam::Mat4::from_cols(x,y,z,w);
+
+						// let matrix = camera.calc_matrix();
+						// let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+						// let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+						// let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+						// let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+						// let view = glam::Mat4::from_cols(x,y,z,w);
+						// // let ndc_to_world = val.inverse();
+
+
+						// // let matrix = projection.calc_matrix();
+						// let matrix = cgmath::perspective(projection.fovy, projection.aspect, projection.znear, projection.zfar);
+						// let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+						// let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+						// let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+						// let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+						// let proj = OPENGL_TO_WGPU_MATRIXmat4 * glam::Mat4::from_cols(x,y,z,w);
+
+						// // let matrix = camera.calc_matrix(); // proj; //TODO suspicious
+						// // let x: glam::Vec4 = glam::Vec4::new(matrix.x.x,matrix.x.y,matrix.x.z,matrix.x.w);
+						// // let y: glam::Vec4 = glam::Vec4::new(matrix.y.x,matrix.y.y,matrix.y.z,matrix.y.w);
+						// // let z: glam::Vec4 = glam::Vec4::new(matrix.z.x,matrix.z.y,matrix.z.z,matrix.z.w);
+						// // let w: glam::Vec4 = glam::Vec4::new(matrix.w.x,matrix.w.y,matrix.w.z,matrix.w.w);
+						// // let view = glam::Mat4::from_cols(x,y,z,w);
+
+						// let far_ndc = proj.project_point3(glam::Vec3::NEG_Z).z;
+            			// let near_ndc = proj.project_point3(glam::Vec3::Z).z;
+						// let cursor_ndc = (adj_cursor_pos / viewport_size) * 2.0 - glam::Vec2::ONE;
+						// let ndc_to_world: glam::Mat4 = view * proj.inverse();
+						// let near = ndc_to_world.project_point3(cursor_ndc.extend(near_ndc));
+						// let far = ndc_to_world.project_point3(cursor_ndc.extend(far_ndc));
+						// let ray_direction = far - near;
+						// //Some(Ray3d::new(near, ray_direction))
+						// log!(" pos3d: {:?}  dir: {:?}", near, ray_direction);
+
+						// let mut pos : glam::Vec3 = near.into();
+						// // for _ in 1..100 {
+						// 	// pos = pos + ray_direction.normalize();// * glam::Vec3::new(100.,100.,100.);
+						// 	cube_instance_data.push(Instance{
+						// 		position: pos.into(),
+						// 		color: as_rgba_u32(0.4, 0.4, 0.4, 1.)
+						// 	});
+						// 	cube_target_heights.push(0.);
+						// // }
+						// log!(" pos3d: {:?}  dir: {:?} {}", near, ray_direction, cube_target_heights.len());
+
+						// create small box that starts at point and goes to destination...
+
+
+
+					}
+				}
 				if let WindowEvent::Resized(new_size) = event {
 					log!("WINIT: set new size width: {} height: {}", new_size.width, new_size.height);
-					window.set_inner_size(*new_size);       
-					window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+					// window.set_inner_size(*new_size);       
+					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
 					projection.resize(new_size.width, new_size.height);
 					size = new_size.clone();
 					surface.configure(&device, &surface_config);
@@ -2065,7 +2177,7 @@ fn render_block(
 					block_instances.push(Instance {
 						position: glam::Vec3::new(
 							0. + (block_num as f32) - 5.,
-							if is_relay { 0. } else { LAYER_GAP },
+							if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
 							(RELAY_CHAIN_CHASM_WIDTH +
 								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 								rflip,
