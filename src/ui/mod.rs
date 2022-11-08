@@ -33,94 +33,96 @@ pub fn ui_bars_system(
 	mut spec: &mut UrlBar,
 	mut anchor: &mut Anchor,
 	mut inspector: &mut Inspector,
-	// entities: Query<(&GlobalTransform, &Details)>,
 	destination: &mut Destination,
 	fps: u32,
+	selected_details: Option<(u32, Details)>,
 ) {
-	// if inspector.selected.is_some() {
-	// 	occupied_screen_space.left = egui::SidePanel::left("left_panel")
-	// 		.resizable(true)
-	// 		.show(egui_context.ctx_mut(), |ui| {
-	// 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+	if selected_details.is_some() {
+		occupied_screen_space.left = egui::SidePanel::left("left_panel")
+			.resizable(true)
+			.show(egui_context, |ui| {
+				// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 
-	// 			// ui.horizontal(|ui| {
-	// 			// 	// ui.heading("Selected:");
-	// 			// });
-	// 			// ui.separator();
+				// ui.horizontal(|ui| {
+				// 	// ui.heading("Selected:");
+				// });
+				// ui.separator();
 
-	// 			// if inspector.selected.is_some() {
-	// 			// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
+				// if inspector.selected.is_some() {
+				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
 
-	// 			// #[cfg(target_arch = "wasm32")]
-	// 			// let maybe_bytes: Option<Vec<u8>> = None;
-	// 			// let maybe_bytes = {
-	// 			// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
-	// 			// 	use wasm_bindgen::JsCast;
-	// 			// 	use wasm_bindgen_futures::JsFuture;
-	// 			// 	let window = web_sys::window().unwrap();
-	// 			// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
-	// 			// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
-	// 			// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
-	// 			// 	Some(js_sys::Uint8Array::new(&data).to_vec())
-	// 			// };
+				// #[cfg(target_arch = "wasm32")]
+				// let maybe_bytes: Option<Vec<u8>> = None;
+				// let maybe_bytes = {
+				// 	let uri = &format!("https://cloudflare-ipfs.com/ipfs/Qmb1GG87ufHEvXkarzYoLn9NYRGntgZSfvJSBvdrbhbSNe/{}.jpeg", chain_str);
+				// 	use wasm_bindgen::JsCast;
+				// 	use wasm_bindgen_futures::JsFuture;
+				// 	let window = web_sys::window().unwrap();
+				// 	let resp_value = JsFuture::from(window.fetch_with_str(uri)).await.unwrap();
+				// 	let resp: web_sys::Response = resp_value.dyn_into().unwrap();
+				// 	let data = JsFuture::from(resp.array_buffer().unwrap()).await.unwrap();
+				// 	Some(js_sys::Uint8Array::new(&data).to_vec())
+				// };
 
-	// 			// #[cfg(not(target_arch = "wasm32"))]
-	// 			// let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
+				// #[cfg(not(target_arch = "wasm32"))]
+				// let maybe_bytes = std::fs::read(&format!("assets/branding/{}.jpeg", name)).ok();
 
-	// 			// if let Some(bytes) = maybe_bytes {
-	// 			// 	let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
-	// 			// 	let _texture: &egui::TextureHandle =
-	// 			// 		inspector.texture.get_or_insert_with(|| {
-	// 			// 			// Load the texture only once.
-	// 			// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
-	// 			// 		});
-	// 			// }
-	// 			// }
-	// 			use egui::Link;
-	// 			if let Some(selected) = &inspector.selected {
-	// 				ui.heading(&selected.variant);
-	// 				ui.heading(&selected.pallet);
-	// 				ui.separator();
-	// 				// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
-	// 				// use open.
-	// 				if ui.add(Link::new("open in polkadot.js")).clicked() {
-	// 					open::that(&selected.url).unwrap();
-	// 				}
-	// 				// 					if let Some(val) = &selected.value {
-	// 				// 						// ui.add(|ui| Tree(val.clone()));
-	// 				// 						// ui.collapsing(
-	// 				// 						// 	"value", 	|
-	// 				// 							funk(ui,
-	// 				// 								&scale_value_to_borrowed::convert(val,true));
-	// 				// //             .default_open(depth < 1)
-	// 				// 						ui.label(&val.to_string());
-	// 				// 						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
-	// 				// 					}
-	// 				// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
-	// 				ui.label("RAW Scale:");
+				// if let Some(bytes) = maybe_bytes {
+				// 	let img = egui_extras::image::load_image_bytes(bytes.as_slice()).unwrap();
+				// 	let _texture: &egui::TextureHandle =
+				// 		inspector.texture.get_or_insert_with(|| {
+				// 			// Load the texture only once.
+				// 			ui.ctx().load_texture(name, egui::ImageData::Color(img))
+				// 		});
+				// }
+				// }
+				use egui::Link;
+				if let Some((index, selected)) = &selected_details {
+					ui.heading(&selected.variant);
+					ui.heading(&selected.pallet);
+					ui.separator();
+					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
+					// use open.
+					if ui.add(Link::new("open in polkadot.js")).clicked() {
+						open::that(&selected.url).unwrap();
+					}
+										if let Some(val) = &selected.value {
+											let (val, s) = scale_value::stringify::from_str(val);
+											let val = val.unwrap();
+											// ui.add(|ui| Tree(val.clone()));
+											// ui.collapsing(
+											// 	"value", 	|
+												funk(ui,
+													&scale_value_to_borrowed::convert(&val,true));
+					//             .default_open(depth < 1)
+											// ui.label(&val.to_string());
+											// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
+										}
+					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
+					ui.label("RAW Scale:");
 
-	// 				// if ui.button("📋").clicked() {
-	// 				// 	let s = hex::encode(&selected.raw);
-	// 				// 	log!("{}", &s);
-	// 				// 	ui.output().copied_text = s; //TODO not working...
-	// 				// };
-	// 				//TODO: request raw from webworker!!!
-	// 				// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+					// if ui.button("📋").clicked() {
+					// 	let s = hex::encode(&selected.raw);
+					// 	log!("{}", &s);
+					// 	ui.output().copied_text = s; //TODO not working...
+					// };
+					//TODO: request raw from webworker!!!
+					// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
-	// 				ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-	// 					if let Some(hand) = inspector.texture.as_ref() {
-	// 						let texture: &egui::TextureHandle = hand;
+					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+						if let Some(hand) = inspector.texture.as_ref() {
+							let texture: &egui::TextureHandle = hand;
 
-	// 						let l = 200.; // occupied_screen_space.left - 10.;
-	// 						ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
-	// 					}
-	// 				});
-	// 			}
-	// 		})
-	// 		.response
-	// 		.rect
-	// 		.width();
-	// }
+							let l = 200.; // occupied_screen_space.left - 10.;
+							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+						}
+					});
+				}
+			})
+			.response
+			.rect
+			.width();
+	}
 	// occupied_screen_space.right = egui::SidePanel::right("right_panel")
 	//     .resizable(true)
 	//     .show(egui_context.ctx_mut(), |ui| {

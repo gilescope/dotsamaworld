@@ -4,8 +4,8 @@ use core::future::Future;
 // use core::slice::SlicePattern;
 // use super::polkadot;
 use crate::{
-	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, RenderUpdate, BASETIME,
-	DATASOURCE_EPOC, PAUSE_DATA_FETCH,
+	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, RenderDetails, RenderUpdate,
+	BASETIME, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
 use log::warn;
 // use async_std::stream::StreamExt;
@@ -137,7 +137,7 @@ pub type RelayBlockNumber = u32;
 
 pub struct BlockWatcher<F, R>
 where
-	F: Fn(RenderUpdate) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()>,
 {
 	pub tx: Option<F>,
@@ -150,7 +150,7 @@ where
 
 impl<F, R> BlockWatcher<F, R>
 where
-	F: Fn(RenderUpdate) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
 	pub async fn watch_blocks(mut self) {
@@ -180,8 +180,14 @@ where
 		// Tell renderer to draw a new chain...
 		{
 			let mut render_update = RenderUpdate::default();
-			render_block(DataUpdate::NewChain(chain_info.clone()), &chain_info, &mut render_update);
-			tx(render_update).await;
+			let mut render_details = RenderDetails::default();
+			render_block(
+				DataUpdate::NewChain(chain_info.clone()),
+				&chain_info,
+				&mut render_update,
+				&mut render_details,
+			);
+			tx((render_update, render_details)).await;
 		}
 
 		if let Some(as_of) = as_of {
@@ -354,7 +360,7 @@ async fn process_extrinsics<S: Source, F, R>(
 	timestamp_parent: Option<i64>,
 ) -> Result<Option<i64>, ()>
 where
-	F: Fn(RenderUpdate) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
 	let mut timestamp = None;
@@ -402,7 +408,7 @@ where
 						pallet: "?".to_string(),
 						variant: "?".to_string(),
 						// raw: encoded_extrinsic,
-						// value: None,
+						value: None,
 					},
 				},
 			};
@@ -419,7 +425,7 @@ where
 				)
 				.await;
 				if let Some(mut entity) = entity {
-					// entity.details_mut().value = Some(extrinsic2.clone().remove_context());
+					entity.details_mut().value = Some(scale_value::stringify::to_string(&extrinsic2.clone().remove_context()));
 					if let Some(scale_borrow::Value::U64(time)) =
 						extrinsic.expect4("Timestamp", "0", "set", "now")
 					{
@@ -466,8 +472,9 @@ where
 		}
 
 		let mut rend = RenderUpdate::default();
-		render_block(DataUpdate::NewBlock(current), chain_info, &mut rend);
-		tx(rend).await;
+		let mut render_details = RenderDetails::default();
+		render_block(DataUpdate::NewBlock(current), chain_info, &mut rend, &mut render_details);
+		tx((rend, render_details)).await;
 	}
 	Ok(timestamp)
 }
@@ -1054,7 +1061,7 @@ async fn process_extrinsic<'a, 'scale>(
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
 			// raw: ex_slice.to_vec(),
-			// value: None
+			value: None
 		},
 	})
 

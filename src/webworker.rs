@@ -1,6 +1,6 @@
 use crate::{
-	datasource, do_datasources, log, render_block, BridgeMessage, RenderUpdate, BASETIME,
-	DATASOURCE_EPOC, UPDATE_QUEUE,
+	datasource, do_datasources, log, render_block, BridgeMessage, Details, RenderDetails,
+	RenderUpdate, BASETIME, DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE,
 };
 use core::sync::atomic::Ordering;
 
@@ -25,16 +25,24 @@ impl IOWorker {
 		log!("Finished waiting");
 	}
 
-	async fn send_it_too(render_block: RenderUpdate) {
+	async fn send_it_too(rendered: (RenderUpdate, RenderDetails)) {
 		let mut pending = UPDATE_QUEUE.lock().unwrap();
-		pending.extend(render_block);
+		let mut details = DETAILS.lock().unwrap();
+		pending.extend(rendered.0);
+		details.extend(rendered.1);
 	}
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum WorkerResponse {
+	RenderUpdate(RenderUpdate),
+	Details(u32, Details),
 }
 
 impl Worker for IOWorker {
 	type Input = BridgeMessage;
 	type Message = Vec<()>;
-	type Output = RenderUpdate;
+	type Output = WorkerResponse;
 
 	fn create(_scope: &WorkerScope<Self>) -> Self {
 		Self {}
@@ -54,7 +62,12 @@ impl Worker for IOWorker {
 				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
 				let mut results = RenderUpdate::default();
 				core::mem::swap(vec, &mut results);
-				scope.respond(id, results);
+				scope.respond(id, WorkerResponse::RenderUpdate(results));
+			},
+			BridgeMessage::GetDetails(cube_index) => {
+				let details =
+					(*DETAILS.lock().unwrap()).cube_instances[cube_index as usize].clone();
+				scope.respond(id, WorkerResponse::Details(cube_index, details));
 			},
 		}
 

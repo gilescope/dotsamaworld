@@ -33,7 +33,7 @@ pub struct Details
 	pub url: String,
 	// pub chain_name: String,
 	// pub raw: Vec<u8>,
-	// pub value: Option<scale_value::Value>
+	pub value: Option<String>//scale Value as string
 }
 
 // use egui::Grid;

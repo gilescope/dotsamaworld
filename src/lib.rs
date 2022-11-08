@@ -14,7 +14,7 @@ use {
 };
 
 use crate::{
-	camera::{CameraUniform, OPENGL_TO_WGPU_MATRIX},
+	camera::CameraUniform,
 	movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
@@ -24,7 +24,6 @@ use datasource::DataUpdate;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use lazy_static::lazy_static;
-use log::warn;
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -39,9 +38,10 @@ use std::{
 	},
 	time::Duration,
 };
+use webworker::WorkerResponse;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
-	dpi::{LogicalSize, PhysicalSize},
+	dpi::PhysicalSize,
 	event::{WindowEvent, *},
 	event_loop::EventLoop,
 	window::Window,
@@ -108,6 +108,21 @@ lazy_static! {
 lazy_static! {
 	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<RenderUpdate>> =
 		Arc::new(std::sync::Mutex::new(RenderUpdate::default()));
+}
+
+lazy_static! {
+	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details)>>> =
+		Arc::new(std::sync::Mutex::new(None));
+}
+
+lazy_static! {
+	static ref DETAILS: Arc<std::sync::Mutex<RenderDetails>> =
+		Arc::new(std::sync::Mutex::new(RenderDetails::default()));
+}
+
+lazy_static! {
+	static ref REQUESTS: Arc<std::sync::Mutex<Vec<BridgeMessage>>> =
+		Arc::new(std::sync::Mutex::new(Vec::default()));
 }
 
 /// Bump this to tell the current datasources to stop.
@@ -728,7 +743,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		usage: wgpu::BufferUsages::INDEX,
 	});
 
-	let mut ground_instance_data: Vec<Instance> = vec![
+	let ground_instance_data: Vec<Instance> = vec![
 	// Instance{ position: [-ground_width/2.0,-10.,-ground_width/2.0], color: 123444 },
 	// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 
@@ -832,9 +847,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
 	let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
 	let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
-	let OPENGL_TO_WGPU_MATRIXmat4 = glam::Mat4::from_cols(x, y, z, w);
-
-
+	let opengl_to_wgpu_matrix_mat4 = glam::Mat4::from_cols(x, y, z, w);
 
 	let mut last_mouse_position = None;
 	event_loop.run(move |event, _, _control_flow| {
@@ -845,6 +858,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		platform.handle_event(&event);
 
 		frames += 1;
+
+		let selected_details = SELECTED.lock().unwrap().clone();
 
 		// viewport_resize_system(&resize_receiver);
 		// if let Some(new_size) = viewport_resize_system(&resize_receiver) {
@@ -894,7 +909,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 						let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
 						let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
 						let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
-						let proj = OPENGL_TO_WGPU_MATRIXmat4 * glam::Mat4::from_cols(x, y, z, w);
+						let proj = opengl_to_wgpu_matrix_mat4 * glam::Mat4::from_cols(x, y, z, w);
 
 						let far_ndc = projection.zfar; //proj.project_point3(glam::Vec3::NEG_Z).z;
 						let near_ndc = projection.znear; //camera.position.z;// proj.project_point3(glam::Vec3::Z).z;
@@ -907,18 +922,18 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 						// log!("new add: {:?}", clicked);
 						let clicked = glam::Vec2::new(clicked2.x / scale_x,
 							clicked2.y/scale_y);
-						log!("new adj: {:?}  {:?}  {:?}", clicked1, clicked2, clicked);
+						// log!("new adj: {:?}  {:?}  {:?}", clicked1, clicked2, clicked);
 
 						let near_clicked = ndc_to_world.project_point3(clicked.extend(near_ndc));
 						let far_clicked = ndc_to_world.project_point3(clicked.extend(far_ndc));
 						let ray_direction_clicked = near_clicked - far_clicked;
-						let mut pos_clicked: glam::Vec3 = near_clicked.into();
+						let pos_clicked: glam::Vec3 = near_clicked.into();
 
 						let selected = get_selected(pos_clicked, ray_direction_clicked, &mut cube_instance_data,
 							glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH)
 						);
 						log!("selected = {:?}", selected);
-						if let Some(instance) = selected {
+						if let Some((index, instance)) = selected {
 							// ground_instance_data.push(Instance { position: near_clicked.into(), color: as_rgba_u32(0.3, 0.3, 0.3, 1.) });
 							let mut pos = instance.position.clone();
 							pos[0] += -0.1;
@@ -926,6 +941,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 							pos[2] += -0.1;
 							selected_instance_data.clear();
 							selected_instance_data.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
+
+							(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetDetails(index));
 						}
 					}
 				}
@@ -1034,6 +1051,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				&mut inspector,
 				&mut destination,
 				fps,
+				selected_details,
 			);
 
 			// End the UI frame. We could now handle the output and draw the UI with the backend.
@@ -1171,7 +1189,7 @@ fn get_selected(
 	mut r_dir: glam::Vec3,
 	instances: &mut Vec<Instance>,
 	to_rt: glam::Vec3,
-) -> Option<&mut Instance> {
+) -> Option<(u32, Instance)> {
 	r_dir = r_dir.normalize();
 	//From:
 	//https://gamedev.stackexchange.com/questions/18436/most-efficient-aabb-vs-ray-collision-algorithms
@@ -1181,7 +1199,7 @@ fn get_selected(
 	let mut best = None;
 	let mut distance = f32::MAX;
 
-	for instance in instances {
+	for (i, instance) in instances.iter().enumerate() {
 		let lb: glam::Vec3 = Into::<glam::Vec3>::into(instance.position); // position is axis aligned bottom left.
 		let rt: glam::Vec3 = Into::<glam::Vec3>::into(instance.position) + to_rt; // + size.
 
@@ -1210,7 +1228,7 @@ fn get_selected(
 		let is_closest = tmin < distance;
 		if is_closest {
 			distance = tmin;
-			best = Some(instance);
+			best = Some((i as u32, instance.clone()));
 		}
 	}
 	best
@@ -1539,21 +1557,23 @@ fn source_data(
 
 	#[cfg(not(target_arch = "wasm32"))]
 	do_datasources(sovereigns, as_of);
-	// let sovereigns: Sovereigns = sovereigns;
 
-	#[cfg(target_arch = "wasm32")]
+	#[cfg(target_family = "wasm")]
 	let t = async move || {
 		log("send to bridge");
 
-		#[cfg(target_family = "wasm")]
 		let bridge: WorkerBridge<IOWorker> = crate::webworker::IOWorker::spawner()
-			.callback(|result| {
-				let mut pending = UPDATE_QUEUE.lock().unwrap();
-				pending.extend(result);
+			.callback(|result| match result {
+				WorkerResponse::RenderUpdate(update) => {
+					let mut pending = UPDATE_QUEUE.lock().unwrap();
+					pending.extend(update);
+				},
+				WorkerResponse::Details(index, details) => {
+					*SELECTED.lock().unwrap() = Some((index, details));
+				},
 			})
 			.spawn("./worker.js");
 
-		#[cfg(target_arch = "wasm32")]
 		let bridge = Box::leak(Box::new(bridge));
 		bridge.send(BridgeMessage::SetDatasource(
 			sovereigns.clone(),
@@ -1562,16 +1582,20 @@ fn source_data(
 		));
 
 		loop {
-			bridge.send(BridgeMessage::GetNewBlocks);
+			if let Some(msg) = REQUESTS.lock().unwrap().pop() {
+				bridge.send(msg);
+			// log!("Sent bridge message");
+			} else {
+				bridge.send(BridgeMessage::GetNewBlocks);
+			}
 			async_std::task::sleep(Duration::from_millis(15)).await;
 		}
 	};
 
-	#[cfg(target_arch = "wasm32")]
+	#[cfg(target_family = "wasm")]
 	wasm_bindgen_futures::spawn_local(t());
-	#[cfg(target_arch = "wasm32")]
+	#[cfg(target_family = "wasm")]
 	log!("sent to bridge");
-	// }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1625,7 +1649,7 @@ async fn do_datasources<F, R>(
 	as_of: Option<DotUrl>,
 	callback: &'static F,
 ) where
-	F: (Fn(RenderUpdate) -> R) + Send + Sync + 'static,
+	F: (Fn((RenderUpdate, RenderDetails)) -> R) + Send + Sync + 'static,
 	R: Future<Output = ()> + 'static,
 {
 	for relay in sovereigns.relays.iter() {
@@ -1954,8 +1978,23 @@ pub struct RenderUpdate {
 	cube_instances: Vec<(Instance, f32)>,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct RenderDetails {
+	chain_instances: Vec<Details>,
+	block_instances: Vec<Details>,
+	cube_instances: Vec<Details>,
+}
+
 impl RenderUpdate {
 	fn extend(&mut self, update: RenderUpdate) {
+		self.chain_instances.extend(update.chain_instances);
+		self.block_instances.extend(update.block_instances);
+		self.cube_instances.extend(update.cube_instances);
+	}
+}
+
+impl RenderDetails {
+	fn extend(&mut self, update: RenderDetails) {
 		self.chain_instances.extend(update.chain_instances);
 		self.block_instances.extend(update.block_instances);
 		self.cube_instances.extend(update.cube_instances);
@@ -1977,6 +2016,7 @@ fn render_block(
 	// mut event_instances: &mut Vec<(Instance, f32)>,
 	// mut block_instances: &mut Vec<Instance>,
 	// mut chain_instances: &mut Vec<Instance>,
+	mut render_details: &mut RenderDetails,
 ) {
 	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	// 	for mut event_instances in event_instances.iter_mut() {
@@ -2136,6 +2176,7 @@ fn render_block(
 					),
 					// flags: 0,
 				});
+				render_details.block_instances.push(details);
 				// block_instances.1.push(false);
 
 				// let chain_str = details.doturl.chain_str();
@@ -2235,7 +2276,7 @@ fn render_block(
 				&encoded,
 				// &mut handles,
 				&mut render.cube_instances,
-				// &mut event_dest, // &mut event_instances,
+				&mut render_details, // &mut event_dest, // &mut event_instances,
 			);
 
 			add_blocks(
@@ -2251,7 +2292,7 @@ fn render_block(
 				&encoded,
 				// &mut handles,
 				&mut render.cube_instances,
-				// &mut event_dest, // &mut event_instances,
+				&mut render_details, // &mut event_dest, // &mut event_instances,
 			);
 			//event.send(RequestRedraw);
 		},
@@ -2284,6 +2325,7 @@ fn add_blocks(
 	// polylines: &mut ResMut<Assets<Polyline>>,
 	encoded: &str,
 	extrinsic_instances: &mut Vec<(Instance, f32)>,
+	render_details: &mut RenderDetails,
 ) {
 	let rflip = chain_info.chain_url.rflip();
 	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
@@ -2432,6 +2474,7 @@ fn add_blocks(
 					},
 					base_y + target_y * build_dir,
 				));
+				render_details.cube_instances.push(block.details().clone());
 				// extrinsic_instances.1.push(false);
 
 				// for source in create_source {
@@ -2440,8 +2483,8 @@ fn add_blocks(
 			}
 		}
 
-		let mut events = events.clone();
-		events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
+		//let mut events = events.clone();
+		//events.sort_unstable_by_key(|e| e.details.pallet.to_string() + &e.details.variant);
 		//TODO keep original order a bit
 
 		// for event_group in events.group_by(|a, b| {
@@ -2473,7 +2516,6 @@ fn add_blocks(
 
 		for event in events {
 			let mut entity = event;
-			entity.details.url = blocklink.clone();
 
 			let style = style::style_data_event(&entity);
 			//TODO: map should be a resource.
@@ -2510,6 +2552,11 @@ fn add_blocks(
 				},
 				base_y + target_y * build_dir,
 			));
+
+			let mut details = entity.details.clone();
+			details.url = blocklink.clone();
+
+			render_details.cube_instances.push(details);
 
 			// let mut x = commands.spawn_bundle(PbrBundle {
 			// 	mesh,
@@ -2617,7 +2664,7 @@ macro_rules! min {
 fn rain(
 	// time: Res<Time>,
 	drops: &mut Vec<Instance>,
-	mut drops_target: &mut Vec<f32>, // mut timer: ResMut<UpdateTimer>,
+	drops_target: &mut Vec<f32>, // mut timer: ResMut<UpdateTimer>,
 ) {
 	let delta = 1.;
 	// if timer.timer.tick(time.delta()).just_finished() {
@@ -3122,6 +3169,7 @@ pub mod html_body {
 pub enum BridgeMessage {
 	SetDatasource(Sovereigns, Option<DotUrl>, u32), //data epoc
 	GetNewBlocks,
+	GetDetails(u32),
 }
 
 //from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE

@@ -70,7 +70,7 @@ frame-metadata = { git = "https://github.com/integritee-network/frame-metadata.g
 ] }
 
 scale-info = { version = "*", features = ["serde"] }
-scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32" }
+scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
 # scale-value = {path="/home/gilescope/git/scale-value" }
 scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
     "bitvec",
