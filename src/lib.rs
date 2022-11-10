@@ -12,7 +12,7 @@ use {
 	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
 	winit::platform::web::WindowBuilderExtWebSys,
 };
-
+use winit::dpi::PhysicalPosition;
 use crate::{
 	camera::CameraUniform,
 	movement::Destination,
@@ -559,7 +559,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// 	speed: 12.0,          // default: 12.0
 	// 	boost: 5.,
 	// };
-	let ground_width = 100000.0f32;
+	let ground_width = 1000000.0f32;
+	let touch_sensitivity = 4.0f64;
 
 	let mut urlbar =
 		ui::UrlBar::new("dotsama:/1//10504599".to_string(), Utc::now().naive_utc(), Env::Local);
@@ -718,7 +719,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let offset2 = vertices.len(); //chain
 	vertices.extend(rectangle(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
 	let offset3 = vertices.len(); //ground
-	vertices.extend(rectangle(0.01, 0.01, 0.01, 0.0, 0.0, 0.));
+	vertices.extend(rectangle(ground_width, 10., ground_width, 0.0, 0.0, 0.));
 	let offset4 = vertices.len(); //selected
 	vertices.extend(rectangle(CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, 0., 0., 0.));
 
@@ -744,7 +745,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	});
 
 	let ground_instance_data: Vec<Instance> = vec![
-	// Instance{ position: [-ground_width/2.0,-10.,-ground_width/2.0], color: 123444 },
+	// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color: as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
 	// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 
 	];
@@ -848,9 +849,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
 	let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
 	let opengl_to_wgpu_matrix_mat4 = glam::Mat4::from_cols(x, y, z, w);
+	let mut last_touch_location: HashMap<
+		u64,
+		(PhysicalPosition<f64>, DateTime<Utc>, Option<(PhysicalPosition<f64>, DateTime<Utc>)>),
+	> = Default::default();
 
 	let mut last_mouse_position = None;
 	event_loop.run(move |event, _, _control_flow| {
+		let now = Utc::now();
+
 		let scale_x = size.width as f32 / hidpi_factor as f32;
 		let scale_y = size.height as f32 / hidpi_factor as f32;
 
@@ -885,9 +892,69 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
 				redraw = input(&mut camera_controller, &event, &mut mouse_pressed);
-
+				log!("event: {:?}", &event);
 				if let WindowEvent::CursorMoved{ position, .. } = event {
 					last_mouse_position = Some(position.clone());
+				}
+
+				// WindowEvent::TouchpadMagnify and WindowEvent::TouchpadRotate events are
+				// only available on macos, so build up from touch events:
+
+				if let WindowEvent::Touch(Touch{ location, phase, id, .. }) = event {
+					let mut our_finger = None;
+					let mut other_finger = None;
+					for (other_id, (last_touch_location, last_time, previous)) in last_touch_location.iter() {
+						if let Some((prev_loc, prev_time)) = previous {
+							if (now - *last_time).num_milliseconds() < 500
+							&& (now - *prev_time).num_milliseconds() < 1000 {
+								if other_id != id {
+									other_finger = Some((last_touch_location, prev_loc));
+								} else {
+									our_finger = Some((location, prev_loc));
+								}
+							}
+						}
+					}
+
+					// We have previous and current locations of two fingers.
+					if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
+						let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
+							let x_diff = loc1.x - loc2.x;
+							let y_diff = loc2.y - loc2.y;
+							(x_diff*x_diff + y_diff * y_diff).sqrt()
+						};
+						let cur_dist = dist(cur1, cur2);
+						let prev_dist = dist(prev1, prev2);
+
+						//TODO: could use pressure to boost?
+						if cur_dist > prev_dist {
+							// Zoom out
+							camera_controller.process_scroll(
+								&MouseScrollDelta::PixelDelta(
+									PhysicalPosition { y: cur_dist - prev_dist, x:0. }));
+						} else {
+							// Zoom in
+							camera_controller.process_scroll(
+								&MouseScrollDelta::PixelDelta(
+									PhysicalPosition { y: -(prev_dist - cur_dist), x:0. }));
+						}
+					} else {
+						log!("Touch!");
+						// if *id == 0 {
+						if let Some((last_touch_location, last_time, _prev)) = last_touch_location.get(id) {
+							if let TouchPhase::Moved = phase {
+								let x_diff = last_touch_location.x - location.x;
+								let y_diff = last_touch_location.y - location.y;
+								if x_diff.abs() + y_diff.abs() < 200. {
+									camera_controller.rotate_horizontal -= (x_diff / touch_sensitivity) as f32;
+									camera_controller.rotate_vertical += (y_diff / touch_sensitivity) as f32;
+								}
+							}
+						}
+					}
+
+					let val = last_touch_location.entry(*id).or_insert((location.clone(), now, None));
+					*val = (location.clone(), now, Some((val.0, val.1)));
 				}
 
 				if let WindowEvent::MouseInput { button: winit::event::MouseButton::Left, state, .. } = event {
@@ -1112,23 +1179,31 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 				// Clip window:
-				let (x, y) = (0, occupied_screen_space.top as u32);
+				// let (x, y) = ((occupied_screen_space.left * scale_x) as u32,
+				// (occupied_screen_space.top*scale_y) as u32); let (width, height) =
+				// 	(size.width as u32 - x, size.height as u32 - (y +
+				// (occupied_screen_space.bottom*scale_y) as u32));
+
+				let side = (occupied_screen_space.left * hidpi_factor as f32) as u32;
+
+				// log!("size {:?}", size);
+				let (x, y) = (0 + side, 50);
 				let (width, height) =
-					(size.width - x, size.height - y - (occupied_screen_space.bottom as u32));
+					(size.width /*+ 600*/ - (side), (size.height - y) - 50 /* + 400 */);
 
-				if old_width != width as u32 {
-					log!(
-						"set scissor rect: x: {} y: {}, width: {} height: {}, was {}",
-						x,
-						y,
-						width,
-						height,
-						old_width
-					);
-					old_width = width as u32;
-				}
+				//if old_width != width as u32 {
+				// log!(
+				// 	"set scissor rect: x: {} y: {}, width: {} height: {}, was {}",
+				// 	x,
+				// 	y,
+				// 	width,
+				// 	height,
+				// 	old_width
+				// );
+				old_width = width as u32;
+				//}
 
-				//render_pass.set_scissor_rect(x, y, width, height);
+				render_pass.set_scissor_rect(x as u32, y as u32, width, height);
 
 				// render_pass.set_viewport(x as f32,y as f32,width as f32, height as f32, 0., 1.);
 				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -3096,7 +3171,7 @@ pub struct Inspector {
 	// start_location: UrlBar,
 	// timestamp: DateTime,
 	// #[inspectable(deletable = false)]
-	selected: Option<Details>,
+	// selected: Option<Details>,
 
 	hovered: Option<String>,
 
@@ -3223,3 +3298,65 @@ fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
 // 	}
 // 	return None
 // }
+
+use core::cell::RefCell;
+use futures::task::{Context, Poll};
+// use core::future::Future;
+use core::pin::Pin;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+// use wasm_bindgen::JsCast;
+use core::cell::Cell;
+use web_sys::HtmlImageElement;
+
+pub struct ImageFuture {
+	image: Option<HtmlImageElement>,
+	load_failed: Rc<Cell<bool>>,
+}
+
+impl ImageFuture {
+	pub fn new(path: &str) -> Self {
+		let image = HtmlImageElement::new().unwrap();
+		image.set_src(path);
+		ImageFuture { image: Some(image), load_failed: Rc::new(Cell::new(false)) }
+	}
+}
+
+impl Future for ImageFuture {
+	type Output = Result<HtmlImageElement, ()>;
+
+	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		match &self.image {
+			Some(image) if image.complete() => {
+				let image = self.image.take().unwrap();
+				let failed = self.load_failed.get();
+
+				if failed {
+					Poll::Ready(Err(()))
+				} else {
+					Poll::Ready(Ok(image))
+				}
+			},
+			Some(image) => {
+				let waker = cx.waker().clone();
+				let on_load_closure = Closure::wrap(Box::new(move || {
+					waker.wake_by_ref();
+				}) as Box<dyn FnMut()>);
+				image.set_onload(Some(on_load_closure.as_ref().unchecked_ref()));
+				on_load_closure.forget();
+
+				let waker = cx.waker().clone();
+				let failed_flag = self.load_failed.clone();
+				let on_error_closure = Closure::wrap(Box::new(move || {
+					failed_flag.set(true);
+					waker.wake_by_ref();
+				}) as Box<dyn FnMut()>);
+				image.set_onerror(Some(on_error_closure.as_ref().unchecked_ref()));
+				on_error_closure.forget();
+
+				Poll::Pending
+			},
+			_ => Poll::Ready(Err(())),
+		}
+	}
+}

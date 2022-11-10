@@ -28,7 +28,7 @@ fn vs_main(
     instance: InstanceInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.color = vec4<f32>(model.color, 0.0) + (
+    out.color = vec4<f32>(model.color, 1.0) + (
         vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
             vec4<u32>(255u)) / 255.0);
 //     out.clip_position = vec4<f32>(model.position, 1.0);

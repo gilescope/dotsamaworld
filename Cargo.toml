@@ -37,7 +37,7 @@ async-recursion = "*"
 bytemuck = "*"
 # Not needed since rust 1.63
 lazy_static = "*"
-# futures = { version = "0.3.13", default-features = false, features = [] }
+futures = { version = "0.3.13", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
@@ -90,7 +90,9 @@ egui = { version = "0.19", default-features = false }
 # egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
-# image = { version = "0.24", features = ["jpeg"] }
+# image = { version = "0.24", features = ["jpeg"], default-features = false }
+
+# jpeg-decoder = { version = "*", default-features = false }
 
 # bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
 # bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }
@@ -173,6 +175,7 @@ features = [
     'WebGlShader',
     'KeyboardEvent',
     'MouseEvent',
+    'Touch',
 ]
 
 [profile.dev]
@@ -197,3 +200,7 @@ incremental = true
 
 [profile.dev.package.backtrace]
 opt-level = 3
+
+
+[replace]
+"winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }

@@ -114,16 +114,18 @@ impl CameraUniform {
 
 #[derive(Debug)]
 pub struct CameraController {
-	amount_left: f32,
+	pub amount_left: f32,
 	amount_right: f32,
 	amount_forward: f32,
 	amount_backward: f32,
-	amount_up: f32,
+	pub amount_up: f32,
 	amount_down: f32,
-	rotate_horizontal: f32,
-	rotate_vertical: f32,
+	pub rotate_horizontal: f32,
+	pub rotate_vertical: f32,
 	scroll: f32,
 	speed: f32,
+	boost: f32,
+	boost_pressed: bool,
 	sensitivity: f32,
 }
 
@@ -140,12 +142,29 @@ impl CameraController {
 			rotate_vertical: 0.0,
 			scroll: 0.0,
 			speed,
+			boost: 4.,
+			boost_pressed: false,
 			sensitivity,
 		}
 	}
 
+	fn boost(&self) -> f32 {
+		if self.boost_pressed {
+			self.boost
+		} else {
+			1.0
+		}
+	}
+
 	pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
-		let amount = if state == ElementState::Pressed { 0.1 } else { 0.0 };
+		if let VirtualKeyCode::LShift = key {
+			if state == ElementState::Pressed {
+				self.boost_pressed = true;
+			} else {
+				self.boost_pressed = false;
+			}
+		}
+		let amount = if state == ElementState::Pressed { 0.1 * self.boost() } else { 0.0 };
 		match key {
 			VirtualKeyCode::W | VirtualKeyCode::Up => {
 				self.amount_forward = amount;
@@ -181,11 +200,17 @@ impl CameraController {
 	}
 
 	pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
+		// Macs generally have their scroll inverted.
+		#[cfg(target_os = "macos")]
+		let invert = 1.0;
+		#[cfg(not(target_os = "macos"))]
+		let invert = -1.0;
 		self.scroll = -match delta {
 			// I'm assuming a line is about 100 pixels
 			MouseScrollDelta::LineDelta(_, scroll) => scroll * 100.0,
 			MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
-		};
+		} * self.boost() *
+			invert;
 	}
 
 	pub fn update_camera(&mut self, camera: &mut Camera, dt: chrono::Duration) {

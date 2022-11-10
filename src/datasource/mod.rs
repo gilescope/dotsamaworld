@@ -425,7 +425,9 @@ where
 				)
 				.await;
 				if let Some(mut entity) = entity {
-					entity.details_mut().value = Some(scale_value::stringify::to_string(&extrinsic2.clone().remove_context()));
+					entity.details_mut().value = Some(scale_value::stringify::to_string(
+						&extrinsic2.clone().remove_context(),
+					));
 					if let Some(scale_borrow::Value::U64(time)) =
 						extrinsic.expect4("Timestamp", "0", "set", "now")
 					{
@@ -1061,7 +1063,7 @@ async fn process_extrinsic<'a, 'scale>(
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
 			// raw: ex_slice.to_vec(),
-			value: None
+			value: None,
 		},
 	})
 

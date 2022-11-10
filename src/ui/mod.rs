@@ -86,18 +86,17 @@ pub fn ui_bars_system(
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						open::that(&selected.url).unwrap();
 					}
-										if let Some(val) = &selected.value {
-											let (val, s) = scale_value::stringify::from_str(val);
-											let val = val.unwrap();
-											// ui.add(|ui| Tree(val.clone()));
-											// ui.collapsing(
-											// 	"value", 	|
-												funk(ui,
-													&scale_value_to_borrowed::convert(&val,true));
-					//             .default_open(depth < 1)
-											// ui.label(&val.to_string());
-											// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
-										}
+					if let Some(val) = &selected.value {
+						let (val, s) = scale_value::stringify::from_str(val);
+						let val = val.unwrap();
+						// ui.add(|ui| Tree(val.clone()));
+						// ui.collapsing(
+						// 	"value", 	|
+						funk(ui, &scale_value_to_borrowed::convert(&val, true));
+						//             .default_open(depth < 1)
+						// ui.label(&val.to_string());
+						// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
+					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
 					ui.label("RAW Scale:");
 
@@ -131,14 +130,6 @@ pub fn ui_bars_system(
 	//     .response
 	//     .rect
 	//     .width();
-
-	// let mut fps = 0.;
-	// for diag in diagnostics.iter() {
-	// 	if diag.name == "fps" {
-	// 		fps = diag.value().unwrap_or_default();
-	// 		break
-	// 	}
-	// }
 
 	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
 		.resizable(false)
