@@ -1268,7 +1268,9 @@ async fn get_events_for_block(
 					let mut details = Details {
 						url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
-						// value: Some(event_val.clone()),
+						value: Some(scale_value::stringify::to_string(
+							&event_val.clone().remove_context(),
+						)),
 						..Default::default()
 					};
 
