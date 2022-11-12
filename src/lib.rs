@@ -12,7 +12,6 @@ use crate::{
 	movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
- use winit::window::WindowId;
 use ::egui::FontDefinitions;
 use chrono::prelude::*;
 use datasource::DataUpdate;
@@ -33,14 +32,13 @@ use std::{
 	},
 	time::Duration,
 };
-use winit::dpi::LogicalSize;
 use webworker::WorkerResponse;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
-	dpi::{PhysicalPosition, PhysicalSize},
+	dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
 	event::{WindowEvent, *},
 	event_loop::EventLoop,
-	window::Window,
+	window::{Window, WindowId},
 };
 #[cfg(target_arch = "wasm32")]
 use {
@@ -58,6 +56,7 @@ macro_rules! log {
 mod camera;
 mod content;
 mod datasource;
+mod input;
 mod movement;
 mod style;
 mod texture;
@@ -181,8 +180,6 @@ pub fn main() {
 	#[cfg(not(target_arch = "wasm32"))]
 	async_std::task::block_on(async_main()).unwrap();
 }
-
-use crate::camera::CameraController;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -593,7 +590,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	//TODO: can we await instead of block_on here?
 	let (device, queue) = pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
-			features: wgpu::Features::default(), // | gpu::Features::CLEAR_TEXTURE 
+			features: wgpu::Features::default(), // | gpu::Features::CLEAR_TEXTURE
 			limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
 			label: None,
 		},
@@ -643,7 +640,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// Display the application
 
 	let mut frame_time = Utc::now().timestamp();
-	let frames = 0;
 	// let instance_buffer: wgpu::Buffer;
 
 	// let instance_buffer = device.create_buffer_init(
@@ -675,7 +671,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let mut camera = camera::Camera::new((0.0, 100.0, 10.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
 	let mut projection =
 		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 4000.0);
-	let mut camera_controller = camera::CameraController::new(4.0, 0.4);
+	let mut camera_controller = input::CameraController::new(4.0, 0.4);
 
 	let mut camera_uniform = CameraUniform::new();
 	camera_uniform.update_view_proj(&camera, &projection);
@@ -711,8 +707,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	});
 
 	let sample_count = 1;
-	let mut depth_texture =
-		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture", sample_count);
+	let mut depth_texture = texture::Texture::create_depth_texture(
+		&device,
+		&surface_config,
+		"depth_texture",
+		sample_count,
+	);
 
 	let mut vertices = vec![]; //cube
 	vertices.extend(rectangle(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
@@ -899,7 +899,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			}
 
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
-				redraw = input(&mut camera_controller, &event, &mut mouse_pressed);
+				redraw = input::input(&mut camera_controller, &event, &mut mouse_pressed);
 				if let WindowEvent::CursorMoved{ position, .. } = event {
 					last_mouse_position = Some(position.clone());
 				}
@@ -910,7 +910,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				if let WindowEvent::Touch(Touch{ location, phase, id, .. }) = event {
 					// let normal_loc = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
 					let ctx = platform.context();
-					let touch_in_egui = false; 
+					let touch_in_egui = false;
 					// if let Some(layer) = ctx.layer_id_at(normal_loc) {
 					// 	if layer.order == Order::Background {
 					// 		!ctx.frame_state().unused_rect.contains(normal_loc)
@@ -961,7 +961,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 							*SELECTED.lock().unwrap() = None;
 							selected_instance_data.clear();
 						} else {
-							
 							log!("Touch! {:?}", &location);
 							// if *id == 0 {
 							if let Some((last_touch_location, last_time, _prev)) = last_touch_location.get(id) {
@@ -982,7 +981,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 										let per_frame_horiz = (x_diff / touch_sensitivity) as f32 / elapsed_frames;
 										let per_frame_vert = (y_diff / touch_sensitivity) as f32 / elapsed_frames;
 
-										let add = | stack: &mut Vec<f32>, bump, len | {										
+										let add = | stack: &mut Vec<f32>, bump, len | {
 											for i in stack.iter_mut().rev().take(len) {
 												*i += bump;
 											}
@@ -996,8 +995,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 										add(&mut camera_controller.rotate_vertical_stack, per_frame_vert, elapsed_frames as usize);
 										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(), 
 										per_frame_horiz, millies_elapsed );
-
-									
 									}
 								}
 							} //else {
@@ -1006,7 +1003,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 							//let location = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
 							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data, scale_x, scale_y, &size, &location);
-							
 						}
 
 						let val = last_touch_location.entry(*id).or_insert((location.clone(), now, None));
@@ -1291,13 +1287,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 			if camera_controller.rotate_horizontal_stack.len() +
 					camera_controller.rotate_vertical_stack.len() > 0
-				
 				{
 					// log!("make it");
 					camera_controller.update_camera(&mut camera, chrono::Duration::milliseconds((1000. / fps as f32) as i64));
 					camera_uniform.update_view_proj(&camera, &projection);
 					queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
-				}			
+				}
 		}
 	});
 }
@@ -1432,7 +1427,7 @@ fn resize(
 	camera: &mut camera::Camera,
 	sample_count: u32,
 	platform: &mut Platform,
-	window_id: &WindowId
+	window_id: &WindowId,
 ) {
 	// let window = web_sys::window().expect("no global `window` exists");
 	// let document = window.document().expect("should have a document on window");
@@ -1440,71 +1435,50 @@ fn resize(
 	// .get_element_by_id("bevycanvas")
 	// .unwrap()
 	// .dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-    // canvas.set_width(size.width);
-    // canvas.set_height(size.height);
+	// canvas.set_width(size.width);
+	// canvas.set_height(size.height);
 
 	let hidpi_factor = hidpi_factor_f64 as f32;
 	let dpi_width = size.width as f32 * hidpi_factor;
 	let dpi_height = size.height as f32 * hidpi_factor;
-	surface_config.width = size.width;//dpi_width as u32;
+	surface_config.width = size.width; //dpi_width as u32;
 	surface_config.height = size.height; //dpi_height as u32;
 	surface.configure(&device, &surface_config);
 
 	projection.resize(dpi_width as u32, dpi_height as u32);
 
 	camera_uniform.update_view_proj(&camera, &projection);
-	
-	*depth_texture =
-		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture", sample_count);
+
+	*depth_texture = texture::Texture::create_depth_texture(
+		&device,
+		&surface_config,
+		"depth_texture",
+		sample_count,
+	);
 
 	// Resize egui:
 	use winit::event::Event::WindowEvent;
 	// use winit::event::WindowEvent;
 	//TODO: egui thinks screen is 2x size that it is.
-	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent{window_id: *window_id, 
-		event: winit::event::WindowEvent::Resized(PhysicalSize{width: dpi_width as u32 ,
-	height: dpi_height as u32 }) });
+	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent {
+		window_id: *window_id,
+		event: winit::event::WindowEvent::Resized(PhysicalSize {
+			width: dpi_width as u32,
+			height: dpi_height as u32,
+		}),
+	});
 
 	let mut s = size.clone();
-	s.width = s.width;// / 2;
-	s.height = s.height;// / 2;
-	platform.handle_event::<winit::event::WindowEvent>(
-		&WindowEvent{
-			window_id: *window_id, 
-			event: winit::event::WindowEvent::ScaleFactorChanged{
-				scale_factor: hidpi_factor_f64,// / 2.,
-				new_inner_size: &mut s
-				// width: dpi_width as u32 / 2,
-				// height: dpi_height as u32 
-			}
-		}
-	);
-}
-
-fn input(
-	camera_controller: &mut CameraController,
-	event: &WindowEvent,
-	mouse_pressed: &mut bool,
-) -> bool {
-	match event {
-		WindowEvent::KeyboardInput {
-			input: KeyboardInput { virtual_keycode: Some(key), state, .. },
-			..
-		} => camera_controller.process_keyboard(*key, *state),
-		WindowEvent::MouseWheel { delta, .. } => {
-			camera_controller.process_scroll(delta);
-			true
+	s.width = s.width; // / 2;
+	s.height = s.height; // / 2;
+	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent {
+		window_id: *window_id,
+		event: winit::event::WindowEvent::ScaleFactorChanged {
+			scale_factor: hidpi_factor_f64, // / 2.,
+			new_inner_size: &mut s,         /* width: dpi_width as u32 / 2,
+			                                 * height: dpi_height as u32 */
 		},
-		WindowEvent::MouseInput { button: winit::event::MouseButton::Left, state, .. } => {
-			*mouse_pressed = *state == ElementState::Pressed;
-			true
-		},
-		WindowEvent::Resized(new_size) => {
-			log!("Window event: new size: width {} height {}", new_size.width, new_size.height);
-			true
-		},
-		_ => false,
-	}
+	});
 }
 
 // struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
@@ -2758,50 +2732,11 @@ fn add_blocks(
 
 			render_details.cube_instances.push(details);
 
-			// let mut x = commands.spawn_bundle(PbrBundle {
-			// 	mesh,
-			// 	material: material.clone(),
-			// 	transform: t,
-			// 	..Default::default()
-			// });
-			// let event_bun = x
-			// 	.insert_bundle(PickableBundle::default())
-			// 	.insert(entity.details.clone())
-			// 	.insert(Rainable { dest: base_y + target_y * build_dir, build_direction })
-			// 	.insert(Name::new("BlockEvent"))
-			// 	.insert(ClearMe)
-			// 	.insert(HiFi);
-			//
 			// for (link, link_type) in &event.start_link {
 			// 	// println!("inserting source of rainbow (an event)!");
 			// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
 			// }
 		}
-
-		// commands.spawn().insert_bundle((
-		// 	handles.block_mesh.clone(), //todo xcm different?
-		// 	Transform::from_xyz(base_x, base_y, base_z),
-		// 	GlobalTransform::default(),
-		// 	InstanceMaterialData(instances),
-		// 	Visibility::default(),
-		// 	ComputedVisibility::default(),
-		// 	// NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
-		// 	// As the cube is at the origin, if its Aabb moves outside the view frustum, all the
-		// 	// instanced cubes will be culled.
-		// 	// The InstanceMaterialData contains the 'GlobalTransform' information for this custom
-		// 	// instancing, and that is not taken into account with the built-in frustum culling.
-		// 	// We must disable the built-in frustum culling by adding the `NoFrustumCulling` marker
-		// 	// component to avoid incorrect culling.
-		// 	NoFrustumCulling,
-		// ))
-		// .insert_bundle(PickableBundle::default())
-		// 		.insert(Name::new("BlockEvent"))
-		// 		.insert(ClearMe)
-		// 		.insert(HiFi);
-
-		// }
-		// }
-		//log!("hohohohohohhohoo");
 	}
 }
 

@@ -1,6 +1,6 @@
 use crate::{
-	datasource, do_datasources, log, render_block, BridgeMessage, Details, RenderDetails,
-	RenderUpdate, BASETIME, DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE,
+	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate, BASETIME,
+	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE,
 };
 use core::sync::atomic::Ordering;
 

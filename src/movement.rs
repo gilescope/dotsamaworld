@@ -1,18 +1,7 @@
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
-use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
+// use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
 use glam::{Quat, Vec3};
-// use bevy::{
-// 	ecs::system::{Query, Res},
-// 	input::{keyboard::KeyCode, Input},
-// 	prelude::*,
-// 	time::Time,
-// 	transform::components::Transform,
-// 	window::Windows,
-// };
-// #[cfg(feature = "normalmouse")]
-// use bevy_flycam::MovementSettings;
-use std::sync::atomic::Ordering;
 pub struct MouseCapture(pub bool);
 
 impl Default for MouseCapture {

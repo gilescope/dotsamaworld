@@ -5,9 +5,9 @@ pub mod doturl;
 pub mod toggle;
 use cgmath::Point3;
 //  use egui::ImageData;
-use crate::{log, Anchor, Env, Inspector, Viewport};
-// use bevy::prelude::*;
-// use bevy_inspector_egui::{options::StringAttributes, Inspectable};
+use crate::{log, Anchor, Env, Inspector}; //Viewport
+										  // use bevy::prelude::*;
+										  // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
@@ -84,17 +84,15 @@ pub fn ui_bars_system(
 					// use open.
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
 						log!("click detected");
-						if let Err(e) = open::that(&selected.url){ 
+						if let Err(e) = open::that(&selected.url) {
 							log!("Error opening link {:?}", e);
 						}
 					}
 					if let Some(val) = &selected.value {
-						let (val, s) = scale_value::stringify::from_str(val);
-						let val = val.unwrap();
-						// ui.add(|ui| Tree(val.clone()));
-						// ui.collapsing(
-						// 	"value", 	|
-						funk(ui, &scale_value_to_borrowed::convert(&val, true));
+						let (val, _s) = scale_value::stringify::from_str(val);
+						if let Ok(val) = val {
+							funk(ui, &scale_value_to_borrowed::convert(&val, true));
+						}
 						//             .default_open(depth < 1)
 						// ui.label(&val.to_string());
 						// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
@@ -224,7 +222,7 @@ pub fn ui_bars_system(
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
 					ui.heading(format!(
 						"{:03.0} fps. x={:03.0} y={:03.0} z={:03.0} {} ",
-						fps, x, y, z,  newdate
+						fps, x, y, z, newdate
 					));
 				});
 			});
