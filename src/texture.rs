@@ -11,6 +11,7 @@ impl Texture {
 		device: &wgpu::Device,
 		config: &wgpu::SurfaceConfiguration,
 		label: &str,
+		sample_count: u32,
 	) -> Self {
 		let size =
 			wgpu::Extent3d { width: config.width, height: config.height, depth_or_array_layers: 1 };
@@ -18,10 +19,10 @@ impl Texture {
 			label: Some(label),
 			size,
 			mip_level_count: 1,
-			sample_count: 1,
+			sample_count,
 			dimension: wgpu::TextureDimension::D2,
 			format: Self::DEPTH_FORMAT,
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING,
 		};
 		let texture = device.create_texture(&desc);

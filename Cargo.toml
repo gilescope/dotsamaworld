@@ -21,7 +21,7 @@ cgmath = "0.18"
 
 pollster = "0.2"
 egui_wgpu_backend = "0.19"
-egui_winit_platform = "0.16"
+egui_winit_platform = { version = "0.16", features = [] } #"webbrowser" , "clipboard"
 wgpu = { version = "0.13", features = ["webgl"] }
 primitive-types = { version = "0.11", default-features = false, features = [
     "serde_no_std",
@@ -203,4 +203,5 @@ opt-level = 3
 
 
 [replace]
-"winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
+# "winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
+"winit:0.27.5"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }

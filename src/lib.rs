@@ -7,17 +7,12 @@
 #![feature(stmt_expr_attributes)]
 #![feature(let_chains)]
 
-#[cfg(target_arch = "wasm32")]
-use {
-	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
-	winit::platform::web::WindowBuilderExtWebSys,
-};
-use winit::dpi::PhysicalPosition;
 use crate::{
 	camera::CameraUniform,
 	movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
+ use winit::window::WindowId;
 use ::egui::FontDefinitions;
 use chrono::prelude::*;
 use datasource::DataUpdate;
@@ -38,13 +33,19 @@ use std::{
 	},
 	time::Duration,
 };
+use winit::dpi::LogicalSize;
 use webworker::WorkerResponse;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
-	dpi::PhysicalSize,
+	dpi::{PhysicalPosition, PhysicalSize},
 	event::{WindowEvent, *},
 	event_loop::EventLoop,
 	window::Window,
+};
+#[cfg(target_arch = "wasm32")]
+use {
+	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
+	winit::platform::web::WindowBuilderExtWebSys,
 };
 
 // Define macros before mods
@@ -592,7 +593,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	//TODO: can we await instead of block_on here?
 	let (device, queue) = pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
-			features: wgpu::Features::default(),
+			features: wgpu::Features::default(), // | gpu::Features::CLEAR_TEXTURE 
 			limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
 			label: None,
 		},
@@ -600,8 +601,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	))
 	.unwrap();
 
-	let mut size = window.inner_size();
-	let hidpi_factor = window.scale_factor(); // 2.0 <-- this is why quaters!
+	let mut size: PhysicalSize<u32> = window.inner_size();
+	let mut hidpi_factor = window.scale_factor(); // 2.0 <-- this is why quaters!
 	log!("hidpi factor {:?}", hidpi_factor);
 
 	// size.width *= hidpi_factor as u32;//todo!
@@ -611,10 +612,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// size.width = 1024; - seems double this so 4x pixels
 	// size.height = 768;
 
-	// let channel = std::sync::mpsc::channel();
-	// let resize_sender: OnResizeSender = channel.0;
-	// let resize_receiver = Mutex::new(channel.1);
-	// setup_viewport_resize_system(Mutex::new(resize_sender));
+	let channel = std::sync::mpsc::channel();
+	let resize_sender: OnResizeSender = channel.0;
+	let resize_receiver = Mutex::new(channel.1);
+	setup_viewport_resize_system(Mutex::new(resize_sender));
 
 	let surface_format = surface.get_supported_formats(&adapter)[0];
 	let mut surface_config = wgpu::SurfaceConfiguration {
@@ -709,8 +710,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		label: Some("camera_bind_group"),
 	});
 
+	let sample_count = 1;
 	let mut depth_texture =
-		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture", sample_count);
 
 	let mut vertices = vec![]; //cube
 	vertices.extend(rectangle(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
@@ -803,9 +805,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			bias: wgpu::DepthBiasState::default(),
 		}),
 		multisample: wgpu::MultisampleState {
-			count: 1,
-			mask: !0,
-			alpha_to_coverage_enabled: false,
+			count: sample_count,
+			// mask: !0,
+			// alpha_to_coverage_enabled: false,
+			..Default::default()
 		},
 		multiview: None,
 	});
@@ -833,7 +836,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	);
 
 	// let mut ctx = egui::Context::default();
-	let mut old_width = 0u32;
 	let mut mouse_pressed = false;
 
 	use crate::camera::OPENGL_TO_WGPU_MATRIX;
@@ -855,6 +857,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	> = Default::default();
 
 	let mut last_mouse_position = None;
+	let window_id = window.id();
 	event_loop.run(move |event, _, _control_flow| {
 		let now = Utc::now();
 
@@ -864,21 +867,26 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
 
-		frames += 1;
 
 		let selected_details = SELECTED.lock().unwrap().clone();
 
 		// viewport_resize_system(&resize_receiver);
-		// if let Some(new_size) = viewport_resize_system(&resize_receiver) {
-		// 	log!("set new size width: {} height: {}", new_size.width, new_size.height);
-		// 	window.set_inner_size(new_size);
-		// 	window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
+		if let Some(new_size) = viewport_resize_system(&resize_receiver) {
+			log!("set new size width: {} height: {}", new_size.width, new_size.height);
+			// window.set_inner_size(new_size);
+			window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
 		// 	projection.resize(new_size.width, new_size.height);
 		// 	size = new_size;
 		// 	surface.configure(&device, &surface_config);
 		// 	depth_texture =
 		// 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
-		// }
+
+			// TODO can we set canvas size?
+
+			size = new_size;
+			hidpi_factor = window.scale_factor();
+			resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform, &mut camera, sample_count, &mut platform, &window_id);
+		}
 
 		//if frames % 10 == 1
 		let mut redraw = true;
@@ -892,7 +900,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
 				redraw = input(&mut camera_controller, &event, &mut mouse_pressed);
-				log!("event: {:?}", &event);
 				if let WindowEvent::CursorMoved{ position, .. } = event {
 					last_mouse_position = Some(position.clone());
 				}
@@ -901,115 +908,122 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// only available on macos, so build up from touch events:
 
 				if let WindowEvent::Touch(Touch{ location, phase, id, .. }) = event {
-					let mut our_finger = None;
-					let mut other_finger = None;
-					for (other_id, (last_touch_location, last_time, previous)) in last_touch_location.iter() {
-						if let Some((prev_loc, prev_time)) = previous {
-							if (now - *last_time).num_milliseconds() < 500
-							&& (now - *prev_time).num_milliseconds() < 1000 {
-								if other_id != id {
-									other_finger = Some((last_touch_location, prev_loc));
-								} else {
-									our_finger = Some((location, prev_loc));
+					// let normal_loc = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
+					let ctx = platform.context();
+					let touch_in_egui = false; 
+					// if let Some(layer) = ctx.layer_id_at(normal_loc) {
+					// 	if layer.order == Order::Background {
+					// 		!ctx.frame_state().unused_rect.contains(normal_loc)
+					// 	} else {
+					// 		true
+					// 	}
+					// } else {
+					// 	false
+					// };
+					if !touch_in_egui {
+						let mut our_finger = None;
+						let mut other_finger = None;
+						for (other_id, (last_touch_location, last_time, previous)) in last_touch_location.iter() {
+							if let Some((prev_loc, prev_time)) = previous {
+								if (now - *last_time).num_milliseconds() < 500
+								&& (now - *prev_time).num_milliseconds() < 1000 {
+									if other_id != id {
+										other_finger = Some((last_touch_location, prev_loc));
+									} else {
+										our_finger = Some((location, prev_loc));
+									}
 								}
 							}
 						}
-					}
 
-					// We have previous and current locations of two fingers.
-					if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
-						let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
-							let x_diff = loc1.x - loc2.x;
-							let y_diff = loc2.y - loc2.y;
-							(x_diff*x_diff + y_diff * y_diff).sqrt()
-						};
-						let cur_dist = dist(cur1, cur2);
-						let prev_dist = dist(prev1, prev2);
+						// We have previous and current locations of two fingers.
+						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
+							let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
+								let x_diff = loc1.x - loc2.x;
+								let y_diff = loc2.y - loc2.y;
+								(x_diff*x_diff + y_diff * y_diff).sqrt()
+							};
+							let cur_dist = dist(cur1, cur2);
+							let prev_dist = dist(prev1, prev2);
 
-						//TODO: could use pressure to boost?
-						if cur_dist > prev_dist {
-							// Zoom out
-							camera_controller.process_scroll(
-								&MouseScrollDelta::PixelDelta(
-									PhysicalPosition { y: cur_dist - prev_dist, x:0. }));
+							//TODO: could use pressure to boost?
+							if cur_dist > prev_dist {
+								// Zoom out
+								camera_controller.process_scroll(
+									&MouseScrollDelta::PixelDelta(
+										PhysicalPosition { y: cur_dist - prev_dist, x:0. }));
+							} else {
+								// Zoom in
+								camera_controller.process_scroll(
+									&MouseScrollDelta::PixelDelta(
+										PhysicalPosition { y: -(prev_dist - cur_dist), x:0. }));
+							}
+							*SELECTED.lock().unwrap() = None;
+							selected_instance_data.clear();
 						} else {
-							// Zoom in
-							camera_controller.process_scroll(
-								&MouseScrollDelta::PixelDelta(
-									PhysicalPosition { y: -(prev_dist - cur_dist), x:0. }));
-						}
-					} else {
-						log!("Touch!");
-						// if *id == 0 {
-						if let Some((last_touch_location, last_time, _prev)) = last_touch_location.get(id) {
-							if let TouchPhase::Moved = phase {
-								let x_diff = last_touch_location.x - location.x;
-								let y_diff = last_touch_location.y - location.y;
-								if x_diff.abs() + y_diff.abs() < 200. {
-									camera_controller.rotate_horizontal -= (x_diff / touch_sensitivity) as f32;
-									camera_controller.rotate_vertical += (y_diff / touch_sensitivity) as f32;
-								}
-							}
-						}
-					}
+							
+							log!("Touch! {:?}", &location);
+							// if *id == 0 {
+							if let Some((last_touch_location, last_time, _prev)) = last_touch_location.get(id) {
+								if let TouchPhase::Moved = phase {
+									// LOL Gotcha: touch y 0 starts from the bottom!
 
-					let val = last_touch_location.entry(*id).or_insert((location.clone(), now, None));
-					*val = (location.clone(), now, Some((val.0, val.1)));
+									let x_diff = last_touch_location.x - location.x;
+									let y_diff = last_touch_location.y - location.y;
+									if x_diff.abs() + y_diff.abs() < 200. {
+										// camera_controller.rotate_horizontal -= (x_diff / touch_sensitivity) as f32;
+										// camera_controller.rotate_vertical += (y_diff / touch_sensitivity) as f32;
+
+										//TODO:
+										// time distance since updates * fps = frames to make movement in (to be smooth).
+										let millies_elapsed = (now - *last_time).num_milliseconds();
+										let elapsed_frames = fps as f32 * millies_elapsed as f32 / 1000.0;
+
+										let per_frame_horiz = (x_diff / touch_sensitivity) as f32 / elapsed_frames;
+										let per_frame_vert = (y_diff / touch_sensitivity) as f32 / elapsed_frames;
+
+										let add = | stack: &mut Vec<f32>, bump, len | {										
+											for i in stack.iter_mut().rev().take(len) {
+												*i += bump;
+											}
+											for _i in stack.len()..len {
+												//TODO: these need to be inserted in the front not the end!
+												stack.push(bump);
+											}
+										};
+										let before = camera_controller.rotate_horizontal_stack.len();
+										add(&mut camera_controller.rotate_horizontal_stack, per_frame_horiz, elapsed_frames as usize);
+										add(&mut camera_controller.rotate_vertical_stack, per_frame_vert, elapsed_frames as usize);
+										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(), 
+										per_frame_horiz, millies_elapsed );
+
+									
+									}
+								}
+							} //else {
+
+							//TODO: push this non-crazyness higher!
+
+							//let location = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
+							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data, scale_x, scale_y, &size, &location);
+							
+						}
+
+						let val = last_touch_location.entry(*id).or_insert((location.clone(), now, None));
+						*val = (location.clone(), now, Some((val.0, val.1)));
+					}
 				}
 
 				if let WindowEvent::MouseInput { button: winit::event::MouseButton::Left, state, .. } = event {
 					if let Some(position) = last_mouse_position {
-						let matrix = camera.calc_matrix();
-						let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
-						let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
-						let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
-						let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
-						let view = glam::Mat4::from_cols(x, y, z, w);
-
-						let matrix = cgmath::perspective(
-							projection.fovy,
-							projection.aspect,
-							projection.znear,
-							projection.zfar,
-						);
-						let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
-						let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
-						let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
-						let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
-						let proj = opengl_to_wgpu_matrix_mat4 * glam::Mat4::from_cols(x, y, z, w);
-
-						let far_ndc = projection.zfar; //proj.project_point3(glam::Vec3::NEG_Z).z;
-						let near_ndc = projection.znear; //camera.position.z;// proj.project_point3(glam::Vec3::Z).z;
-						let ndc_to_world: glam::Mat4 = view.inverse() * proj.inverse();
-
-						// log!("new pos: {:?}", position);
-						let clicked1 = glam::Vec2::new(position.x as f32, position.y as f32);
-						let clicked2 = glam::Vec2::new( clicked1.x - size.width as f32 / 2.0,
-							size.height as f32 / 2.0 -  clicked1.y);
-						// log!("new add: {:?}", clicked);
-						let clicked = glam::Vec2::new(clicked2.x / scale_x,
-							clicked2.y/scale_y);
-						// log!("new adj: {:?}  {:?}  {:?}", clicked1, clicked2, clicked);
-
-						let near_clicked = ndc_to_world.project_point3(clicked.extend(near_ndc));
-						let far_clicked = ndc_to_world.project_point3(clicked.extend(far_ndc));
-						let ray_direction_clicked = near_clicked - far_clicked;
-						let pos_clicked: glam::Vec3 = near_clicked.into();
-
-						let selected = get_selected(pos_clicked, ray_direction_clicked, &mut cube_instance_data,
-							glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH)
-						);
-						log!("selected = {:?}", selected);
-						if let Some((index, instance)) = selected {
-							// ground_instance_data.push(Instance { position: near_clicked.into(), color: as_rgba_u32(0.3, 0.3, 0.3, 1.) });
-							let mut pos = instance.position.clone();
-							pos[0] += -0.1;
-							pos[1] += -0.1;
-							pos[2] += -0.1;
-							selected_instance_data.clear();
-							selected_instance_data.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
-
-							(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetDetails(index));
+						if let ElementState::Pressed = state {
+							// If we're over an egui area we should not be trying to select anything.
+							if !platform.context().is_pointer_over_area() {
+								try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data,
+								scale_x, scale_y, &size, &position);
+							} else {
+								log!("suppressing click as on egui");
+							}
 						}
 					}
 				}
@@ -1025,10 +1039,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 					// depth_texture =
 					// texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
 					size = *new_size;
-					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture);
+					hidpi_factor = window.scale_factor();
+					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform,&mut camera, sample_count, &mut platform, &window_id);
 				} else if let WindowEvent::ScaleFactorChanged { new_inner_size, .. } = event {
 					size = **new_inner_size;
-					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture);
+					hidpi_factor = window.scale_factor();
+					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform, &mut camera, sample_count, &mut platform, &window_id);
 				}
 			},
 			Event::RedrawRequested(window_id) if window_id == window.id() => {
@@ -1049,6 +1065,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		}
 
 		if redraw {
+			frames += 1;
+
 			// let mut data_update: Option<DataUpdate> = None;
 			if let Ok(render_update) = &mut UPDATE_QUEUE.lock() {
 				for (instance, height) in &(**render_update).cube_instances {
@@ -1132,7 +1150,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			let screen_descriptor = ScreenDescriptor {
 				physical_width: surface_config.width,
 				physical_height: surface_config.height,
-				scale_factor: window.scale_factor() as f32,
+				scale_factor: hidpi_factor as f32,
 			};
 			let tdelta: egui::TexturesDelta = full_output.textures_delta;
 			egui_rpass.add_textures(&device, &queue, &tdelta).expect("add texture ok");
@@ -1154,6 +1172,16 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 			let mut encoder = device
 				.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("encoder") });
+			// let mut encoder = device
+			// 	.create_render_bundle_encoder(
+			// 		&wgpu::RenderBundleEncoderDescriptor {
+			// 			label: None,
+			// 			color_formats: &[Some(config.format)],
+			// 			depth_stencil: None,
+			// 			sample_count,
+			// 			multiview: None,
+			// 		}
+			// 	);
 			{
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("Render Pass"),
@@ -1184,12 +1212,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// 	(size.width as u32 - x, size.height as u32 - (y +
 				// (occupied_screen_space.bottom*scale_y) as u32));
 
-				let side = (occupied_screen_space.left * hidpi_factor as f32) as u32;
+				let side = if selected_instance_data.is_empty() { 0u32 } else {
+					(occupied_screen_space.left * hidpi_factor as f32) as u32
+				};
 
 				// log!("size {:?}", size);
 				let (x, y) = (0 + side, 50);
 				let (width, height) =
-					(size.width /*+ 600*/ - (side), (size.height - y) - 50 /* + 400 */);
+					(size.width.saturating_sub(side), (size.height.saturating_sub(y)).saturating_sub(50) /* + 400 */);
 
 				//if old_width != width as u32 {
 				// log!(
@@ -1200,7 +1230,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// 	height,
 				// 	old_width
 				// );
-				old_width = width as u32;
+				// old_width = width as u32;
 				//}
 
 				render_pass.set_scissor_rect(x as u32, y as u32, width, height);
@@ -1243,11 +1273,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 					0..selected_instance_data.len() as _,
 				);
 			}
-			queue.submit(std::iter::once(encoder.finish()));
+			queue.submit(std::iter::once(encoder.finish(
+		// 		&wgpu::RenderBundleDescriptor {
+        //     label: Some("main"),
+        // }
+			)));
 
 			output_frame.present();
 
-			frames += 1;
 			if Utc::now().timestamp() - frame_time > 1 {
 				fps = frames as u32;
 				frames = 0;
@@ -1255,14 +1288,91 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			}
 
 			egui_rpass.remove_textures(tdelta).expect("remove texture ok");
+
+			if camera_controller.rotate_horizontal_stack.len() +
+					camera_controller.rotate_vertical_stack.len() > 0
+				
+				{
+					// log!("make it");
+					camera_controller.update_camera(&mut camera, chrono::Duration::milliseconds((1000. / fps as f32) as i64));
+					camera_uniform.update_view_proj(&camera, &projection);
+					queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
+				}			
 		}
 	});
+}
+
+fn try_select(
+	camera: &camera::Camera,
+	projection: &camera::Projection,
+	opengl_to_wgpu_matrix_mat4: glam::Mat4,
+	cube_instance_data: &Vec<Instance>,
+	selected_instance_data: &mut Vec<Instance>,
+	scale_x: f32,
+	scale_y: f32,
+	size: &PhysicalSize<u32>,
+	position: &PhysicalPosition<f64>,
+) {
+	let matrix = camera.calc_matrix();
+	let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
+	let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
+	let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
+	let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
+	let view = glam::Mat4::from_cols(x, y, z, w);
+
+	let matrix =
+		cgmath::perspective(projection.fovy, projection.aspect, projection.znear, projection.zfar);
+	let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
+	let y: glam::Vec4 = glam::Vec4::new(matrix.y.x, matrix.y.y, matrix.y.z, matrix.y.w);
+	let z: glam::Vec4 = glam::Vec4::new(matrix.z.x, matrix.z.y, matrix.z.z, matrix.z.w);
+	let w: glam::Vec4 = glam::Vec4::new(matrix.w.x, matrix.w.y, matrix.w.z, matrix.w.w);
+	let proj = opengl_to_wgpu_matrix_mat4 * glam::Mat4::from_cols(x, y, z, w);
+
+	let far_ndc = projection.zfar; //proj.project_point3(glam::Vec3::NEG_Z).z;
+	let near_ndc = projection.znear; //camera.position.z;// proj.project_point3(glam::Vec3::Z).z;
+	let ndc_to_world: glam::Mat4 = view.inverse() * proj.inverse();
+
+	// log!("new pos: {:?}", position);
+	let clicked1 = glam::Vec2::new(position.x as f32, position.y as f32);
+	let clicked2 = glam::Vec2::new(
+		clicked1.x - size.width as f32 / 2.0,
+		size.height as f32 / 2.0 - clicked1.y,
+	);
+	// log!("new add: {:?}", clicked);
+	let clicked = glam::Vec2::new(clicked2.x / scale_x, clicked2.y / scale_y);
+	// log!("new adj: {:?}  {:?}  {:?}", clicked1, clicked2, clicked);
+
+	let near_clicked = ndc_to_world.project_point3(clicked.extend(near_ndc));
+	let far_clicked = ndc_to_world.project_point3(clicked.extend(far_ndc));
+	let ray_direction_clicked = near_clicked - far_clicked;
+	let pos_clicked: glam::Vec3 = near_clicked.into();
+
+	let selected = get_selected(
+		pos_clicked,
+		ray_direction_clicked,
+		&cube_instance_data,
+		glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
+	);
+	log!("selected = {:?}", selected);
+	if let Some((index, instance)) = selected {
+		// ground_instance_data.push(Instance { position: near_clicked.into(), color:
+		// as_rgba_u32(0.3, 0.3, 0.3, 1.) });
+		let mut pos = instance.position.clone();
+		pos[0] += -0.1;
+		pos[1] += -0.1;
+		pos[2] += -0.1;
+		selected_instance_data.clear();
+		selected_instance_data
+			.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
+
+		(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetDetails(index));
+	}
 }
 
 fn get_selected(
 	r_org: glam::Vec3,
 	mut r_dir: glam::Vec3,
-	instances: &mut Vec<Instance>,
+	instances: &Vec<Instance>,
 	to_rt: glam::Vec3,
 ) -> Option<(u32, Instance)> {
 	r_dir = r_dir.normalize();
@@ -1317,14 +1427,58 @@ fn resize(
 	projection: &mut camera::Projection,
 	surface: &mut wgpu::Surface,
 	depth_texture: &mut texture::Texture,
+	hidpi_factor_f64: f64,
+	camera_uniform: &mut camera::CameraUniform,
+	camera: &mut camera::Camera,
+	sample_count: u32,
+	platform: &mut Platform,
+	window_id: &WindowId
 ) {
-	surface_config.width = size.width;
-	surface_config.height = size.height;
-	projection.resize(size.width, size.height);
-	//TODO: might need to update CameraUniform here
+	// let window = web_sys::window().expect("no global `window` exists");
+	// let document = window.document().expect("should have a document on window");
+	// let canvas = document
+	// .get_element_by_id("bevycanvas")
+	// .unwrap()
+	// .dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+    // canvas.set_width(size.width);
+    // canvas.set_height(size.height);
+
+	let hidpi_factor = hidpi_factor_f64 as f32;
+	let dpi_width = size.width as f32 * hidpi_factor;
+	let dpi_height = size.height as f32 * hidpi_factor;
+	surface_config.width = size.width;//dpi_width as u32;
+	surface_config.height = size.height; //dpi_height as u32;
 	surface.configure(&device, &surface_config);
+
+	projection.resize(dpi_width as u32, dpi_height as u32);
+
+	camera_uniform.update_view_proj(&camera, &projection);
+	
 	*depth_texture =
-		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture", sample_count);
+
+	// Resize egui:
+	use winit::event::Event::WindowEvent;
+	// use winit::event::WindowEvent;
+	//TODO: egui thinks screen is 2x size that it is.
+	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent{window_id: *window_id, 
+		event: winit::event::WindowEvent::Resized(PhysicalSize{width: dpi_width as u32 ,
+	height: dpi_height as u32 }) });
+
+	let mut s = size.clone();
+	s.width = s.width;// / 2;
+	s.height = s.height;// / 2;
+	platform.handle_event::<winit::event::WindowEvent>(
+		&WindowEvent{
+			window_id: *window_id, 
+			event: winit::event::WindowEvent::ScaleFactorChanged{
+				scale_factor: hidpi_factor_f64,// / 2.,
+				new_inner_size: &mut s
+				// width: dpi_width as u32 / 2,
+				// height: dpi_height as u32 
+			}
+		}
+	);
 }
 
 fn input(
@@ -1558,7 +1712,7 @@ fn source_data(
 	log!("tracking speed set to {}", sovereigns.default_track_speed);
 	let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 		let env = event.source.split(":").collect::<Vec<_>>()[0].to_string();
-		let env = Env::try_from(env.as_str()).unwrap();
+		let env = Env::try_from(env.as_str()).unwrap_or(Env::Prod);
 		(DotUrl { env, ..Default::default() }, None)
 	} else {
 		(dot_url.clone().unwrap(), Some(dot_url.unwrap()))
@@ -1865,39 +2019,10 @@ fn clear_world(// details: &Query<Entity, With<ClearMeAlwaysVisible>>,
 }
 
 #[derive(Clone, Copy)]
-
 enum BuildDirection {
 	Up,
 	Down,
 }
-
-// fn format_entity(entity: &DataEntity) -> String {
-// 	let res = match entity {
-// 		DataEntity::Event(DataEvent { details, .. }) => {
-// 			format!("{:#?}", details)
-// 		},
-// 		DataEntity::Extrinsic {
-// 			// id: _,
-// 			args,
-// 			contains,
-// 			details,
-// 			..
-// 		} => {
-// 			let kids = if contains.is_empty() {
-// 				String::new()
-// 			} else {
-// 				format!(" contains {} extrinsics", contains.len())
-// 			};
-// 			format!("{} {} {}\n{:#?}", details.pallet, details.variant, kids, args)
-// 		},
-// 	};
-
-// 	// if let Some(pos) = res.find("data: Bytes(") {
-// 	//     res.truncate(pos + "data: Bytes(".len());
-// 	//     res.push_str("...");
-// 	// }
-// 	res
-// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum DataEntity {
@@ -3172,7 +3297,6 @@ pub struct Inspector {
 	// timestamp: DateTime,
 	// #[inspectable(deletable = false)]
 	// selected: Option<Details>,
-
 	hovered: Option<String>,
 
 	texture: Option<egui::TextureHandle>,
@@ -3284,22 +3408,20 @@ fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
 	}
 }
 
-// fn viewport_resize_system(
-// 	// mut window: &mut Window,
-// 	resize_receiver: &Mutex<OnResizeReceiver>,
-// ) -> Option<winit::dpi::PhysicalSize<u32>> {
-// 	if resize_receiver.lock().unwrap().try_recv().is_ok() {
-// 		let new_size = get_viewport_size();
-// 		//TODO: bugout if window size is already this.
-// 		if new_size.width > 0 && new_size.height > 0 {
-// 			return Some(new_size)
-// 			// log!("I GOT CALLED with {}, {}", size.0, size.1);// width, height
-// 		}
-// 	}
-// 	return None
-// }
+fn viewport_resize_system(
+	// mut window: &mut Window,
+	resize_receiver: &Mutex<OnResizeReceiver>,
+) -> Option<winit::dpi::PhysicalSize<u32>> {
+	if resize_receiver.lock().unwrap().try_recv().is_ok() {
+		let new_size = get_viewport_size();
+		//TODO: bugout if window size is already this.
+		if new_size.width > 0 && new_size.height > 0 {
+			return Some(new_size)
+		}
+	}
+	return None
+}
 
-use core::cell::RefCell;
 use futures::task::{Context, Poll};
 // use core::future::Future;
 use core::pin::Pin;

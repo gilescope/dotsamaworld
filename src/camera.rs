@@ -127,6 +127,12 @@ pub struct CameraController {
 	boost: f32,
 	boost_pressed: bool,
 	sensitivity: f32,
+
+	/// stack of per frame changes to do so that big changes are smoothed
+	pub rotate_horizontal_stack: Vec<f32>,
+
+	/// stack of per frame changes to do so that big changes are smoothed
+	pub rotate_vertical_stack: Vec<f32>,
 }
 
 impl CameraController {
@@ -145,6 +151,9 @@ impl CameraController {
 			boost: 4.,
 			boost_pressed: false,
 			sensitivity,
+
+			rotate_horizontal_stack: vec![],
+			rotate_vertical_stack: vec![],
 		}
 	}
 
@@ -195,8 +204,8 @@ impl CameraController {
 	}
 
 	pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-		self.rotate_horizontal = mouse_dx as f32;
-		self.rotate_vertical = mouse_dy as f32;
+		self.rotate_horizontal = mouse_dx as f32 / 4.;
+		self.rotate_vertical = mouse_dy as f32 / 4.;
 	}
 
 	pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -237,6 +246,12 @@ impl CameraController {
 		// modify the y coordinate directly.
 		camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
 
+		if let Some(val) = self.rotate_horizontal_stack.pop() {
+			self.rotate_horizontal += val;
+		}
+		if let Some(val) = self.rotate_vertical_stack.pop() {
+			self.rotate_vertical += val;
+		}
 		// Rotate
 		camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
 		camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;

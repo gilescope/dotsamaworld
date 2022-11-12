@@ -7,7 +7,6 @@ use cgmath::Point3;
 //  use egui::ImageData;
 use crate::{log, Anchor, Env, Inspector, Viewport};
 // use bevy::prelude::*;
-use egui::Context;
 // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -27,7 +26,7 @@ pub struct OccupiedScreenSpace {
 // pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
-	mut egui_context: &mut egui::Context,
+	egui_context: &mut egui::Context,
 	mut occupied_screen_space: &mut OccupiedScreenSpace,
 	viewpoint: &Point3<f32>,
 	mut spec: &mut UrlBar,
@@ -84,7 +83,10 @@ pub fn ui_bars_system(
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.
 					if ui.add(Link::new("open in polkadot.js")).clicked() {
-						open::that(&selected.url).unwrap();
+						log!("click detected");
+						if let Err(e) = open::that(&selected.url){ 
+							log!("Error opening link {:?}", e);
+						}
 					}
 					if let Some(val) = &selected.value {
 						let (val, s) = scale_value::stringify::from_str(val);
@@ -116,6 +118,8 @@ pub fn ui_bars_system(
 							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
 						}
 					});
+				} else {
+					occupied_screen_space.left = 0.;
 				}
 			})
 			.response
@@ -219,8 +223,8 @@ pub fn ui_bars_system(
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
 					ui.heading(format!(
-						"x={:03.0} y={:03.0} z={:03.0} {:03.0} fps. {}",
-						x, y, z, fps, newdate
+						"{:03.0} fps. x={:03.0} y={:03.0} z={:03.0} {} ",
+						fps, x, y, z,  newdate
 					));
 				});
 			});
