@@ -30,9 +30,9 @@ pub struct Details
 	// pub hover: String,
 	// pub flattern: String,
 	// #[inspectable(label = "Url:")]
-	pub url: String,
+	// pub url: String,
 	// pub chain_name: String,
-	// pub raw: Vec<u8>,
+	pub raw: Vec<u8>,
 	pub value: Option<String>, //scale Value as string
 }
 

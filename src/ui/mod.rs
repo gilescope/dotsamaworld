@@ -4,14 +4,13 @@ pub mod details;
 pub mod doturl;
 pub mod toggle;
 use cgmath::Point3;
-//  use egui::ImageData;
-use crate::{log, Anchor, Env, Inspector}; //Viewport
-										  // use bevy::prelude::*;
-										  // use bevy_inspector_egui::{options::StringAttributes, Inspectable};
+use std::collections::HashMap;
+use crate::{log, Anchor, Env, Inspector, ChainInfo};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+// use std::num::NonZeroU32;
 use egui::ComboBox;
 // use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
@@ -34,7 +33,7 @@ pub fn ui_bars_system(
 	inspector: &mut Inspector,
 	destination: &mut Destination,
 	fps: u32,
-	selected_details: Option<(u32, Details)>,
+	selected_details: Option<(u32, Details, ChainInfo)>,
 ) {
 	if selected_details.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
@@ -76,29 +75,148 @@ pub fn ui_bars_system(
 				// }
 				// }
 				use egui::Link;
-				if let Some((_index, selected)) = &selected_details {
+
+
+
+
+
+				if let Some((_cube_index, selected, chain_info)) = &selected_details {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
+					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap().into());
+
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.
-					if ui.add(Link::new("open in polkadot.js")).clicked() {
-						log!("click detected");
-						if let Err(e) = open::that(&selected.url) {
-							log!("Error opening link {:?}", e);
-						}
-					}
+					// if ui.add(Link::new("open in polkadot.js")).clicked() {
+					// 	log!("click detected");
+					// 	if let Err(e) = open::that(&selected.url) {
+					// 		log!("Error opening link {:?}", e);
+					// 	}
+					// }
 					if let Some(val) = &selected.value {
 						let (val, _s) = scale_value::stringify::from_str(val);
 						if let Ok(val) = val {
-							funk(ui, &scale_value_to_borrowed::convert(&val, true));
+							let val_decoded = scale_value_to_borrowed::convert(&val, true);
+
+							if let Some(v) = val_decoded.expect3("Ethereum", "0", "Executed")
+							{
+								log!("yeah baby {:?}", &v);
+								if let Some(tx_hash) = v.find2("transaction_hash", "0") {
+									if let scale_borrow::Value::ScaleOwned(tx) = tx_hash {
+										let mut eth_tx_map = HashMap::new();
+											eth_tx_map.insert((1,2006), "https://blockscout.com/astar//tx/0x{}");
+											eth_tx_map.insert((1,2004), "https://moonscan.io/tx/0x{}");
+											eth_tx_map.insert((0,2023), "https://moonriver.moonscan.io/tx/0x{}");
+											
+										if let Some(url) = eth_tx_map.get(&chain_tuple) {
+											let tx_hash =  hex::encode(&tx[..]);
+											if ui.add(Link::new(format!("Transaction Hash #: 0x{}", tx_hash))).clicked() {
+												let url = url.replace("{}", &tx_hash);
+												
+												if let Err(e) = open::that(&url) {
+													log!("Error opening link {:?}", e);
+												}
+											}
+										}
+									}
+								}
+							}
+
+							funk(ui, &val_decoded);
 						}
 						//             .default_open(depth < 1)
 						// ui.label(&val.to_string());
 						// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
 					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
-					ui.label("RAW Scale:");
+					// ui.label("RAW Scale:");
+
+					if let Some(event) = selected.doturl.event {
+						ui.label(format!("Event #: {}", event));
+					}
+					if let Some(extrinsic) = selected.doturl.extrinsic {
+						if selected.raw.is_empty() {
+							ui.label(format!("Extrinsic #: {}", extrinsic));
+						} else {
+							if ui.add(Link::new(format!("Decode Extrinsic #: {}", extrinsic))).clicked() {
+								let encoded: String = form_urlencoded::Serializer::new(String::new())
+									.append_pair("rpc", &chain_info.chain_ws)
+									.finish();
+
+								// let is_relay = chain_info.chain_url.is_relay();
+								let url = format!(
+									"https://polkadot.js.org/apps/?{}#/extrinsics/decode/0x{}",
+									&encoded,
+									&hex::encode(&selected.raw)
+								);
+
+								if let Err(e) = open::that(&url) {
+									log!("Error opening link {:?}", e);
+								}
+							}
+						}
+					}
+					if let Some(block_number) = selected.doturl.block_number {
+						if ui.add(Link::new(format!("See Block #: {}", block_number))).clicked() {
+							log!("click block detected");
+							let encoded: String = form_urlencoded::Serializer::new(String::new())
+								.append_pair("rpc", &chain_info.chain_ws)
+								.finish();
+
+							// let is_relay = chain_info.chain_url.is_relay();
+							let url = format!(
+								"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+								&encoded,
+								block_number
+							);
+
+							if let Err(e) = open::that(&url) {
+								log!("Error opening link {:?}", e);
+							}
+						}
+
+						let mut block_explore_map = HashMap::new();
+						block_explore_map.insert((1,2004),"https://moonscan.io/block/{}");
+						block_explore_map.insert((0,2023), "https://moonriver.moonscan.io/block/{}");
+
+
+					
+
+						if let Some(para_id) = selected.doturl.para_id {
+							if let Some(url) = block_explore_map.get(&(selected.doturl.souverign_index(), para_id.into())) {
+								if ui.add(Link::new(format!("Local block explore #: {}", block_number))).clicked() {
+									log!("click block detected");
+
+									let url = url.replace("{}", &block_number.to_string());
+
+									if let Err(e) = open::that(&url) {
+										log!("Error opening link {:?}", e);
+									}
+								}
+							}
+						}
+					}
+					if let Some(para_id) = selected.doturl.para_id {
+						ui.label(format!("Para Id: {}", para_id));
+					}
+					if let Some(sovereign) = selected.doturl.sovereign {
+						if sovereign == -1 {
+							if ui.add(Link::new("Kusama Relay Chain")).clicked() {
+								if let Err(e) = open::that("https://kusama.network/") {
+									log!("Error opening link {:?}", e);
+								}
+							}							
+						} else if sovereign == 1 {
+							if ui.add(Link::new("Polkadot Relay Chain")).clicked() {
+								if let Err(e) = open::that("https://polkadot.network/") {
+									log!("Error opening link {:?}", e);
+								}
+							}
+						} else {
+							ui.label(format!("Relay Id: {}", sovereign));
+						}
+					}
 
 					// if ui.button("📋").clicked() {
 					// 	let s = hex::encode(&selected.raw);
@@ -108,14 +226,14 @@ pub fn ui_bars_system(
 					//TODO: request raw from webworker!!!
 					// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
-					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-						if let Some(hand) = inspector.texture.as_ref() {
-							let texture: &egui::TextureHandle = hand;
+					// ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+					// 	if let Some(hand) = inspector.texture.as_ref() {
+					// 		let texture: &egui::TextureHandle = hand;
 
-							let l = 200.; // occupied_screen_space.left - 10.;
-							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
-						}
-					});
+					// 		let l = 200.; // occupied_screen_space.left - 10.;
+					// 		ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+					// 	}
+					// });
 				} else {
 					occupied_screen_space.left = 0.;
 				}

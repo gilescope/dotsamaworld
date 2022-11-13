@@ -6,6 +6,11 @@
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
 #![feature(let_chains)]
+#![allow(clippy::identity_op)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::wildcard_in_or_patterns)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::type_complexity)]
 
 use crate::{
 	camera::CameraUniform,
@@ -111,13 +116,18 @@ lazy_static! {
 }
 
 lazy_static! {
-	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details)>>> =
+	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details, ChainInfo)>>> =
 		Arc::new(std::sync::Mutex::new(None));
 }
 
 lazy_static! {
 	static ref DETAILS: Arc<std::sync::Mutex<RenderDetails>> =
 		Arc::new(std::sync::Mutex::new(RenderDetails::default()));
+}
+
+lazy_static! {
+	static ref SOVEREIGNS: Arc<std::sync::Mutex<Option<Sovereigns>>> =
+		Arc::new(std::sync::Mutex::new(None));
 }
 
 lazy_static! {
@@ -1770,8 +1780,8 @@ fn source_data(
 					let mut pending = UPDATE_QUEUE.lock().unwrap();
 					pending.extend(update);
 				},
-				WorkerResponse::Details(index, details) => {
-					*SELECTED.lock().unwrap() = Some((index, details));
+				WorkerResponse::Details(index, details, chain_info) => {
+					*SELECTED.lock().unwrap() = Some((index, details, chain_info));
 				},
 			})
 			.spawn("./worker.js");
@@ -2120,6 +2130,23 @@ pub struct Sovereigns {
 	pub default_track_speed: f32,
 }
 
+impl Sovereigns {
+	fn chain_info(&self, doturl: &DotUrl) -> ChainInfo {
+		//TODO work for 3+ sovs
+		let sov = &self.relays[if doturl.is_darkside() {0} else {1}];
+		if let Some(para_id) = doturl.para_id {
+			for chain_info in sov {
+				if chain_info.chain_url.para_id == Some(para_id) {
+					return chain_info.clone();
+				}
+			}
+			panic!("chain info not found for para id: {}", para_id);
+		} else {
+			sov[0].clone()
+		}
+	}
+}
+
 // #[derive(Component)]
 // struct ClearMe;
 
@@ -2268,19 +2295,19 @@ fn render_block(
 			// };
 
 			let rflip = chain_info.chain_url.rflip();
-			let encoded: String = form_urlencoded::Serializer::new(String::new())
-				.append_pair("rpc", &chain_info.chain_ws)
-				.finish();
+			// let encoded: String = form_urlencoded::Serializer::new(String::new())
+			// 	.append_pair("rpc", &chain_info.chain_ws)
+			// 	.finish();
 
 			let is_relay = chain_info.chain_url.is_relay();
 			let details = Details {
 				doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
 
-				url: format!(
-					"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-					&encoded,
-					block.blockurl.block_number.unwrap()
-				),
+				// url: format!(
+				// 	"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+				// 	&encoded,
+				// 	block.blockurl.block_number.unwrap()
+				// ),
 				..Default::default()
 			};
 			// log!("rendering block from {}", details.doturl);
@@ -2446,7 +2473,7 @@ fn render_block(
 				// &links,
 				// &mut polyline_materials,
 				// &mut polylines,
-				&encoded,
+				// &encoded,
 				// &mut handles,
 				&mut render.cube_instances,
 				render_details, // &mut event_dest, // &mut event_instances,
@@ -2462,7 +2489,7 @@ fn render_block(
 				// &links,
 				// &mut polyline_materials,
 				// &mut polylines,
-				&encoded,
+				// &encoded,
 				// &mut handles,
 				&mut render.cube_instances,
 				render_details, // &mut event_dest, // &mut event_instances,
@@ -2491,12 +2518,12 @@ fn render_block(
 fn add_blocks(
 	chain_info: &ChainInfo,
 	block_num: f32,
-	block_events: Vec<(Option<DataEntity>, Vec<DataEvent>)>,
+	block_events: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)>,
 	build_direction: BuildDirection,
 	// links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
 	// polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	// polylines: &mut ResMut<Assets<Polyline>>,
-	encoded: &str,
+	// encoded: &str,
 	extrinsic_instances: &mut Vec<(Instance, f32)>,
 	render_details: &mut RenderDetails,
 ) {
@@ -2647,8 +2674,13 @@ fn add_blocks(
 					},
 					base_y + target_y * build_dir,
 				));
+
+				// let extrinsic_details = block.details().clone();
+				// TODO: link to decode for extrinsics.
+				// extrinsic_details.url = format!("https://polkadot.subscan.io/extrinsic/{}-{}",
+				// extrinsic_details.doturl.block_number.unwrap(),
+				// extrinsic_details.doturl.extrinsic.unwrap());
 				render_details.cube_instances.push(block.details().clone());
-				// extrinsic_instances.1.push(false);
 
 				// for source in create_source {
 				// 	bun.insert(source);
@@ -2684,10 +2716,10 @@ fn add_blocks(
 		//     } else {
 		//         vec![&annoying]
 		//     };
-		let blocklink =
-			format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, block_num);
+		// let blocklink =
+		// 	format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, block_num);
 
-		for event in events {
+		for (_block_event_index, event) in events {
 			let mut entity = event;
 
 			let style = style::style_data_event(entity);
@@ -2726,10 +2758,12 @@ fn add_blocks(
 				base_y + target_y * build_dir,
 			));
 
-			let mut details = entity.details.clone();
-			details.url = blocklink.clone();
+			// let details = entity.details.clone();
+			// details.url = format!("https://polkadot.subscan.io/extrinsic/{}-{}", 
+			// details.doturl.block_number.unwrap(),
+			// block_event_index);
 
-			render_details.cube_instances.push(details);
+			render_details.cube_instances.push(entity.details.clone());
 
 			// for (link, link_type) in &event.start_link {
 			// 	// println!("inserting source of rainbow (an event)!");
@@ -3233,7 +3267,7 @@ pub struct Inspector {
 	// selected: Option<Details>,
 	hovered: Option<String>,
 
-	texture: Option<egui::TextureHandle>,
+	// texture: Option<egui::TextureHandle>,
 }
 
 // struct DateTime(NaiveDateTime, bool);

@@ -260,23 +260,28 @@ where
 						get_block_hash(&mut source, block_number).await;
 					// log!("hash is {:?}", block_hash);
 					if block_hash.is_none() {
-						eprintln!(
+						log!(
 							"should be able to get from relay chain hash for block num {} of url {}",
 							block_number, url
 						);
 						// TODO: timestamp probably incorrect
-						// tx(vec![DataUpdate::NewBlock(PolkaBlock {
-						// 	data_epoc: our_data_epoc,
-						// 	// Place it in the approximately right location...
-						// 	timestamp: last_timestamp.map(|t| t + 12_000_000),
-						// 	timestamp_parent: None,
-						// 	blockurl: DotUrl {
-						// 		block_number: Some(block_number),
-						// 		..chain_info.chain_url.clone()
-						// 	},
-						// 	extrinsics: vec![],
-						// 	events: vec![],
-						// })]);
+
+						let mut rend = RenderUpdate::default();
+						let mut render_details = RenderDetails::default();
+						render_block(DataUpdate::NewBlock(PolkaBlock {
+							data_epoc: our_data_epoc,
+							// Place it in the approximately right location...
+							timestamp: last_timestamp.map(|t| t + 12_000_000),
+							timestamp_parent: None,
+							blockurl: DotUrl {
+								block_number: Some(block_number),
+								..chain_info.chain_url.clone()
+							},
+							extrinsics: vec![],
+							events: vec![],
+						}), &chain_info, &mut rend, &mut render_details);
+						
+						tx((rend, render_details));
 
 						continue
 					}
@@ -402,12 +407,12 @@ where
 					details: Details {
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 						// flattern: "can't yet decode.".to_string(),
-						url: source.url().to_string(),
+						// url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
 						variant: "?".to_string(),
-						// raw: encoded_extrinsic,
+						raw: encoded_extrinsic,
 						value: None,
 					},
 				},
@@ -421,7 +426,7 @@ where
 					ex_slice,
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-					source.url(),
+					// source.url(),
 				)
 				.await;
 				if let Some(mut entity) = entity {
@@ -527,7 +532,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ex_slice: &'scale [u8],
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
-	url: &str,
+	// url: &str,
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
 	// let para_id = extrinsic_url.para_id.clone();
@@ -622,97 +627,95 @@ async fn process_extrinsic<'a, 'scale>(
 
 					for (msg_index, msg) in channels {
 						println!("found {} downward_message is, {}", msg_index, &msg);
-						if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
-							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
-								let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
-									"expect to be able to decode {}",
-									&hex::encode(&bytes[..])
-								)));
-								println!("xcm msgv= {}", v);
-								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
-								// msg.set("msg_decoded", msg_decoded);
-								let msg = msg_decoded;
-								println!("xcm msg = {}", msg);
+						if let (Some(scale_borrow::Value::ScaleOwned(bytes)), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
+							let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
+								"expect to be able to decode {}",
+								&hex::encode(&bytes[..])
+							)));
+							println!("xcm msgv= {}", v);
+							let msg_decoded = scale_value_to_borrowed::convert(&v, true);
+							// msg.set("msg_decoded", msg_decoded);
+							let msg = msg_decoded;
+							println!("xcm msg = {}", msg);
 
-								if let Some(instructions) = msg.get("V0") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
+							if let Some(instructions) = msg.get("V0") {
+								for (instruction, payload) in instructions {
+									println!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
 
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-												// raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
 
-										if *instruction == "TransferAsset" {
-											if let Some(_dest) = payload.get("dest") {}
-											// panic!();
-										}
-									}
-								}
-								if let Some(instructions) = msg.get("V1") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
-
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-												// raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
-
-										// if *instruction == "TransferAsset" {
-										// 	if let Some(ben) = payload.get("beneficiary") {
-
-										// 	}
-										// 	// panic!();
-										// }
-									}
-								}
-								if let Some(instructions) = msg.get("V2") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
-
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-												// raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
-
-										if *instruction == "TransferAsset" {
-											if let Some(_dest) = payload.get("dest") {}
-											// panic!();
-										}
+									if *instruction == "TransferAsset" {
+										if let Some(_dest) = payload.get("dest") {}
+										// panic!();
 									}
 								}
 							}
+							if let Some(instructions) = msg.get("V1") {
+								for (instruction, payload) in instructions {
+									println!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
 
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
+
+									// if *instruction == "TransferAsset" {
+									// 	if let Some(ben) = payload.get("beneficiary") {
+
+									// 	}
+									// 	// panic!();
+									// }
+								}
+							}
+							if let Some(instructions) = msg.get("V2") {
+								for (instruction, payload) in instructions {
+									println!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
+
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
+
+									if *instruction == "TransferAsset" {
+										if let Some(_dest) = payload.get("dest") {}
+										// panic!();
+									}
+								}
+							}
+							
 							// VersionedXcm::V1(msg) => {
 							// 										// Only one xcm instruction in a v1 message.
 							// 										let instruction = format!("{:?}", &msg);
@@ -1057,12 +1060,12 @@ async fn process_extrinsic<'a, 'scale>(
 			// hover: "".to_string(),
 			doturl: extrinsic_url,
 			// flattern: "".to_string(), // format!("{results:#?}"),
-			url: url.to_string(),
+			// url: url.to_string(),
 			parent: None,
 			success: crate::ui::details::Success::Happy,
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
-			// raw: ex_slice.to_vec(),
+			raw: ex_slice.to_vec(),
 			value: None,
 		},
 	})
@@ -1266,7 +1269,7 @@ async fn get_events_for_block(
 					let start_link = vec![];
 					// let end_link = vec![];
 					let mut details = Details {
-						url: source.url().to_string(),
+						// url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
 						value: Some(scale_value::stringify::to_string(
 							&event_val.clone().remove_context(),
@@ -1409,8 +1412,9 @@ async fn get_events_for_block(
 pub fn associate_events(
 	ext: Vec<DataEntity>,
 	mut events: Vec<DataEvent>,
-) -> Vec<(Option<DataEntity>, Vec<DataEvent>)> {
-	let mut ext: Vec<(Option<DataEntity>, Vec<DataEvent>)> = ext
+) -> Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> {
+	let mut events : Vec<_> = events.into_iter().enumerate().collect();
+	let mut ext: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> = ext
 		.into_iter()
 		.map(|extrinsic| {
 			let eid = if let DataEntity::Extrinsic {
@@ -1426,7 +1430,7 @@ pub fn associate_events(
 			(
 				Some(extrinsic),
 				events
-					.drain_filter(|ev| match ev.details.parent {
+					.drain_filter(|ev| match ev.1.details.parent {
 						Some(extrinsic_id) => extrinsic_id == eid,
 						_ => false,
 					})

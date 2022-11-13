@@ -1,6 +1,7 @@
 use crate::{
 	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate,
-	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE,
+	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE, SOVEREIGNS,
+	ChainInfo
 };
 use core::sync::atomic::Ordering;
 
@@ -36,7 +37,7 @@ impl IOWorker {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum WorkerResponse {
 	RenderUpdate(RenderUpdate),
-	Details(u32, Details),
+	Details(u32, Details, ChainInfo),
 }
 
 impl Worker for IOWorker {
@@ -56,6 +57,7 @@ impl Worker for IOWorker {
 		match msg {
 			BridgeMessage::SetDatasource(sovs, as_of, data_epoc) => {
 				DATASOURCE_EPOC.store(data_epoc, Ordering::Relaxed);
+				*SOVEREIGNS.lock().unwrap() = Some(sovs.clone());
 				async_std::task::block_on(do_datasources(sovs, as_of, &Self::send_it_too));
 			},
 			BridgeMessage::GetNewBlocks => {
@@ -67,7 +69,8 @@ impl Worker for IOWorker {
 			BridgeMessage::GetDetails(cube_index) => {
 				let details =
 					DETAILS.lock().unwrap().cube_instances[cube_index as usize].clone();
-				scope.respond(id, WorkerResponse::Details(cube_index, details));
+				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},
 		}
 

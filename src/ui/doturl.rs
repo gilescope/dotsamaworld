@@ -11,6 +11,7 @@ pub struct DotUrl {
 	pub block_number: Option<u32>,
 	pub extrinsic: Option<u32>,
 	pub event: Option<u32>,
+	pub event_in_block: Option<u32>,
 }
 
 impl DotUrl {
@@ -84,6 +85,10 @@ impl DotUrl {
 	// Is cyberpunkusama?
 	pub fn is_darkside(&self) -> bool {
 		self.sovereign.unwrap_or(1) == -1
+	}
+
+	pub fn souverign_index(&self) -> u32 {
+		if self.is_darkside() { 0 } else {1}
 	}
 
 	pub fn rflip(&self) -> f32 {
