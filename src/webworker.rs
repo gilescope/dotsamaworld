@@ -1,5 +1,5 @@
 use crate::{
-	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate, BASETIME,
+	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate,
 	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE,
 };
 use core::sync::atomic::Ordering;
@@ -66,7 +66,7 @@ impl Worker for IOWorker {
 			},
 			BridgeMessage::GetDetails(cube_index) => {
 				let details =
-					(*DETAILS.lock().unwrap()).cube_instances[cube_index as usize].clone();
+					DETAILS.lock().unwrap().cube_instances[cube_index as usize].clone();
 				scope.respond(id, WorkerResponse::Details(cube_index, details));
 			},
 		}

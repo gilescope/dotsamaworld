@@ -531,7 +531,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 	{
 		let window = web_sys::window().unwrap();
 		let document = window.document().unwrap();
-		let canvas = document.query_selector(&"canvas").expect("Cannot query for canvas element.");
+		let canvas = document.query_selector("canvas").expect("Cannot query for canvas element.");
 		if let Some(canvas) = canvas {
 			let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>().ok();
 			winit_window_builder = winit_window_builder.with_canvas(canvas);
@@ -605,7 +605,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// size.width *= hidpi_factor as u32;//todo!
 	// size.height *= hidpi_factor as u32;
 
-	log!("Initial size: width:{} height:{}", size.width as u32, size.height as u32);
+	log!("Initial size: width:{} height:{}", size.width, size.height);
 	// size.width = 1024; - seems double this so 4x pixels
 	// size.height = 768;
 
@@ -618,8 +618,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let mut surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format: surface_format,
-		width: size.width as u32,
-		height: size.height as u32,
+		width: size.width,
+		height: size.height,
 		present_mode: wgpu::PresentMode::Fifo, //Immediate not supported on web
 	};
 	surface.configure(&device, &surface_config);
@@ -627,8 +627,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	assert!(size.width > 0);
 	// We use the egui_winit_platform crate as the platform.
 	let mut platform = Platform::new(PlatformDescriptor {
-		physical_width: size.width as u32,
-		physical_height: size.height as u32,
+		physical_width: size.width,
+		physical_height: size.height,
 		scale_factor: window.scale_factor(),
 		font_definitions: FontDefinitions::default(),
 		style: Default::default(),
@@ -728,11 +728,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// vertices.extend(rectangle(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
-	indicies.extend(&cube_indicies(0));
-	indicies.extend(&cube_indicies(offset1 as u16));
-	indicies.extend(&cube_indicies(offset2 as u16));
-	indicies.extend(&cube_indicies(offset3 as u16));
-	indicies.extend(&cube_indicies(offset4 as u16));
+	indicies.extend(cube_indicies(0));
+	indicies.extend(cube_indicies(offset1 as u16));
+	indicies.extend(cube_indicies(offset2 as u16));
+	indicies.extend(cube_indicies(offset3 as u16));
+	indicies.extend(cube_indicies(offset4 as u16));
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Vertex Buffer"),
@@ -899,9 +899,9 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 			}
 
 			Event::WindowEvent { ref event, window_id } if window_id == window.id() => {
-				redraw = input::input(&mut camera_controller, &event, &mut mouse_pressed);
+				redraw = input::input(&mut camera_controller, event, &mut mouse_pressed);
 				if let WindowEvent::CursorMoved{ position, .. } = event {
-					last_mouse_position = Some(position.clone());
+					last_mouse_position = Some(*position);
 				}
 
 				// WindowEvent::TouchpadMagnify and WindowEvent::TouchpadRotate events are
@@ -940,7 +940,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
 							let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
 								let x_diff = loc1.x - loc2.x;
-								let y_diff = loc2.y - loc2.y;
+								let y_diff = loc1.y - loc2.y;
 								(x_diff*x_diff + y_diff * y_diff).sqrt()
 							};
 							let cur_dist = dist(cur1, cur2);
@@ -1002,11 +1002,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 							//TODO: push this non-crazyness higher!
 
 							//let location = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
-							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data, scale_x, scale_y, &size, &location);
+							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data, scale_x, scale_y, &size, location);
 						}
 
-						let val = last_touch_location.entry(*id).or_insert((location.clone(), now, None));
-						*val = (location.clone(), now, Some((val.0, val.1)));
+						let val = last_touch_location.entry(*id).or_insert((*location, now, None));
+						*val = (*location, now, Some((val.0, val.1)));
 					}
 				}
 
@@ -1065,13 +1065,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 			// let mut data_update: Option<DataUpdate> = None;
 			if let Ok(render_update) = &mut UPDATE_QUEUE.lock() {
-				for (instance, height) in &(**render_update).cube_instances {
-					cube_instance_data.push(instance.clone());
+				for (instance, height) in &render_update.cube_instances {
+					cube_instance_data.push(*instance);
 					cube_target_heights.push(*height);
 				}
 				//TODO: drain not clone!
-				block_instance_data.extend((**render_update).block_instances.clone());
-				chain_instance_data.extend((**render_update).chain_instances.clone());
+				block_instance_data.extend(render_update.block_instances.clone());
+				chain_instance_data.extend(render_update.chain_instances.clone());
 
 				//todo: possibly not needed?
 				render_update.chain_instances.truncate(0);
@@ -1229,7 +1229,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// old_width = width as u32;
 				//}
 
-				render_pass.set_scissor_rect(x as u32, y as u32, width, height);
+				render_pass.set_scissor_rect(x, y, width, height);
 
 				// render_pass.set_viewport(x as f32,y as f32,width as f32, height as f32, 0., 1.);
 				render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -1253,14 +1253,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// Draw blocks
 				render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
 				render_pass.draw_indexed(
-					(36)..((36 + 36) as u32),
+					36..((36 + 36) as u32),
 					0,
 					0..block_instance_data.len() as _,
 				);
 
 				// Draw cubes
 				render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
-				render_pass.draw_indexed((0)..((36) as u32), 0, 0..cube_instance_data.len() as _);
+				render_pass.draw_indexed(0..36_u32, 0, 0..cube_instance_data.len() as _);
 
 				render_pass.set_vertex_buffer(1, selected_instance_buffer.slice(..));
 				render_pass.draw_indexed(
@@ -1301,7 +1301,7 @@ fn try_select(
 	camera: &camera::Camera,
 	projection: &camera::Projection,
 	opengl_to_wgpu_matrix_mat4: glam::Mat4,
-	cube_instance_data: &Vec<Instance>,
+	cube_instance_data: &[Instance],
 	selected_instance_data: &mut Vec<Instance>,
 	scale_x: f32,
 	scale_y: f32,
@@ -1340,19 +1340,19 @@ fn try_select(
 	let near_clicked = ndc_to_world.project_point3(clicked.extend(near_ndc));
 	let far_clicked = ndc_to_world.project_point3(clicked.extend(far_ndc));
 	let ray_direction_clicked = near_clicked - far_clicked;
-	let pos_clicked: glam::Vec3 = near_clicked.into();
+	let pos_clicked: glam::Vec3 = near_clicked;
 
 	let selected = get_selected(
 		pos_clicked,
 		ray_direction_clicked,
-		&cube_instance_data,
+		cube_instance_data,
 		glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
 	);
 	log!("selected = {:?}", selected);
 	if let Some((index, instance)) = selected {
 		// ground_instance_data.push(Instance { position: near_clicked.into(), color:
 		// as_rgba_u32(0.3, 0.3, 0.3, 1.) });
-		let mut pos = instance.position.clone();
+		let mut pos = instance.position;
 		pos[0] += -0.1;
 		pos[1] += -0.1;
 		pos[2] += -0.1;
@@ -1367,7 +1367,7 @@ fn try_select(
 fn get_selected(
 	r_org: glam::Vec3,
 	mut r_dir: glam::Vec3,
-	instances: &Vec<Instance>,
+	instances: &[Instance],
 	to_rt: glam::Vec3,
 ) -> Option<(u32, Instance)> {
 	r_dir = r_dir.normalize();
@@ -1393,7 +1393,9 @@ fn get_selected(
 		let t6 = (rt.z - r_org.z) * dirfrac.z;
 
 		let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
+		// let tmin = t1.clamp(t3.min(t4), t2).max(t5.min(t6));
 		let tmax = t1.max(t2).min(t3.max(t4)).min(t5.max(t6));
+		// let tmax = t1.clamp(t2, t3.max(t4)).min(t5.max(t6));
 
 		// if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us
 		if tmax < 0. {
@@ -1408,7 +1410,7 @@ fn get_selected(
 		let is_closest = tmin < distance;
 		if is_closest {
 			distance = tmin;
-			best = Some((i as u32, instance.clone()));
+			best = Some((i as u32, *instance));
 		}
 	}
 	best
@@ -1443,15 +1445,15 @@ fn resize(
 	let dpi_height = size.height as f32 * hidpi_factor;
 	surface_config.width = size.width; //dpi_width as u32;
 	surface_config.height = size.height; //dpi_height as u32;
-	surface.configure(&device, &surface_config);
+	surface.configure(device, surface_config);
 
 	projection.resize(dpi_width as u32, dpi_height as u32);
 
-	camera_uniform.update_view_proj(&camera, &projection);
+	camera_uniform.update_view_proj(camera, projection);
 
 	*depth_texture = texture::Texture::create_depth_texture(
-		&device,
-		&surface_config,
+		device,
+		surface_config,
 		"depth_texture",
 		sample_count,
 	);
@@ -1468,15 +1470,12 @@ fn resize(
 		}),
 	});
 
-	let mut s = size.clone();
-	s.width = s.width; // / 2;
-	s.height = s.height; // / 2;
+	let mut s = *size;
 	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent {
 		window_id: *window_id,
 		event: winit::event::WindowEvent::ScaleFactorChanged {
-			scale_factor: hidpi_factor_f64, // / 2.,
-			new_inner_size: &mut s,         /* width: dpi_width as u32 / 2,
-			                                 * height: dpi_height as u32 */
+			scale_factor: hidpi_factor_f64,
+			new_inner_size: &mut s,
 		},
 	});
 }
@@ -1685,7 +1684,7 @@ fn source_data(
 
 	log!("tracking speed set to {}", sovereigns.default_track_speed);
 	let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
-		let env = event.source.split(":").collect::<Vec<_>>()[0].to_string();
+		let env = event.source.split(':').collect::<Vec<_>>()[0].to_string();
 		let env = Env::try_from(env.as_str()).unwrap_or(Env::Prod);
 		(DotUrl { env, ..Default::default() }, None)
 	} else {
@@ -2190,7 +2189,7 @@ fn render_block(
 	// mut event_instances: &mut Vec<(Instance, f32)>,
 	// mut block_instances: &mut Vec<Instance>,
 	// mut chain_instances: &mut Vec<Instance>,
-	mut render_details: &mut RenderDetails,
+	render_details: &mut RenderDetails,
 ) {
 	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	// 	for mut event_instances in event_instances.iter_mut() {
@@ -2336,7 +2335,7 @@ fn render_block(
 
 				render.block_instances.push(Instance {
 					position: glam::Vec3::new(
-						0. + (block_num as f32) - 5.,
+						0. + block_num - 5.,
 						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
 						(RELAY_CHAIN_CHASM_WIDTH +
 							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
@@ -2424,7 +2423,7 @@ fn render_block(
 			}
 			// return;
 			let ext_with_events =
-				datasource::associate_events(block.extrinsics.clone(), block.events.clone());
+				datasource::associate_events(block.extrinsics.clone(), block.events);
 
 			// Leave infrastructure events underground and show user activity above
 			// ground.
@@ -2450,7 +2449,7 @@ fn render_block(
 				&encoded,
 				// &mut handles,
 				&mut render.cube_instances,
-				&mut render_details, // &mut event_dest, // &mut event_instances,
+				render_details, // &mut event_dest, // &mut event_instances,
 			);
 
 			add_blocks(
@@ -2466,7 +2465,7 @@ fn render_block(
 				&encoded,
 				// &mut handles,
 				&mut render.cube_instances,
-				&mut render_details, // &mut event_dest, // &mut event_instances,
+				render_details, // &mut event_dest, // &mut event_instances,
 			);
 			//event.send(RequestRedraw);
 		},
@@ -2691,7 +2690,7 @@ fn add_blocks(
 		for event in events {
 			let mut entity = event;
 
-			let style = style::style_data_event(&entity);
+			let style = style::style_data_event(entity);
 			//TODO: map should be a resource.
 			// let material = mat_map.entry(style.clone()).or_insert_with(|| {
 			// 	materials.add(if dark {
@@ -2765,7 +2764,7 @@ fn rainbow(vertices: &mut Vec<glam::Vec3>, points: usize) {
 		let y = (proportion * PI).sin() * radius;
 		let z = start.z + proportion * diff.z;
 		// println!("vertex {},{},{}", x, y, z);
-		vertices.push(glam::Vec3::new(x, y, z).into());
+		vertices.push(glam::Vec3::new(x, y, z));
 	}
 }
 
@@ -2798,8 +2797,8 @@ macro_rules! min {
 
 fn rain(
 	// time: Res<Time>,
-	drops: &mut Vec<Instance>,
-	drops_target: &mut Vec<f32>, // mut timer: ResMut<UpdateTimer>,
+	drops: &mut [Instance],
+	drops_target: &mut [f32], // mut timer: ResMut<UpdateTimer>,
 ) {
 	let delta = 1.;
 	// if timer.timer.tick(time.delta()).just_finished() {
@@ -3354,7 +3353,7 @@ fn viewport_resize_system(
 			return Some(new_size)
 		}
 	}
-	return None
+	None
 }
 
 use futures::task::{Context, Poll};

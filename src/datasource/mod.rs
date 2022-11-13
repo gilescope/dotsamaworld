@@ -624,10 +624,10 @@ async fn process_extrinsic<'a, 'scale>(
 						println!("found {} downward_message is, {}", msg_index, &msg);
 						if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
 							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
-								let v = polkadyn::decode_xcm(meta, &bytes[..]).expect(&format!(
+								let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
 									"expect to be able to decode {}",
 									&hex::encode(&bytes[..])
-								));
+								)));
 								println!("xcm msgv= {}", v);
 								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
 								// msg.set("msg_decoded", msg_decoded);
@@ -962,7 +962,7 @@ async fn process_extrinsic<'a, 'scale>(
 				// 	//         print_val(&ext.call_data.arguments[1].value);
 			},
 			("XcmPallet", "reserve_transfer_assets") => {
-				check_reserve_asset(&payload, &extrinsic_url, &mut start_link).await;
+				check_reserve_asset(payload, &extrinsic_url, &mut start_link).await;
 			},
 			(_, variant) => {
 				if variant.contains("batch") {
@@ -997,7 +997,7 @@ async fn process_extrinsic<'a, 'scale>(
 									inner_variant == "reserve_transfer_assets"
 								{
 									check_reserve_asset(
-										&extrinsic_payload,
+										extrinsic_payload,
 										&extrinsic_url,
 										&mut start_link,
 									)
@@ -1257,7 +1257,7 @@ async fn get_events_for_block(
 			// if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
 			let mut inclusions = vec![];
 			let mut ext_count_map = HashMap::new();
-			let events: Vec<_> = events
+			let _events: Vec<_> = events
 				.iter()
 				.map(|(phase, event_val)| {
 					let event = scale_value_to_borrowed::convert(event_val, true);
@@ -1275,7 +1275,7 @@ async fn get_events_for_block(
 					};
 
 					if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
-						details.parent = Some(*extrinsic_num as u32);
+						details.parent = Some(*extrinsic_num);
 						let count = ext_count_map.entry(extrinsic_num).or_insert(0);
 						*count += 1;
 						details.doturl.extrinsic = Some(*extrinsic_num);

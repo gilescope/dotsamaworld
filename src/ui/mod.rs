@@ -29,9 +29,9 @@ pub fn ui_bars_system(
 	egui_context: &mut egui::Context,
 	mut occupied_screen_space: &mut OccupiedScreenSpace,
 	viewpoint: &Point3<f32>,
-	mut spec: &mut UrlBar,
+	spec: &mut UrlBar,
 	mut anchor: &mut Anchor,
-	mut inspector: &mut Inspector,
+	inspector: &mut Inspector,
 	destination: &mut Destination,
 	fps: u32,
 	selected_details: Option<(u32, Details)>,
@@ -76,7 +76,7 @@ pub fn ui_bars_system(
 				// }
 				// }
 				use egui::Link;
-				if let Some((index, selected)) = &selected_details {
+				if let Some((_index, selected)) = &selected_details {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
@@ -215,7 +215,7 @@ pub fn ui_bars_system(
 					let z = viewpoint.z;
 
 					let timestamp = super::x_to_timestamp(viewpoint.x);
-					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+					let naive = NaiveDateTime::from_timestamp(timestamp, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
@@ -233,43 +233,43 @@ pub fn ui_bars_system(
 }
 use egui::Ui;
 
-fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
+fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 	match &val {
 		scale_borrow::Value::Object(ref pairs) => {
 			if pairs.len() == 1 {
 				let mut header = String::new();
 				let (mut k, v) = &pairs[0];
-				let mut v: &scale_borrow::Value = &v;
+				let mut v: &scale_borrow::Value = v;
 
 				while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 					header.push_str(k);
 					header.push('.');
 					let (nk, nv) = &nested_pairs[0];
 					k = nk;
-					v = &nv;
+					v = nv;
 				}
 				header.push_str(k);
 				// use egui::CollapsingHeader;
 				ui.collapsing(header, |ui| {
-					funk(ui, &v);
+					funk(ui, v);
 				});
 			} else {
 				for (mut k, v) in pairs.iter() {
 					if let scale_borrow::Value::Object(nested_pairs) = &v {
 						let mut header = String::new();
-						let mut v: &scale_borrow::Value = &v;
+						let mut v: &scale_borrow::Value = v;
 
 						while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 							header.push_str(k);
 							header.push('.');
 							let (nk, nv) = &nested_pairs[0];
 							k = nk;
-							v = &nv;
+							v = nv;
 						}
 						header.push_str(k);
 						// use egui::CollapsingHeader;
 						ui.collapsing(header, |ui| {
-							funk(ui, &v);
+							funk(ui, v);
 						});
 					} else {
 						ui.collapsing(k, |ui| {

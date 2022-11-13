@@ -100,11 +100,7 @@ impl DotUrl {
 
 	/// Are we layer zero (relay chain), layer one or...
 	pub fn layer(&self) -> usize {
-		if self.is_relay() {
-			0
-		} else {
-			1
-		}
+		usize::from(!self.is_relay())
 	}
 
 	pub fn chain_str(&self) -> String {
