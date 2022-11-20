@@ -47,14 +47,27 @@ fn vs_main(
     return out;
 }
 
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Fog constants
+    let density = -(0.001 * 0.001);
+    let LOG2 = 1.442695;
+    let log_density = density * LOG2;
+    //let fog_color = vec4<f32>(230./255. * 1.0,0.0,122./255. * 1.0,1.0);
+    let fog_color = vec4<f32>(1.0,1.0,1.0,1.0);
+
+    // Calc fog factor    
+    let z = in.clip_position[2] / in.clip_position[3];
+    let fog_factor = exp2( log_density * z * z );
+    let fog_factor = clamp(fog_factor, 0.0, 1.0);
+    
     //TODO: we are sampling every pixel, even ones we don't need to.
     let z = textureSample(t_diffuse, s_diffuse, vec2<f32>(in.color[0], in.color[1]));//1. - 
     let y = in.color;
     if in.color[2] == 0.0 && in.color[3] == 0.0 {
-        return z;
+        return mix(fog_color, z, fog_factor);
     } else {
-        return y;
+        return mix(fog_color,y, fog_factor);
     }
 }

@@ -506,7 +506,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// 	boost: 5.,
 	// };
 	let ground_width = 1000000.0f32;
-	let touch_sensitivity = 4.0f64;
+	let touch_sensitivity = 2.0f64;
 
 	let mut q = params.get("q").unwrap_or(&"dotsama:live".to_string()).clone();
 	if !q.contains(':') {
@@ -1192,15 +1192,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					usage: wgpu::BufferUsages::VERTEX,
 				});
 			// }
-			if selected_instance_data_count != selected_instance_data.len() {
-				selected_instance_data_count = selected_instance_data.len();				
-				selected_instance_buffer =
-				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("selected Instance Buffer"),
-					contents: bytemuck::cast_slice(&selected_instance_data),
-					usage: wgpu::BufferUsages::VERTEX,
-				});
-			}
+
+			// render selected instance buffer eachtime as selected item might have changed
+			selected_instance_buffer =
+			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some("selected Instance Buffer"),
+				contents: bytemuck::cast_slice(&selected_instance_data),
+				usage: wgpu::BufferUsages::VERTEX,
+			});
+
 			if textured_instance_data_count != textured_instance_data.len() {
 				textured_instance_data_count = textured_instance_data.len();
 				textured_instance_buffer =
@@ -1469,7 +1469,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 
 	// images must be inserted in same order as they are in the map.
 
-	//sips -z 400 1200 *.jpeg to format them all to same aspect.
+	//sips -z 200 600 *.jpeg to format them all to same aspect.
 	let mut images = vec![];	
 	images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
@@ -1516,6 +1516,9 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	// images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
+
+	//MAX: 16k for chrome, safari. 8k height for firefox.
+
 
 	let mut diffuse_rgba2 = Vec::new();
 
