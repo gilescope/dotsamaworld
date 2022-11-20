@@ -130,6 +130,7 @@ lazy_static! {
 		Arc::new(std::sync::Mutex::new(None));
 }
 
+//TODO could these be thread local?
 lazy_static! {
 	static ref REQUESTS: Arc<std::sync::Mutex<Vec<BridgeMessage>>> =
 		Arc::new(std::sync::Mutex::new(Vec::default()));
@@ -219,8 +220,84 @@ impl Vertex {
 	}
 }
 
+// #[repr(C)]
+// #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+// struct TextureVertex {
+//     position: [f32; 3],
+//     tex_coords: [f32; 2],
+// }
+
+// impl TextureVertex {
+//     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+//         use std::mem;
+//         wgpu::VertexBufferLayout {
+//             array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
+//             step_mode: wgpu::VertexStepMode::Vertex,
+//             attributes: &[
+//                 wgpu::VertexAttribute {
+//                     offset: 0,
+//                     shader_location: 0,
+//                     format: wgpu::VertexFormat::Float32x3,
+//                 },
+//                 wgpu::VertexAttribute {
+//                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+//                     shader_location: 1,
+//                     format: wgpu::VertexFormat::Float32x2, // NEW!
+//                 },
+//             ]
+//         }
+//     }
+// }
+
+// We don't use blue. r, g, color is texture co-ordinates
+//
+// counter clockwise to be visible
+// B-D
+// | |
+// A-C   
+
+fn rect_instances(count: usize) -> Vec<Vertex> {
+	let count = count as f32;
+	let mut results = vec![];
+	let scale = 3.25;
+
+	results.push(Vertex { position: [0., 0., 0.0],		  color: [0.,  1. / count, -2.], }); // A
+	results.push(Vertex { position: [scale, 0., 0.0], 	  color: [0.,  0., -2.], }); // B
+	results.push(Vertex { position: [0., 0., 3.*scale],    color: [1. ,  1. / count, -2.], }); // C
+	results.push(Vertex { position: [scale, 0., 3.*scale], color: [1. ,  0., -2.], }); // D
+
+	results.push(Vertex { position: [0., 0.3, 0.0],		  color: [0.,  1. / count, -2.], }); // A
+	results.push(Vertex { position: [scale, 0.3, 0.0], 	  color: [0.,  0., -2.], }); // B
+	results.push(Vertex { position: [0., 0.3, 3.*scale],    color: [1. ,  1. / count, -2.], }); // C
+	results.push(Vertex { position: [scale, 0.3, 3.*scale], color: [1. ,  0., -2.], }); // D
+
+
+	// 0,0                    0,1
+		//   texture co-ordinates 
+		// 1,0                    1,1
+	results
+}
+
+/// Counter clockwise to show up as looking from outside at cube.
+// const INDICES: &[u16] = &cube_indicies(0);
+
+const fn rect_indicies(offset: u16) -> [u16; 12] {
+	let a = offset + 0;
+	let b = offset + 1;
+	let c = offset + 2;
+	let d = offset + 3;
+	[
+		a,b,d,
+		d,c,a,
+		// Second side (backwards)
+		d+4,b+4,a+4,
+		a+4,c+4,d+4,
+	]
+}
+
 /// https://www.researchgate.net/profile/John-Sheridan-7/publication/253573419/figure/fig1/AS:298229276135426@1448114808488/A-volume-is-subdivided-into-cubes-The-vertices-are-numbered-0-7.png
 
+//TODO: rename to cube!!
 fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) -> [Vertex; 8] {
 	let col = |bump: f32| -> [f32; 3] {
 		[(r + bump).clamp(0., 2.), (g + bump).clamp(0., 2.), (b + bump).clamp(0., 2.)]
@@ -249,8 +326,6 @@ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) 
 
 */
 
-/// Counter clockwise to show up as looking from outside at cube.
-// const INDICES: &[u16] = &cube_indicies(0);
 
 const fn cube_indicies(offset: u16) -> [u16; 36] {
 	[
@@ -307,19 +382,6 @@ const fn cube_indicies(offset: u16) -> [u16; 36] {
 	]
 }
 
-// struct Instance {
-//     position: cgmath::Vector3<f32>,
-//     //color: u32,
-//     //flags: u32,
-// }
-// impl Instance {
-//     fn to_raw(&self) -> InstanceRaw {
-//         InstanceRaw {
-//             model: self.position.into()
-//         }
-//     }
-// }
-
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Deserialize, Serialize, Debug)]
 struct Instance {
@@ -353,22 +415,20 @@ impl Instance {
 					shader_location: 6,
 					format: wgpu::VertexFormat::Uint32,
 				},
-				// wgpu::VertexAttribute {
-				//     offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-				//     shader_location: 7,
-				//     format: wgpu::VertexFormat::Float32x4,
-				// },
-				// wgpu::VertexAttribute {
-				//     offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-				//     shader_location: 8,
-				//     format: wgpu::VertexFormat::Float32x4,
-				// },
 			],
 		}
 	}
 }
 
 async fn async_main() -> std::result::Result<(), ()> {
+	let url = web_sys::window().unwrap()
+        .location()
+       .search().expect("no search exists");
+	let url = url::Url::parse(&format!("http://dotsama.world/{}", url)).unwrap();
+	let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
+	
+	log!("url : {:?}", params.get("env"));
+
 	#[cfg(target_arch = "wasm32")]
 	console_error_panic_hook::set_once();
 	// let error = console_log::init_with_level(Level::Warn);
@@ -383,155 +443,33 @@ async fn async_main() -> std::result::Result<(), ()> {
 	#[cfg(target_feature = "atomics")]
 	log!("Yay atomics!");
 
-	// let mut app = App::new();
-	// app
 	// app.insert_resource(Msaa { samples: 4 });
 
-	// #[cfg(target_family = "wasm")]
-	// app.insert_resource(WindowDescriptor {
-	// 	canvas: Some("canvas".into()), // CSS selector of the first canvas on the page.
-	// 	..default()
-	// });
-
-	// The web asset plugin must be inserted before the `AssetPlugin` so
-	// that the asset plugin doesn't create another instance of an asset
-	// server. In general, the AssetPlugin should still run so that other
-	// aspects of the asset system are initialized correctly.
-	//app.add_plugin(bevy_web_asset::WebAssetPlugin);
-
-	// #[cfg(target_arch = "wasm32")]
-	// app.add_plugins_with(DefaultPlugins, |group| {
-	// 	// The web asset plugin must be inserted in-between the
-	// 	// `CorePlugin' and `AssetPlugin`. It needs to be after the
-	// 	// CorePlugin, so that the IO task pool has already been constructed.
-	// 	// And it must be before the `AssetPlugin` so that the asset plugin
-	// 	// doesn't create another instance of an assert server. In general,
-	// 	// the AssetPlugin should still run so that other aspects of the
-	// 	// asset system are initialized correctly.
-	// 	group.add_before::<bevy::asset::AssetPlugin, _>(bevy_web_asset::WebAssetPlugin)
-	// });
-	// #[cfg(not(target_arch = "wasm32"))]
-	// app.add_plugins(DefaultPlugins);
-
-	// CustomMaterialPlugin needs the shader handle set up:
-	// load_internal_asset!(
-	// 	app,
-	// 	SHADER_HANDLE,
-	// 	"../assets/shaders/instancing.wgsl",
-	// 	Shader::from_wgsl
-	// );
-	// app.add_plugin(CustomMaterialPlugin);
-
-	// Plugins related to instance rendering...
-	// app.add_plugin(IndirectRenderingPlugin);
-	// app.add_plugin(BasicMaterialPlugin)
-	//       .add_plugin(CustomMaterialPlugin)
-	//       .add_plugin(TextureMaterialPlugin);
-
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-	// app.add_event::<DataSourceChangedEvent>();
-	// app.add_event::<DataSourceStreamEvent>();
-	// app.insert_resource(MovementSettings {
-	// 	sensitivity: 0.00020, // default: 0.00012
-	// 	speed: 12.0,          // default: 12.0
-	// 	boost: 5.,
-	// });
-
-	// app.insert_resource(Sovereigns { relays: vec![], default_track_speed: 1. })
-
-	// #[cfg(target_family = "wasm")]
-	// app.add_plugin(bevy_web_fullscreen::FullViewportPlugin);
-
-	// #[cfg(feature = "normalmouse")]
-	// app.add_plugin(NoCameraPlayerPlugin);
-	// app.insert_resource(movement::MouseCapture::default());
 	// app.insert_resource(Anchor::default());
-	// #[cfg(not(target_family = "wasm"))]
-	// app.insert_resource(Width(750.));
-	// #[cfg(target_family = "wasm")]
-	// app.insert_resource(Width(500.));
-	// app.insert_resource(Inspector::default());
 
-	// #[cfg(feature = "spacemouse")]
 	// app.add_plugin(SpaceMousePlugin);
 
-	// // Continuous rendering for games - bevy's default.
-	// // app.insert_resource(WinitSettings::game())
-	// // Power-saving reactive rendering for applications.
 	// if low_power_mode {
 	// 	app.insert_resource(WinitSettings::desktop_app());
 	// }
-	// You can also customize update behavior with the fields of [`WinitConfig`]
-	// .insert_resource(WinitSettings {
-	//     focused_mode: bevy::winit::UpdateMode::ReactiveLowPower { max_wait:
-	// Duration::from_millis(20), },     unfocused_mode: bevy::winit::UpdateMode::ReactiveLowPower {
-	//         max_wait: Duration::from_millis(20),
-	//     },
-	//     ..default()
-	// })
-	// Turn off vsync to maximize CPU/GPU usage
-	// .insert_resource(WindowDescriptor {
-	//     present_mode: PresentMode::Immediate,
-	//     ..default()
-	// });
-	// app.add_plugins(HighlightablePickingPlugins);
 
-	// app.add_plugin(PickingPlugin)
-	// .insert_resource(camera_rig)
 	// .insert_resource(movement::Destination::default());
-	// app.add_system(ui::ui_bars_system);
 	// .add_plugin(recorder::RecorderPlugin)
-	// .add_system(movement::rig_system)
-	// app.add_plugin(InteractablePickingPlugin);
-	// .add_plugin(HighlightablePickingPlugin);
-	// .add_plugin(DebugCursorPickingPlugin) // <- Adds the green debug cursor.
-	// .add_plugin(InspectorPlugin::<Inspector>::new())
-	// .register_inspectable::<Details>()
-	// .add_plugin(DebugEventsPickingPlugin)
 	// app.add_plugin(PolylinePlugin);
-	// app.add_plugin(EguiPlugin);
-	// app.insert_resource(ui::OccupiedScreenSpace::default());
 
-	// app.add_startup_system(setup);
-	// app.add_startup_system(load_assets_initial);
 	// #[cfg(feature = "spacemouse")]
 	// app.add_startup_system(move |mut scale: ResMut<bevy_spacemouse::Scale>| {
 	// 	scale.rotate_scale = 0.00010;
 	// 	scale.translate_scale = 0.004;
 	// });
-	// app.add_system(movement::player_move_arrows)
-	// .add_system(rain)
-	// .add_system(source_data)
 
 	// // .add_system(pad_system)
-	// // .add_plugin(LogDiagnosticsPlugin::default())
-	// app.add_plugin(FrameTimeDiagnosticsPlugin::default());
-	// // .add_system(ui::update_camera_transform_system)
-	// app.add_system(right_click_system);
 	// app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
-	// app.add_startup_system(ui::details::configure_visuals);
 
-	// #[cfg(feature = "atmosphere")]
 	// app.insert_resource(Atmosphere::default()); // Default Earth sky
 
-	// #[cfg(feature = "atmosphere")]
-	// app.add_plugin(AtmospherePlugin::default());
-	//  {
-	// 	// dynamic: false, // Set to false since we aren't changing the sky's appearance
-	// 	sky_radius: 1000.0,
-	// }
-
-	// app.add_system(capture_mouse_on_click);
-	//  app.add_system(get_mouse_movement )
-	//     .init_resource::<WasmMouseTracker>();
-
-	// app.add_system(render_block);
-	// app.add_system_to_stage(CoreStage::PostUpdate, print_events);
-
-	// #[cfg(target_arch = "wasm32")]
 	// html_body::get().request_pointer_lock();
-
-	//	app.run();
 
 	let event_loop = winit::event_loop::EventLoopBuilder::<()>::with_user_event().build();
 
@@ -553,7 +491,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 	log!("about to run event loop");
 	let window = winit_window_builder.build(&event_loop).unwrap();
 	#[cfg(target_family = "wasm")]
-	wasm_bindgen_futures::spawn_local(run(event_loop, window));
+	wasm_bindgen_futures::spawn_local(run(event_loop, window, params));
 	#[cfg(not(target_family = "wasm"))]
 	run(event_loop, window).await;
 
@@ -561,7 +499,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 	Ok::<(), ()>(())
 }
 
-async fn run(event_loop: EventLoop<()>, window: Window) {
+async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, String>) {
 	// let movement_settings = MovementSettings {
 	// 	sensitivity: 0.00020, // default: 0.00012
 	// 	speed: 12.0,          // default: 12.0
@@ -570,8 +508,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let ground_width = 1000000.0f32;
 	let touch_sensitivity = 4.0f64;
 
+	let mut q = params.get("q").unwrap_or(&"dotsama:live".to_string()).clone();
+	if !q.contains(':') {
+		q.push_str(":live");
+	}
+
+	//"dotsama:/1//10504599".to_string()
 	let mut urlbar =
-		ui::UrlBar::new("dotsama:/1//10504599".to_string(), Utc::now().naive_utc(), Env::Local);
+		ui::UrlBar::new(q.clone() , Utc::now().naive_utc(), Env::Local);
 	// app.insert_resource();
 	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
@@ -703,16 +647,52 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 					min_binding_size: None,
 				},
 				count: None,
-			}],
+			},
+			wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        // This should match the filterable field of the
+                        // corresponding Texture entry above.
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+			],
 			label: Some("camera_bind_group_layout"),
 		});
+
+				//if !loaded_textures {
+		//	loaded_textures = true;
+
+			let (diffuse_texture, diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue).await;
+			// diffuse_texture_view =diffuse_texture_view1;
+			// diffuse_sampler = diffuse_sampler1;
+		//}
 
 	let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		layout: &camera_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding: 0,
 			resource: camera_buffer.as_entire_binding(),
-		}],
+		},
+			wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+            }
+		],
 		label: Some("camera_bind_group"),
 	});
 
@@ -725,24 +705,40 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	);
 
 	let mut vertices = vec![]; //cube
+	let start_cube = vertices.len(); //block
 	vertices.extend(rectangle(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
-	let offset1 = vertices.len(); //block
+	let start_block = vertices.len(); //block
 	vertices.extend(rectangle(10., 0.5, 10., 0., 0.0, 0.));
-	let offset2 = vertices.len(); //chain
+	let start_chain = vertices.len(); //chain
 	vertices.extend(rectangle(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
-	let offset3 = vertices.len(); //ground
+	let start_ground = vertices.len(); //ground
 	vertices.extend(rectangle(ground_width, 10., ground_width, 0.0, 0.0, 0.));
-	let offset4 = vertices.len(); //selected
+	let start_selected = vertices.len(); //selected
 	vertices.extend(rectangle(CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, 0., 0., 0.));
+	let start_textured = vertices.len(); // textured rectangle
+	vertices.extend(&rect_instances(texture_map.len()));	
 
 	// vertices.extend(rectangle(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
-	indicies.extend(cube_indicies(0));
-	indicies.extend(cube_indicies(offset1 as u16));
-	indicies.extend(cube_indicies(offset2 as u16));
-	indicies.extend(cube_indicies(offset3 as u16));
-	indicies.extend(cube_indicies(offset4 as u16));
+	indicies.extend(cube_indicies(start_cube as u16));
+	let indicies_cube = 0..indicies.len() as u32;
+	let end = indicies.len() as u32;
+	indicies.extend(cube_indicies(start_block as u16));
+	let indicies_block = end..indicies.len() as u32;
+	let end = indicies.len() as u32;
+	indicies.extend(cube_indicies(start_chain as u16));
+	let indicies_chain = end..indicies.len() as u32;
+	let end = indicies.len() as u32;
+	indicies.extend(cube_indicies(start_ground as u16));
+	let indicies_ground = end..indicies.len() as u32;
+	let end = indicies.len() as u32;
+	indicies.extend(cube_indicies(start_selected as u16));
+	let indicies_selected = end..indicies.len() as u32;
+	let end = indicies.len() as u32;
+	indicies.extend(rect_indicies(start_textured as u16));
+	let indicies_textured = end..indicies.len() as u32;
+	// let end = indicies.len() as u32;
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Vertex Buffer"),
@@ -761,10 +757,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 
 	];
+
 	let mut chain_instance_data = vec![];
 	let mut block_instance_data = vec![];
 	let mut cube_instance_data = vec![];
 	let mut selected_instance_data = vec![];
+	let mut textured_instance_data: Vec<Instance> = vec![];
+
+
 	let mut cube_target_heights: Vec<f32> = vec![];
 	//let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
@@ -831,7 +831,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 	let initial_event = DataSourceChangedEvent {
 		//source: "dotsama:/1//10504599".to_string(),
 		// source: "local:live".to_string(),
-		source: "dotsama:live".to_string(),
+		source: q, //"test:live".to_string(),
 		timestamp: None,
 	};
 
@@ -868,6 +868,54 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 	let mut last_mouse_position = None;
 	let window_id = window.id();
+
+				
+	let mut ground_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("ground Instance Buffer"),
+			contents: bytemuck::cast_slice(&ground_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut ground_instance_data_count = ground_instance_data.len();
+	let mut textured_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("textured Instance Buffer"),
+			contents: bytemuck::cast_slice(&textured_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut textured_instance_data_count = textured_instance_data.len();	
+	let mut chain_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("chain Instance Buffer"),
+			contents: bytemuck::cast_slice(&chain_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut chain_instance_data_count = chain_instance_data.len();
+	let mut block_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("block Instance Buffer"),
+			contents: bytemuck::cast_slice(&block_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut block_instance_data_count = block_instance_data.len();
+	let mut cube_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("cube Instance Buffer"),
+			contents: bytemuck::cast_slice(&cube_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut cube_instance_data_count = cube_instance_data.len();
+	let mut selected_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("selected Instance Buffer"),
+			contents: bytemuck::cast_slice(&selected_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut selected_instance_data_count = selected_instance_data.len();
+
+	// let mut loaded_textures = false;
+	// let diffuse_texture_view: wgpu::TextureView; 
+	// let diffuse_sampler : wgpu::Sampler;
 	event_loop.run(move |event, _, _control_flow| {
 		let now = Utc::now();
 
@@ -881,6 +929,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 		let selected_details = SELECTED.lock().unwrap().clone();
 
 		// viewport_resize_system(&resize_receiver);
+		#[cfg(target_family = "wasm")]
 		if let Some(new_size) = viewport_resize_system(&resize_receiver) {
 			log!("set new size width: {} height: {}", new_size.width, new_size.height);
 			// window.set_inner_size(new_size);
@@ -1083,45 +1132,84 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				block_instance_data.extend(render_update.block_instances.clone());
 				chain_instance_data.extend(render_update.chain_instances.clone());
 
-				//todo: possibly not needed?
+				for instance in &render_update.textured_instances {
+					let key = if instance.color > 99_000 {
+						(1, instance.color - 100_000)
+					} else {
+						(0, instance.color)
+					};
+					let texture = texture_map.get(&key);
+					if let Some(texture_index) = texture {
+						textured_instance_data.push(Instance{color: *texture_index as u32, ..*instance});
+					}
+				}
+//				textured_instance_data.extend(render_update.textured_instances.clone());
+
 				render_update.chain_instances.truncate(0);
 				render_update.block_instances.truncate(0);
 				render_update.cube_instances.truncate(0);
+				render_update.textured_instances.truncate(0);
 			}
 
 			rain(&mut cube_instance_data, &mut cube_target_heights);
 
-			// TODO don't create each time!!!
-			let ground_instance_buffer =
+			// TODO: when refreshing a buffer can we append to it???
+			if ground_instance_data_count != ground_instance_data.len() {
+				ground_instance_data_count = ground_instance_data.len();
+				ground_instance_buffer =
+					device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+						label: Some("ground Instance Buffer"),
+						contents: bytemuck::cast_slice(&ground_instance_data),
+						usage: wgpu::BufferUsages::VERTEX,
+					}
+				);
+			}
+			if chain_instance_data_count != chain_instance_data.len() {
+				chain_instance_data_count = chain_instance_data.len();
+				chain_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Instance Buffer"),
-					contents: bytemuck::cast_slice(&ground_instance_data),
-					usage: wgpu::BufferUsages::VERTEX,
-				});
-			let chain_instance_buffer =
-				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Instance Buffer"),
+					label: Some("chain Instance Buffer"),
 					contents: bytemuck::cast_slice(&chain_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
-			let block_instance_buffer =
+			}
+			if block_instance_data_count != block_instance_data.len() {
+				block_instance_data_count = block_instance_data.len();
+				block_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Instance Buffer"),
+					label: Some("block Instance Buffer"),
 					contents: bytemuck::cast_slice(&block_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
-			let cube_instance_buffer =
+			}
+			//TODO: at the moment we have to do this every time due to rain.
+			// if cube_instance_data_count != cube_instance_data.len() {
+				// cube_instance_data_count = cube_instance_data.len();
+				cube_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Instance Buffer"),
+					label: Some("cube Instance Buffer"),
 					contents: bytemuck::cast_slice(&cube_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
-			let selected_instance_buffer =
+			// }
+			if selected_instance_data_count != selected_instance_data.len() {
+				selected_instance_data_count = selected_instance_data.len();				
+				selected_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-					label: Some("Instance Buffer"),
+					label: Some("selected Instance Buffer"),
 					contents: bytemuck::cast_slice(&selected_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
+			}
+			if textured_instance_data_count != textured_instance_data.len() {
+				textured_instance_data_count = textured_instance_data.len();
+				textured_instance_buffer =
+					device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+						label: Some("textured Instance Buffer"),
+						contents: bytemuck::cast_slice(&textured_instance_data),
+						usage: wgpu::BufferUsages::VERTEX,
+					});
+			}
 
 			let output = surface.get_current_texture().unwrap();
 			let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1247,7 +1335,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// Draw ground
 				render_pass.set_vertex_buffer(1, ground_instance_buffer.slice(..));
 				render_pass.draw_indexed(
-					(36 + 36 + 36)..((36 + 36 + 36 + 36) as u32),
+					indicies_ground.clone(),
+					// (36 + 36 + 36)..((36 + 36 + 36 + 36) as u32),
 					0,
 					0..ground_instance_data.len() as _,
 				);
@@ -1255,7 +1344,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// Draw chains
 				render_pass.set_vertex_buffer(1, chain_instance_buffer.slice(..));
 				render_pass.draw_indexed(
-					(36 + 36)..((36 + 36 + 36) as u32),
+					indicies_chain.clone(),
+					// (36 + 36)..((36 + 36 + 36) as u32),
 					0,
 					0..chain_instance_data.len() as _,
 				);
@@ -1263,20 +1353,30 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				// Draw blocks
 				render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
 				render_pass.draw_indexed(
-					36..((36 + 36) as u32),
+					indicies_block.clone(),
+					//36..((36 + 36) as u32),
 					0,
 					0..block_instance_data.len() as _,
 				);
 
 				// Draw cubes
 				render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
-				render_pass.draw_indexed(0..36_u32, 0, 0..cube_instance_data.len() as _);
+				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..cube_instance_data.len() as _);
 
 				render_pass.set_vertex_buffer(1, selected_instance_buffer.slice(..));
 				render_pass.draw_indexed(
-					(36 + 36 + 36 + 36)..((36 + 36 + 36 + 36 + 36) as u32),
+					indicies_selected.clone(),
+					// (36 + 36 + 36 + 36)..((36 + 36 + 36 + 36 + 36) as u32),
 					0,
 					0..selected_instance_data.len() as _,
+				);
+
+				render_pass.set_vertex_buffer(1, textured_instance_buffer.slice(..));
+				// log!("render textured_instance_data.len() is {} ",textured_instance_data.len());
+				render_pass.draw_indexed(
+					indicies_textured.clone(),
+					0,
+					0..textured_instance_data.len() as _,
 				);
 			}
 			queue.submit(std::iter::once(encoder.finish(
@@ -1305,6 +1405,251 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 				}
 		}
 	});
+}
+
+async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler,
+	HashMap<(u32,u32), usize>
+) {
+	use wasm_bindgen_futures::JsFuture;
+	use web_sys::Response;
+	use jpeg_decoder::Decoder;
+	// let chain_str = "0-2000";//details.doturl.chain_str();
+	let window = web_sys::window().unwrap();
+	let mut width = 0;
+	let mut height = 0;
+	let mut map = HashMap::new();
+	let mut index = 0;
+	map.insert((0, 0), index); index += 1;
+	map.insert((0,1000), index); index += 1;
+	map.insert((0,1001), index); index += 1;
+	map.insert((0,2000), index); index += 1;
+	map.insert((0,2001), index); index += 1;
+	map.insert((0,2004), index); index += 1;
+	map.insert((0,2007), index); index += 1;
+	map.insert((0,2011), index); index += 1;
+	map.insert((0,2012), index); index += 1;
+	map.insert((0,2015), index); index += 1;
+	map.insert((0,2023), index); index += 1;
+	map.insert((0,2048), index); index += 1;
+	map.insert((0,2084), index); index += 1;
+	map.insert((0,2085), index); index += 1;
+	map.insert((0,2086), index); index += 1;
+	map.insert((0,2087), index); index += 1;
+	map.insert((0,2088), index); index += 1;
+	map.insert((0,2090), index); index += 1;
+	map.insert((0,2092), index); index += 1;
+	map.insert((0,2095), index); index += 1;
+	map.insert((0,2096), index); index += 1;
+	map.insert((0,2100), index); index += 1;
+	map.insert((0,2101), index); index += 1;
+	map.insert((0,2105), index); index += 1;
+	map.insert((0,2106), index); index += 1;
+	map.insert((0,2107), index); index += 1;
+	map.insert((0,2114), index); index += 1;
+
+	map.insert((1, 0), index); index += 1;
+	map.insert((1, 1000), index); index += 1;
+	map.insert((1, 2000), index); index += 1;
+	map.insert((1, 2002), index); index += 1;
+	map.insert((1, 2004), index); index += 1;
+	map.insert((1, 2006), index); index += 1;
+	map.insert((1, 2011), index); index += 1;
+	map.insert((1, 2012), index); index += 1;
+	map.insert((1, 2013), index); index += 1;
+	map.insert((1, 2019), index); index += 1;
+	map.insert((1, 2021), index); index += 1;
+	map.insert((1, 2026), index); index += 1;
+	// map.insert((1, 2031), index); index += 1;
+	map.insert((1, 2032), index); index += 1;
+	// map.insert((1, 2034), index); index += 1;
+	// map.insert((1, 2035), index); index += 1;
+	// map.insert((1, 2037), index); index += 1;
+	//TODO: MAX height achieved!!! need to go wide...
+	// or have another texture buffer.
+
+	// images must be inserted in same order as they are in the map.
+
+	//sips -z 400 1200 *.jpeg to format them all to same aspect.
+	let mut images = vec![];	
+	images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-1001.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2000.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2001.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2004.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2007.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2011.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2012.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2015.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2023.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2048.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2084.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2085.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2086.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2087.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2088.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2090.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2092.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2095.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2096.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2100.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2101.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2105.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2106.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2107.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2114.jpeg").to_vec());
+
+	images.push(include_bytes!("../assets/branding/1.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-1000.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2000.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2002.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2004.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2006.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2011.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2012.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2013.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2019.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
+	// images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
+	// images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
+	// images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
+	// images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
+
+	let mut diffuse_rgba2 = Vec::new();
+
+	let mut found = 0;
+	for bytes in &images {
+		// let url = &format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str);
+		// log!("try get {}", url);
+		//  let mut opts = RequestInit::new();
+		// opts.method("GET");
+		// opts.mode(RequestMode::Cors);
+		//  let request = Request::new_with_str_and_init(&banner_url, &opts)?;
+
+		// let response = JsFuture::from(window.fetch_with_str(url))
+		// .await
+		// .map(|r| r.dyn_into::<web_sys::Response>().unwrap())
+		// .map_err(|e| e.dyn_into::<js_sys::TypeError>().unwrap());
+
+		// if let Err(err) = &response {
+		// 	log!("Failed to fetch asset {url}: {err:?}");
+		// }
+		// let response = response.unwrap();
+		// //.map_err(|_| AssetIoError::NotFound(path.to_path_buf()))?;
+
+		// let data = JsFuture::from(response.array_buffer().unwrap())
+		// 	.await
+		// 	.unwrap();
+
+		// let bytes = js_sys::Uint8Array::new(&data).to_vec();
+
+		let mut decoder = Decoder::new(std::io::Cursor::new(bytes));
+		let diffuse_rgb: Vec<u8> = decoder.decode().expect("failed to decode image");
+
+		
+
+		let metadata = decoder.info().unwrap();
+
+		// let diffuse_rgba2 = vec![
+		// 	255, 0, 0, 255,
+		// 	0, 255, 0, 255,
+		// 	0, 0, 255, 255,
+		// 	255, 0, 255, 255,
+		// ];
+
+		if width == 0 {
+			width += metadata.width as u32;
+			for (i, byte) in diffuse_rgb.iter().enumerate() {
+				diffuse_rgba2.push(*byte);
+				// Add alpha channel
+				if i % 3 == 2 {
+					diffuse_rgba2.push(255);			
+				}
+			}
+		} else {
+			if width == metadata.width as u32 {
+				found += 1;
+				
+				for (i, byte) in diffuse_rgb.iter().enumerate() {
+					diffuse_rgba2.push(*byte);
+					// Add alpha channel
+					if i % 3 == 2 {
+						diffuse_rgba2.push(255);			
+					}
+				}
+			}
+		}
+		height += metadata.height as u32;
+
+		// let width = 2;
+		// let height = 2;
+
+		// assert_eq!(diffuse_rgba.len() as u32, width * height * 4);
+		// log!("first 100 bytes: {:?}", &diffuse_rgba[..100]);
+
+		log!("metadata: {:?}", metadata);
+		// let diffuse = [150_u8;4 * 10 * 10];
+		// let diffuse_rgba = &diffuse[..];
+	}
+	log!("found images {found}");
+	let diffuse_rgba = diffuse_rgba2.as_slice();
+
+	let texture_size = wgpu::Extent3d {
+		width,
+		height,
+		depth_or_array_layers: 1,
+	};
+	let diffuse_texture = device.create_texture(
+		&wgpu::TextureDescriptor {
+			// All textures are stored as 3D, we represent our 2D texture
+			// by setting depth to 1.
+			size: texture_size,
+			mip_level_count: 1, // We'll talk about this a little later
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			// Most images are stored using sRGB so we need to reflect that here.
+			format: wgpu::TextureFormat::Rgba8UnormSrgb,
+			// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
+			// COPY_DST means that we want to copy data to this texture
+			usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+			label: Some("diffuse_texture"),
+		}
+	);
+
+
+	queue.write_texture(
+		// Tells wgpu where to copy the pixel data
+		wgpu::ImageCopyTexture {
+			texture: &diffuse_texture,
+			mip_level: 0,
+			origin: wgpu::Origin3d::ZERO,
+			aspect: wgpu::TextureAspect::All,
+		},
+		// The actual pixel data
+		&diffuse_rgba,
+		// The layout of the texture
+		wgpu::ImageDataLayout {
+			offset: 0,//TODO for different layouts
+			bytes_per_row: std::num::NonZeroU32::new(4 * width),
+			rows_per_image: None,
+		},
+		texture_size,
+	);
+
+	let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+	let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		address_mode_u: wgpu::AddressMode::Repeat, //Repeat
+		address_mode_v: wgpu::AddressMode::Repeat,//ClampToEdge,
+		address_mode_w: wgpu::AddressMode::Repeat,
+		mag_filter: wgpu::FilterMode::Linear, //Linear,
+		min_filter: wgpu::FilterMode::Nearest,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		..Default::default()
+	});
+
+	(diffuse_texture, diffuse_texture_view, diffuse_sampler, map)
 }
 
 fn try_select(
@@ -1867,7 +2212,7 @@ async fn do_datasources<F, R>(
 	for relay in sovereigns.relays.iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
-			NonZeroU32,
+			u32,
 			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
 		> = Default::default();
 		for chain in relay.iter() {
@@ -2176,6 +2521,7 @@ pub struct RenderUpdate {
 	chain_instances: Vec<Instance>,
 	block_instances: Vec<Instance>,
 	cube_instances: Vec<(Instance, f32)>,
+	textured_instances: Vec<Instance>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -2190,6 +2536,7 @@ impl RenderUpdate {
 		self.chain_instances.extend(update.chain_instances);
 		self.block_instances.extend(update.block_instances);
 		self.cube_instances.extend(update.cube_instances);
+		self.textured_instances.extend(update.textured_instances);
 	}
 }
 
@@ -2380,7 +2727,21 @@ fn render_block(
 				// block_instances.1.push(false);
 
 				// let chain_str = details.doturl.chain_str();
+				// &format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str)
 
+				render.textured_instances.push(Instance{
+					position: glam::Vec3::new(
+						0. + block_num - 8.5,
+						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
+					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							chain_info.chain_url.rflip(),
+					)
+					.into(),
+					// Encode the chain / parachain instead of the instance.color data.
+					// This will get translated to 
+					color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } + chain_info.chain_url.para_id.unwrap_or(0)
+				});
 				// bun.insert(details)
 				// .insert(Name::new("Block"))
 				// .with_children(|parent| {
@@ -2497,6 +2858,20 @@ fn render_block(
 			//event.send(RequestRedraw);
 		},
 		DataUpdate::NewChain(chain_info) => {
+			let is_relay = chain_info.chain_url.is_relay();
+			log!("adding new chain");
+			// render.textured_instances.push(Instance{
+			// 		position: glam::Vec3::new(
+			// 			0. + 0. - 10.,
+			// 			if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
+			// 			(RELAY_CHAIN_CHASM_WIDTH +
+			// 				BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+			// 				chain_info.chain_url.rflip(),
+			// 		)
+			// 		.into(),
+			// 		color: 0u32
+			// 	});
+
 			// for mut chain_instances in chain_instances.iter_mut() {
 			draw_chain_rect(
 				// handles.as_ref(),
@@ -3376,6 +3751,7 @@ fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
 	}
 }
 
+#[cfg(target_family = "wasm")]
 fn viewport_resize_system(
 	// mut window: &mut Window,
 	resize_receiver: &Mutex<OnResizeReceiver>,
@@ -3388,65 +3764,4 @@ fn viewport_resize_system(
 		}
 	}
 	None
-}
-
-use futures::task::{Context, Poll};
-// use core::future::Future;
-use core::pin::Pin;
-use std::rc::Rc;
-use wasm_bindgen::prelude::*;
-// use wasm_bindgen::JsCast;
-use core::cell::Cell;
-use web_sys::HtmlImageElement;
-
-pub struct ImageFuture {
-	image: Option<HtmlImageElement>,
-	load_failed: Rc<Cell<bool>>,
-}
-
-impl ImageFuture {
-	pub fn new(path: &str) -> Self {
-		let image = HtmlImageElement::new().unwrap();
-		image.set_src(path);
-		ImageFuture { image: Some(image), load_failed: Rc::new(Cell::new(false)) }
-	}
-}
-
-impl Future for ImageFuture {
-	type Output = Result<HtmlImageElement, ()>;
-
-	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		match &self.image {
-			Some(image) if image.complete() => {
-				let image = self.image.take().unwrap();
-				let failed = self.load_failed.get();
-
-				if failed {
-					Poll::Ready(Err(()))
-				} else {
-					Poll::Ready(Ok(image))
-				}
-			},
-			Some(image) => {
-				let waker = cx.waker().clone();
-				let on_load_closure = Closure::wrap(Box::new(move || {
-					waker.wake_by_ref();
-				}) as Box<dyn FnMut()>);
-				image.set_onload(Some(on_load_closure.as_ref().unchecked_ref()));
-				on_load_closure.forget();
-
-				let waker = cx.waker().clone();
-				let failed_flag = self.load_failed.clone();
-				let on_error_closure = Closure::wrap(Box::new(move || {
-					failed_flag.set(true);
-					waker.wake_by_ref();
-				}) as Box<dyn FnMut()>);
-				image.set_onerror(Some(on_error_closure.as_ref().unchecked_ref()));
-				on_error_closure.forget();
-
-				Poll::Pending
-			},
-			_ => Poll::Ready(Err(())),
-		}
-	}
 }

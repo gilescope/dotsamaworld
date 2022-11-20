@@ -7,7 +7,7 @@ pub struct DotUrl {
 	pub env: Env,
 	// 0 is the no mans land in the middle
 	pub sovereign: Option<i32>,
-	pub para_id: Option<NonZeroU32>,
+	pub para_id: Option<u32>,
 	pub block_number: Option<u32>,
 	pub extrinsic: Option<u32>,
 	pub event: Option<u32>,
@@ -127,7 +127,7 @@ impl std::fmt::Display for DotUrl {
 			// Env::SelfSovereign => "indies",
 			Env::Prod => "dotsama",
 			// Env::SelfSovereignTest => "testindies",
-			// Env::Test => "test",
+			Env::Test => "test",
 			// Env::NFTs => "nfts",
 			Env::Local => "local",
 			// Env::CGP => "cgp",

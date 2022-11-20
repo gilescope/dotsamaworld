@@ -145,7 +145,7 @@ where
 	pub as_of: Option<DotUrl>,
 	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
 	pub sender:
-		Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+		Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 }
 
 impl<F, R> BlockWatcher<F, R>
@@ -161,7 +161,7 @@ where
 		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> =
 			self.receive_channel.take().unwrap();
 		let sender: Option<
-			HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>,
+			HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>,
 		> = self.sender.take();
 		// let mut source = &mut self.source;
 		// log!("listening to as of {:?}", as_of);
@@ -317,6 +317,7 @@ where
 				// log!("live mode starting at block num {}", block_num);
 				loop {
 					let next = source.fetch_block_hash(block_num).await;
+					// log!("got hash {:?}", next);
 					if let Ok(Some(block_hash)) = next {
 						// log!("found new block on {}", source.url());
 						let _ = process_extrinsics(
@@ -360,7 +361,7 @@ async fn process_extrinsics<S: Source, F, R>(
 	chain_info: &ChainInfo,
 	block_hash: H256,
 	source: &mut S,
-	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
 ) -> Result<Option<i64>, ()>
@@ -1233,7 +1234,7 @@ pub struct PolkaBlock {
 async fn get_events_for_block(
 	source: &mut impl Source,
 	blockhash: H256,
-	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
 	metad: &frame_metadata::RuntimeMetadataPrefixed,
 	timestamp: Option<i64>,
@@ -1308,7 +1309,7 @@ async fn get_events_for_block(
 								Some(scale_borrow::Value::ScaleOwned(para_head)),
 							) = (inner.find2("para_id", "0"), inner.find2("para_head", "0"))
 							{
-								let para_id = NonZeroU32::try_from(*parachain_id as u32).unwrap();
+								let para_id = *parachain_id as u32;
 								inclusions.push((para_id, para_head.as_slice().to_vec()));
 							}
 						}
@@ -1411,7 +1412,7 @@ async fn get_events_for_block(
 
 pub fn associate_events(
 	ext: Vec<DataEntity>,
-	mut events: Vec<DataEvent>,
+	events: Vec<DataEvent>,
 ) -> Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> {
 	let mut events : Vec<_> = events.into_iter().enumerate().collect();
 	let mut ext: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> = ext
@@ -1450,6 +1451,7 @@ pub fn associate_events(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use pollster::block_on;
 	// use crate::polkadot::runtime_types::xcm::VersionedXcm;
 	// use crate::polkadot::runtime_types::polkadot_core_primitives::DownwardMessage;
 	// use subxt::BlockNumber;
@@ -1618,7 +1620,7 @@ mod tests {
 	fn polkadot_millionth_block_hash() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
+		let blockhash = pollster::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
@@ -1628,7 +1630,7 @@ mod tests {
 	fn polkadot_millionth_block_3_extrinsics() {
 		let url = "wss://rpc.polkadot.io:443";
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
+		let blockhash = pollster::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");

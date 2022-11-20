@@ -128,7 +128,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 mod tests {
 	use crate::datasource::RawDataSource;
 
-	use super::{super::get_metadata, get_block_number_near_timestamp, TIME};
+	use super::{super::get_metadata, get_block_number_near_timestamp, Time};
 
 	#[test]
 	fn real_polkadot_example_test() {
@@ -139,7 +139,7 @@ mod tests {
 		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
 		let metad_current = get_metadata(&mut source, None).await.unwrap();
 
-		fn time_for_blocknum(blocknum: u32) -> Option<TIME> {
+		fn time_for_blocknum(blocknum: u32) -> Option<Time> {
 			Some(match blocknum {
 				10000000 => 1_650_715_386_009,
 				10000023 => 1_650_715_524_004,

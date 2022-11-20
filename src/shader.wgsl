@@ -11,10 +11,15 @@ struct CameraUniform {
 
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
+@group(0) @binding(1)
+var t_diffuse: texture_2d<f32>;
+@group(0) @binding(2)
+var s_diffuse: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
+    //TODO: maybe you can have 2 more f32s to b aligned.
 };
 
 struct VertexOutput {
@@ -28,23 +33,28 @@ fn vs_main(
     instance: InstanceInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.color = vec4<f32>(model.color, 1.0) + (
-        vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
+    out.clip_position = camera.view_proj * vec4<f32>(instance.instance_position + model.position, 1.0);
+    // Is texture?
+    if model.color[2] == -2.0 {
+        // TODO: inject this number
+        let offset = (1.0 / 40.0) * f32(instance.instance_color);
+        out.color = vec4<f32>(model.color[0], offset + model.color[1], 0.0, 0.0);
+    } else {
+        out.color = vec4<f32>(model.color, 1.0) + (
+            vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
             vec4<u32>(255u)) / 255.0);
-//     out.clip_position = vec4<f32>(model.position, 1.0);
-     out.clip_position = camera.view_proj * vec4<f32>(instance.instance_position + model.position, 1.0);
-   // let x = f32(1 - i32(in_vertex_index)) * 0.5;
-    // let y = f32(i32(in_vertex_index & 1u) * 2 - 1) * 0.5;
-    // out.clip_position = vec4<f32>(x, y, 0.0, 1.0);
-    // out.vert_pos = out.clip_position.xyz;
+    }
     return out;
 }
- 
-
-// Fragment shader
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-     return in.color;
+    //TODO: we are sampling every pixel, even ones we don't need to.
+    let z = textureSample(t_diffuse, s_diffuse, vec2<f32>(in.color[0], in.color[1]));//1. - 
+    let y = in.color;
+    if in.color[2] == 0.0 && in.color[3] == 0.0 {
+        return z;
+    } else {
+        return y;
+    }
 }
- 

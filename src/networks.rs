@@ -6,7 +6,7 @@ use std::fmt::write;
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Env {
 	Local,
-	// Test,
+	Test,
 	#[default]
 	Prod,
 	// SelfSovereign,
@@ -19,7 +19,7 @@ impl std::fmt::Display for Env {
 	fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
 		let display = match self {
 			Env::Local => "local",
-			// Env::Test => "test",
+			Env::Test => "test",
 			Env::Prod => "dotsama",
 			// Env::SelfSovereign => "independents",
 			// Env::SelfSovereignTest => "independent_test",
@@ -36,6 +36,7 @@ impl TryFrom<&str> for Env {
 	fn try_from(val: &str) -> Result<Self, <Self as TryFrom<&str>>::Error> {
 		match val {
 			"dotsama" => Ok(Env::Prod),
+			"test" => Ok(Env::Test),
 			"local" => Ok(Env::Local),
 			_ => Err(()),
 		}
@@ -51,24 +52,25 @@ impl Env {
 
 macro_rules! para_id {
 	($lit:literal) => {
-		Some(NonZeroU32::try_from($lit).unwrap())
+		Some($lit)
 	};
 }
 
 /// Return the network(s) to visulise
-pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static str)>> {
+pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> {
 	match selected_env {
-		// Env::Test => {
-		// 	vec![
-		// 		vec![
-		// 			"westend-rpc.dwellir.com",
-		// 			"westmint-rpc.polkadot.io",
-		// 			"fullnode-collator.charcoal.centrifuge.io",
-		// 			"teerw1.integritee.network",
-		// 			"westend.kylin-node.co.uk",
-		// 			"rpc.westend.standard.tech",
-		// 			"westend.kilt.io:9977",
-		// 		],
+		Env::Test => {
+			vec![
+				vec![
+					(None, "westend-rpc.polkadot.io"),
+					(para_id!(1000), "westmint-rpc.polkadot.io"),
+					(para_id!(1001), "westend-collectives-rpc.polkadot.io"),
+					// (para_id!(2000), "fullnode-collator.charcoal.centrifuge.io"),
+					// (para_id!(2000), "teerw1.integritee.network"),
+					// (para_id!(2000), "westend.kylin-node.co.uk"),
+					// (para_id!(2000), "rpc.westend.standard.tech"),
+					// (para_id!(2000), "westend.kilt.io:9977"),
+				],
 		// 		vec![
 		//             "rococo-rpc.polkadot.io",
 		//             "rococo-statemint-rpc.polkadot.io",
@@ -85,7 +87,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 		//             "rpc.rococo-parachain-sg.litentry.io",
 		//             "moonsama-testnet-rpc.moonsama.com",
 		//             "wss://parachain-testnet.equilab.io:443/rococo/collator/node1/wss",
-		//
+		
 		// "node-6913072722034561024.lh.onfinality.io:443/ws?
 		// apikey=84d77e2e-3793-4785-8908-5096cffea77a", //noodle
 		// "pangolin-parachain-rpc.darwinia.network",             "rococo.kilt.io",
@@ -99,8 +101,8 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<NonZeroU32>, &'static 
 		//             // "ws://127.0.0.1:9966",
 		//             // "ws://127.0.0.1:9920",
 		//         ],
-		// 	]
-		// },
+			]
+		},
 		Env::Prod => {
 			// for history mode to work well we need to be pointing to archive nodes
 			// ( those running --pruning=archive )

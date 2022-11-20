@@ -84,7 +84,7 @@ pub fn ui_bars_system(
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap().into());
+					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap() as i32);
 
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.
@@ -114,9 +114,7 @@ pub fn ui_bars_system(
 											if ui.add(Link::new(format!("Transaction Hash #: 0x{}", tx_hash))).clicked() {
 												let url = url.replace("{}", &tx_hash);
 												
-												if let Err(e) = open::that(&url) {
-													log!("Error opening link {:?}", e);
-												}
+												open_url(&url);
 											}
 										}
 									}
@@ -151,9 +149,7 @@ pub fn ui_bars_system(
 									&hex::encode(&selected.raw)
 								);
 
-								if let Err(e) = open::that(&url) {
-									log!("Error opening link {:?}", e);
-								}
+								open_url(&url);
 							}
 						}
 					}
@@ -171,28 +167,26 @@ pub fn ui_bars_system(
 								block_number
 							);
 
-							if let Err(e) = open::that(&url) {
-								log!("Error opening link {:?}", e);
-							}
+							open_url(&url);
 						}
 
 						let mut block_explore_map = HashMap::new();
 						block_explore_map.insert((1,2004),"https://moonscan.io/block/{}");
 						block_explore_map.insert((0,2023), "https://moonriver.moonscan.io/block/{}");
+						block_explore_map.insert((0, 1000), "https://statemine.statescan.io/block/{}");
+						block_explore_map.insert((1, 1000), "https://statemint.statescan.io/block/{}");
 
 
 					
 
 						if let Some(para_id) = selected.doturl.para_id {
-							if let Some(url) = block_explore_map.get(&(selected.doturl.souverign_index(), para_id.into())) {
+							if let Some(url) = block_explore_map.get(&(selected.doturl.souverign_index(), para_id)) {
 								if ui.add(Link::new(format!("Local block explore #: {}", block_number))).clicked() {
 									log!("click block detected");
 
 									let url = url.replace("{}", &block_number.to_string());
 
-									if let Err(e) = open::that(&url) {
-										log!("Error opening link {:?}", e);
-									}
+									open_url(&url);
 								}
 							}
 						}
@@ -203,15 +197,11 @@ pub fn ui_bars_system(
 					if let Some(sovereign) = selected.doturl.sovereign {
 						if sovereign == -1 {
 							if ui.add(Link::new("Kusama Relay Chain")).clicked() {
-								if let Err(e) = open::that("https://kusama.network/") {
-									log!("Error opening link {:?}", e);
-								}
+								open_url("https://kusama.network/");
 							}							
 						} else if sovereign == 1 {
 							if ui.add(Link::new("Polkadot Relay Chain")).clicked() {
-								if let Err(e) = open::that("https://polkadot.network/") {
-									log!("Error opening link {:?}", e);
-								}
+								open_url("https://polkadot.network/");
 							}
 						} else {
 							ui.label(format!("Relay Id: {}", sovereign));
@@ -350,6 +340,23 @@ pub fn ui_bars_system(
 		.height();
 }
 use egui::Ui;
+
+fn open_url(url: &str) {
+	let window = web_sys::window().unwrap();
+	let agent = window.navigator().user_agent().unwrap();
+	log!("agent {}", agent);
+	if agent.contains("Safari") {
+		if let Err(e) = window.location().assign(url)
+		{
+			log!("Error opening link {:?}", e);
+		}
+	} else {
+		if let Err(e) = web_sys::window().unwrap().open_with_url(url)
+		{
+			log!("Error opening link {:?}", e);
+		}
+	}
+}
 
 fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 	match &val {

@@ -25,13 +25,9 @@ egui_winit_platform = { version = "0.16", features = [] } #"webbrowser" , "clipb
 wgpu = { version = "0.13", features = ["webgl"] }
 primitive-types = { version = "0.11", default-features = false, features = [
     "serde_no_std",
-] } # alt serde_no_std 
-log = { version = "0.4.14", default-features = false }
-async-std = { version = "1.12.0", features = [
-    # "attributes",
-    # "tokio1",
-    # "async-channel",
 ] }
+log = { version = "0.4.14", default-features = false }
+async-std = { version = "1.12.0", features = [] }
 async-trait = "0.1"
 async-recursion = "*"
 bytemuck = "*"
@@ -53,7 +49,7 @@ fastrand = { version = "*", default-features = false }
 #serde_bytes = "0.11"
 serde = { version = "*", default-features = false }
 serde_json = { version = "*", default-features = false }
-# url = { version = "*", default-features = false }
+url = { version = "*", default-features = false }
 form_urlencoded = "*"
 # async-tungstenite = "*"
 # color-eyre = { version = "0.5", default-features = false }
@@ -92,7 +88,7 @@ egui = { version = "0.19", default-features = false }
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
 # image = { version = "0.24", features = ["jpeg"], default-features = false }
 
-# jpeg-decoder = { version = "*", default-features = false }
+jpeg-decoder = { version = "0.3", default-features = false }
 
 # bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
 # bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }
@@ -127,6 +123,7 @@ async-tungstenite = { version = "0.15.0", default-features = true, features = [
 #
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-events = "*"
+js-sys = "*"
 # rexie is for indexeddb web caching
 # rexie = "0.4"
 # console_log = "*"
@@ -176,7 +173,11 @@ features = [
     'KeyboardEvent',
     'MouseEvent',
     'Touch',
+    'Response',
 ]
+
+[dev-dependencies]
+pollster = "*"
 
 [profile.dev]
 opt-level = 1
