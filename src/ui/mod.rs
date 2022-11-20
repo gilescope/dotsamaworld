@@ -319,7 +319,7 @@ pub fn ui_bars_system(
 				}
 				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 					let x = viewpoint.x;
-					let y = viewpoint.y; // WAS x? assumed this was a bug.
+					let y = viewpoint.y;
 					let z = viewpoint.z;
 
 					let timestamp = super::x_to_timestamp(viewpoint.x);

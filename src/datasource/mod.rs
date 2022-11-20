@@ -173,6 +173,7 @@ where
 		let mut source = RawDataSource::new(url);
 
 		let para_id = chain_info.chain_url.para_id;
+		let mut links = vec![];
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
@@ -184,6 +185,7 @@ where
 			render_block(
 				DataUpdate::NewChain(chain_info.clone()),
 				&chain_info,
+				&mut links,
 				&mut render_update,
 				&mut render_details,
 			);
@@ -279,7 +281,7 @@ where
 							},
 							extrinsics: vec![],
 							events: vec![],
-						}), &chain_info, &mut rend, &mut render_details);
+						}), &chain_info, &mut links, &mut rend, &mut render_details);
 						
 						tx((rend, render_details));
 
@@ -407,8 +409,6 @@ where
 					end_link: vec![],
 					details: Details {
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-						// flattern: "can't yet decode.".to_string(),
-						// url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
@@ -468,20 +468,10 @@ where
 		};
 
 		//FYI: blocks sometimes have no events in them.
-		{
-			//TODO: use Once
-			let mut base_time = BASETIME.lock().unwrap();
-			if *base_time == 0 {
-				if let Some(time) = timestamp {
-					log!("BASETIME seting to {}", time);
-					*base_time = time;
-				}
-			}
-		}
-
 		let mut rend = RenderUpdate::default();
 		let mut render_details = RenderDetails::default();
-		render_block(DataUpdate::NewBlock(current), chain_info, &mut rend, &mut render_details);
+		let mut links = vec![]; //TODO should be global?
+		render_block(DataUpdate::NewBlock(current), chain_info, &mut links, &mut rend, &mut render_details);
 		tx((rend, render_details)).await;
 	}
 	Ok(timestamp)
@@ -595,7 +585,7 @@ async fn process_extrinsic<'a, 'scale>(
 				// let _s = format!("{:?}", &payload);
 
 				if payload.find2("data", "upward_messages").is_some() {
-					println!("found upward msgs (first time)");
+					log!("found upward msgs (first time)");
 				}
 				if let Some(channels) = payload.find2("data", "horizontal_messages") {
 					// println!("found horizontal_messages msgs (first time)");
@@ -605,11 +595,11 @@ async fn process_extrinsic<'a, 'scale>(
 							for (_val_name, inner_val) in val {
 								if let scale_borrow::Value::Object(rows) = inner_val {
 									if rows.len() > 1 {
-										println!("found horiz {}", inner_val);
+										log!("found horiz {}", inner_val);
 										if let Some(scale_borrow::Value::U64(para_id)) =
 											inner_val.get("0")
 										{
-											println!(
+											log!(
 												"TODO: do something with horiz to para {}",
 												para_id
 											);
@@ -627,21 +617,21 @@ async fn process_extrinsic<'a, 'scale>(
 					// }
 
 					for (msg_index, msg) in channels {
-						println!("found {} downward_message is, {}", msg_index, &msg);
+						log!("found {} downward_message is, {}", msg_index, &msg);
 						if let (Some(scale_borrow::Value::ScaleOwned(bytes)), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
 							let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
 								"expect to be able to decode {}",
 								&hex::encode(&bytes[..])
 							)));
-							println!("xcm msgv= {}", v);
+							log!("xcm msgv= {}", v);
 							let msg_decoded = scale_value_to_borrowed::convert(&v, true);
 							// msg.set("msg_decoded", msg_decoded);
 							let msg = msg_decoded;
-							println!("xcm msg = {}", msg);
+							log!("xcm msg = {}", msg);
 
 							if let Some(instructions) = msg.get("V0") {
 								for (instruction, payload) in instructions {
-									println!("instruction {}", &payload);
+									log!("instruction {}", &payload);
 									children.push(DataEntity::Extrinsic {
 										// id: (block_number, extrinsic_index),
 										args: vec![instruction.to_string()],
@@ -666,7 +656,7 @@ async fn process_extrinsic<'a, 'scale>(
 							}
 							if let Some(instructions) = msg.get("V1") {
 								for (instruction, payload) in instructions {
-									println!("instruction {}", &payload);
+									log!("instruction {}", &payload);
 									children.push(DataEntity::Extrinsic {
 										// id: (block_number, extrinsic_index),
 										args: vec![instruction.to_string()],
@@ -693,7 +683,7 @@ async fn process_extrinsic<'a, 'scale>(
 							}
 							if let Some(instructions) = msg.get("V2") {
 								for (instruction, payload) in instructions {
-									println!("instruction {}", &payload);
+									log!("instruction {}", &payload);
 									children.push(DataEntity::Extrinsic {
 										// id: (block_number, extrinsic_index),
 										args: vec![instruction.to_string()],
@@ -918,7 +908,7 @@ async fn process_extrinsic<'a, 'scale>(
 				}
 			},
 			("XcmPallet", "limited_teleport_assets") => {
-
+				log!("todo: limited_teleport_assets");
 				// 	let mut flat0 = HashMap::new();
 				// 	flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
 				// 	// println!("FLATTERN {:#?}", flat0);
@@ -1092,14 +1082,14 @@ async fn check_reserve_asset<'scale, 'b>(
 								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
 									rest.only2()
 								{
-									println!("GOT PARA ID dest is {}", para_id);
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
 									let msg_id = format!(
 										"{}-{}",
 										extrinsic_url.block_number.unwrap(),
 										please_hash(to)
 									);
-									println!("FIRST TIME 2 SEND MSG v2 hash {}", msg_id);
+									log!("FIRST TIME 2 SEND MSG v2 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}
@@ -1123,14 +1113,14 @@ async fn check_reserve_asset<'scale, 'b>(
 								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
 									rest.only2()
 								{
-									println!("GOT PARA ID dest is {}", para_id);
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
 									let msg_id = format!(
 										"{}-{}",
 										extrinsic_url.block_number.unwrap(),
 										please_hash(to)
 									);
-									println!("SEND MSG v1 hash {}", msg_id);
+									log!("SEND MSG v1 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}
@@ -1154,14 +1144,14 @@ async fn check_reserve_asset<'scale, 'b>(
 								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
 									rest.only2()
 								{
-									println!("GOT PARA ID dest is {}", para_id);
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
 									let msg_id = format!(
 										"{}-{}",
 										extrinsic_url.block_number.unwrap(),
 										please_hash(to)
 									);
-									println!("SEND MSG v0 hash {}", msg_id);
+									log!("SEND MSG v0 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}

@@ -11,7 +11,7 @@
 #![allow(clippy::wildcard_in_or_patterns)]
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::type_complexity)]
-
+use core::num::NonZeroI64;
 use crate::{
 	camera::CameraUniform,
 	movement::Destination,
@@ -622,7 +622,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//     znear: 0.1,
 	//     zfar: 100.0,
 	// };
-	let mut camera = camera::Camera::new((0.0, 100.0, 10.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
+	let mut camera = camera::Camera::new((-200.0, 100.0, 0.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
 	let mut projection =
 		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 4000.0);
 	let mut camera_controller = input::CameraController::new(4.0, 0.4);
@@ -1143,7 +1143,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						textured_instance_data.push(Instance{color: *texture_index as u32, ..*instance});
 					}
 				}
-//				textured_instance_data.extend(render_update.textured_instances.clone());
+
+				if let Some(basetime) = render_update.basetime {
+					// log!("Updated basetime");
+					*BASETIME.lock().unwrap() = basetime.into();
+				}
 
 				render_update.chain_instances.truncate(0);
 				render_update.block_instances.truncate(0);
@@ -2525,6 +2529,7 @@ pub struct RenderUpdate {
 	block_instances: Vec<Instance>,
 	cube_instances: Vec<(Instance, f32)>,
 	textured_instances: Vec<Instance>,
+	basetime: Option<NonZeroI64>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -2540,6 +2545,9 @@ impl RenderUpdate {
 		self.block_instances.extend(update.block_instances);
 		self.cube_instances.extend(update.cube_instances);
 		self.textured_instances.extend(update.textured_instances);
+		if update.basetime.is_some() {
+			self.basetime = update.basetime;
+		}
 	}
 }
 
@@ -2557,7 +2565,7 @@ fn render_block(
 	// mut materials: ResMut<Assets<StandardMaterial>>,
 	chain_info: &ChainInfo,
 	// asset_server: Res<AssetServer>,
-	// links: Query<(Entity, &MessageSource, &GlobalTransform)>,
+	mut links: &mut Vec<MessageSource>,
 	// mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	// mut polylines: ResMut<Assets<Polyline>>,
 	// mut event: EventWriter<RequestRedraw>,
@@ -2614,8 +2622,9 @@ fn render_block(
 			let mut base_time = *BASETIME.lock().unwrap();
 			if base_time == 0 {
 				base_time = block.timestamp.unwrap_or(0);
-				//log!("BASETIME set to {}", base_time);
+				// log!("BASETIME set to {}", base_time);
 				*BASETIME.lock().unwrap() = base_time;
+				render.basetime = Some(NonZeroI64::new(base_time).unwrap());
 			}
 
 			// let block_num = if is_self_sovereign {
@@ -2834,7 +2843,7 @@ fn render_block(
 				// &mut commands,
 				// &mut materials,
 				BuildDirection::Up,
-				// &links,
+				&mut links,
 				// &mut polyline_materials,
 				// &mut polylines,
 				// &encoded,
@@ -2850,7 +2859,7 @@ fn render_block(
 				// &mut commands,
 				// &mut materials,
 				BuildDirection::Down,
-				// &links,
+				&mut links,
 				// &mut polyline_materials,
 				// &mut polylines,
 				// &encoded,
@@ -2898,7 +2907,7 @@ fn add_blocks(
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)>,
 	build_direction: BuildDirection,
-	// links: &Query<(Entity, &MessageSource, &GlobalTransform)>,
+	links: &mut Vec<MessageSource>,
 	// polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	// polylines: &mut ResMut<Assets<Polyline>>,
 	// encoded: &str,
@@ -2961,56 +2970,56 @@ fn add_blocks(
 				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
 				// let mut create_source = vec![];
-				// for (link, _link_type) in block.end_link() {
-				// 	//if this id already exists then this is the destination, not the source...
-				// 	for (entity, id, source_global) in links.iter() {
-				// 		if id.id == *link {
-				// 			// println!("creating rainbow!");
+				for (link, _link_type) in block.end_link() {
+					//if this id already exists then this is the destination, not the source...
+					for id in links.iter() {
+						if id.id == *link {
+							log!("creating rainbow!");
 
-				// 			let mut vertices = vec![
-				// 				source_global.translation(),
-				// 				Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
-				// 			];
-				// 			rainbow(&mut vertices, 50);
+							// let mut vertices = vec![
+							// 	source_global.translation(),
+							// 	Vec3::new(px, base_y + target_y * build_dir, pz * rflip),
+							// ];
+							// rainbow(&mut vertices, 50);
 
-				// 			let colors = vec![
-				// 				Color::PURPLE,
-				// 				Color::BLUE,
-				// 				Color::CYAN,
-				// 				Color::YELLOW,
-				// 				Color::RED,
-				// 			];
-				// 			for color in colors.into_iter() {
-				// 				// Create rainbow from entity to current extrinsic location.
-				// 				// commands
-				// 				// 	.spawn_bundle(PolylineBundle {
-				// 				// 		polyline: polylines
-				// 				// 			.add(Polyline { vertices: vertices.clone() }),
-				// 				// 		material: polyline_materials.add(PolylineMaterial {
-				// 				// 			width: 10.0,
-				// 				// 			color,
-				// 				// 			perspective: true,
-				// 				// 			..default()
-				// 				// 		}),
-				// 				// 		..default()
-				// 				// 	})
-				// 				// 	.insert(ClearMe);
+							// let colors = vec![
+							// 	Color::PURPLE,
+							// 	Color::BLUE,
+							// 	Color::CYAN,
+							// 	Color::YELLOW,
+							// 	Color::RED,
+							// ];
+							// for color in colors.into_iter() {
+							// 	// Create rainbow from entity to current extrinsic location.
+							// 	// commands
+							// 	// 	.spawn_bundle(PolylineBundle {
+							// 	// 		polyline: polylines
+							// 	// 			.add(Polyline { vertices: vertices.clone() }),
+							// 	// 		material: polyline_materials.add(PolylineMaterial {
+							// 	// 			width: 10.0,
+							// 	// 			color,
+							// 	// 			perspective: true,
+							// 	// 			..default()
+							// 	// 		}),
+							// 	// 		..default()
+							// 	// 	})
+							// 	// 	.insert(ClearMe);
 
-				// 				for v in vertices.iter_mut() {
-				// 					v.y += 0.5;
-				// 				}
-				// 			}
+							// 	for v in vertices.iter_mut() {
+							// 		v.y += 0.5;
+							// 	}
+							// }
 
-				// 			// commands.entity(entity).remove::<MessageSource>();
-				// 		}
-				// 	}
-				// }
+							// commands.entity(entity).remove::<MessageSource>();
+						}
+					}
+				}
 
-				// for (link, link_type) in block.start_link() {
-				// 	// println!("inserting source of rainbow!");
-				// 	create_source
-				// 		.push(MessageSource { id: link.to_string(), link_type: *link_type });
-				// }
+				for (link, link_type) in block.start_link() {
+					log!("inserting source of rainbow!");
+					links
+						.push(MessageSource { id: link.to_string(), link_type: *link_type });
+				}
 
 				// let mut bun = commands.spawn_bundle(PbrBundle {
 				// 	mesh,
@@ -3059,6 +3068,7 @@ fn add_blocks(
 				// extrinsic_details.doturl.block_number.unwrap(),
 				// extrinsic_details.doturl.extrinsic.unwrap());
 				render_details.cube_instances.push(block.details().clone());
+
 
 				// for source in create_source {
 				// 	bun.insert(source);
@@ -3143,10 +3153,10 @@ fn add_blocks(
 
 			render_details.cube_instances.push(entity.details.clone());
 
-			// for (link, link_type) in &event.start_link {
-			// 	// println!("inserting source of rainbow (an event)!");
-			// 	event_bun.insert(MessageSource { id: link.to_string(), link_type: *link_type });
-			// }
+			for (link, link_type) in &event.start_link {
+				// println!("inserting source of rainbow (an event)!");
+				links.push(MessageSource { id: link.to_string(), link_type: *link_type });
+			}
 		}
 	}
 }
