@@ -1431,6 +1431,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 
 	map.insert((1, 0), index); index += 1;
 	map.insert((1, 1000), index); index += 1;
+	map.insert((1, 1001), index); index += 1;
 	map.insert((1, 2000), index); index += 1;
 	map.insert((1, 2002), index); index += 1;
 	map.insert((1, 2004), index); index += 1;
@@ -1442,7 +1443,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	map.insert((1, 2021), index); index += 1;
 	map.insert((1, 2026), index); index += 1;
 	// map.insert((1, 2031), index); index += 1;
-	map.insert((1, 2032), index); index += 1;
+	// map.insert((1, 2032), index); index += 1;
 	// map.insert((1, 2034), index); index += 1;
 	// map.insert((1, 2035), index); index += 1;
 	// map.insert((1, 2037), index); index += 1;
@@ -1483,6 +1484,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 
 	images.push(include_bytes!("../assets/branding/1.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-1000.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-1001.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2000.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2002.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2004.jpeg").to_vec());
@@ -1494,7 +1496,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
+	// images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
@@ -2669,6 +2671,12 @@ fn render_block(
 			// println!("base_time {:?}",base_time);
 			let block_num = timestamp_to_x(block.timestamp.unwrap_or(base_time));
 
+			if block_num < 0. {
+				// negative blocks look messy - let's not show those.
+				return;
+			}
+
+
 			// Add the new block as a large square on the ground:
 			{
 				let timestamp_color = if chain_info.chain_url.is_relay() {
@@ -2866,17 +2874,29 @@ fn render_block(
 		DataUpdate::NewChain(chain_info) => {
 			let is_relay = chain_info.chain_url.is_relay();
 			log!("adding new chain");
-			// render.textured_instances.push(Instance{
-			// 		position: glam::Vec3::new(
-			// 			0. + 0. - 10.,
-			// 			if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
-			// 			(RELAY_CHAIN_CHASM_WIDTH +
-			// 				BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-			// 				chain_info.chain_url.rflip(),
-			// 		)
-			// 		.into(),
-			// 		color: 0u32
-			// 	});
+			render.textured_instances.push(Instance{
+				position: glam::Vec3::new(
+						0. - 8.5 - 28.,
+						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							chain_info.chain_url.rflip(),
+					)
+					.into(),
+				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } + chain_info.chain_url.para_id.unwrap_or(0)
+			});
+
+			render.textured_instances.push(Instance{
+				position: glam::Vec3::new(
+						0. - 8.5 - 28. - 3.3,
+						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							chain_info.chain_url.rflip(),
+					)
+					.into(),
+				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 }
+			});
 
 			// for mut chain_instances in chain_instances.iter_mut() {
 			draw_chain_rect(
