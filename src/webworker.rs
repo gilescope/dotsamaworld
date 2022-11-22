@@ -64,7 +64,9 @@ impl Worker for IOWorker {
 				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
 				let mut results = RenderUpdate::default();
 				core::mem::swap(vec, &mut results);
-				scope.respond(id, WorkerResponse::RenderUpdate(results));
+				if results.any() {
+					scope.respond(id, WorkerResponse::RenderUpdate(results));
+				}
 			},
 			BridgeMessage::GetDetails(cube_index) => {
 				let details =

@@ -1,8 +1,8 @@
 // Vertex shader
 
 struct InstanceInput {
-    @location(5) instance_position: vec3<f32>,
-    @location(6) instance_color: u32,
+    @location(2) instance_position: vec3<f32>,
+    @location(3) instance_color: u32,
 };
 
 struct CameraUniform {
@@ -26,6 +26,9 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
 }
+
+// TODO: add in global time, have rain happen in vertex shader.
+// That way you only need to copy the buffer when new blocks appear.
 
 @vertex
 fn vs_main(

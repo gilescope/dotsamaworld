@@ -371,8 +371,10 @@ where
 	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
+	// log!("processing extrinsics {:?}", block_hash);
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
+		// log!("got extrinsics {:?}", block_hash);
 		let got_block_num = block.block_number;
 		let extrinsics = block.extrinsics;
 		let mut blockurl = chain_info.chain_url.clone();
@@ -395,6 +397,8 @@ where
 
 		let mut exts = vec![];
 		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
+				// log!("an extrinsics {:?}", i);
+
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
 			//TODO: did we need to double decode extrinsics????
 
@@ -420,7 +424,9 @@ where
 			};
 			let ex_slice = &the_extrinsic.raw[..];
 			// let ex_slice = &ext_bytes.0;
-			if let Ok(extrinsic2) = polkadyn::decode_extrinsic(&metad, ex_slice) {
+			let decode_result = polkadyn::decode_extrinsic(&metad, ex_slice);
+			if let Ok(extrinsic2) = decode_result {
+				// log!("an extrinsics  decoded {:?}", i);
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic2, true);
 				let entity = process_extrinsic(
 					&metad,
@@ -431,6 +437,7 @@ where
 				)
 				.await;
 				if let Some(mut entity) = entity {
+					// log!("an extrinsic processed {:?}", i);
 					entity.details_mut().value = Some(scale_value::stringify::to_string(
 						&extrinsic2.clone().remove_context(),
 					));
@@ -442,7 +449,7 @@ where
 					exts.push(entity);
 				}
 			} else {
-				// log!("can't decode block ext {} {}", i, &blockurl);
+				log!("can't decode block ext {} {} because {:?}", i, &blockurl, decode_result);
 				exts.push(the_extrinsic.derived);
 			}
 		}
@@ -1253,7 +1260,7 @@ async fn get_events_for_block(
 			let mut ext_count_map = HashMap::new();
 			let _events: Vec<_> = events
 				.iter()
-				.map(|(phase, event_val)| {
+				.map(|(phase, event_val, raw_event)| {
 					let event = scale_value_to_borrowed::convert(event_val, true);
 
 					// let event = scale_value_to_borrowed::convert(&event2);
@@ -1265,6 +1272,7 @@ async fn get_events_for_block(
 						value: Some(scale_value::stringify::to_string(
 							&event_val.clone().remove_context(),
 						)),
+						raw: raw_event.to_vec(),
 						..Default::default()
 					};
 

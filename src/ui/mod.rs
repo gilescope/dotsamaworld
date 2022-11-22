@@ -84,7 +84,7 @@ pub fn ui_bars_system(
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap() as i32);
+					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap_or(0) as i32);
 
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.

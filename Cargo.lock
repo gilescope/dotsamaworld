@@ -340,7 +340,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -788,7 +787,6 @@ dependencies = [
  "js-sys",
  "lazy_static",
  "log",
- "open",
  "palette",
  "parity-scale-codec",
  "polkadyn",
@@ -807,7 +805,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
- "winit 0.27.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit",
  "ws_stream_wasm",
 ]
 
@@ -846,7 +844,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34fb1c870207c14b99fb7ed9a8760fd7be9a0d96b3516ead3a5e3abe7bb88400"
 dependencies = [
  "egui",
- "winit 0.27.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit",
 ]
 
 [[package]]
@@ -956,12 +954,11 @@ dependencies = [
 [[package]]
 name = "frame-metadata"
 version = "15.0.0"
-source = "git+https://github.com/integritee-network/frame-metadata.git#3b43da9821238681f9431276d55b92a079142083"
+source = "git+https://github.com/paritytech/frame-metadata.git#1ea329920838b3f4170f421cde53ce7e6a15ccee"
 dependencies = [
  "cfg-if",
  "parity-scale-codec",
  "scale-info",
- "serde",
 ]
 
 [[package]]
@@ -1761,16 +1758,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
-name = "open"
-version = "3.0.2"
-source = "git+https://github.com/gilescope/open-rs.git?rev=255025b420dbfec81d0c28e67055402e14295921#255025b420dbfec81d0c28e67055402e14295921"
-dependencies = [
- "pathdiff",
- "web-sys",
- "windows-sys 0.36.1",
-]
-
-[[package]]
 name = "owned_ttf_parser"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1804,9 +1791,9 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec"
-version = "3.1.5"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9182e4a71cae089267ab03e67c99368db7cd877baf50f931e5d6d4b71e195ac0"
+checksum = "366e44391a8af4cfd6002ef6ba072bae071a96aafca98d7d448a34c5dca38b6a"
 dependencies = [
  "arrayvec 0.7.2",
  "bitvec",
@@ -1858,12 +1845,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pathdiff"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-
-[[package]]
 name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1912,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/polkadyn?rev=1da872d87bfe3e560e88ee80ee070b05412b3d8c#1da872d87bfe3e560e88ee80ee070b05412b3d8c"
+source = "git+https://github.com/gilescope/polkadyn?rev=cce7832ca6ec8ef044ccc2905807fd07a089610d#cce7832ca6ec8ef044ccc2905807fd07a089610d"
 dependencies = [
  "frame-metadata",
  "getrandom",
@@ -2159,21 +2140,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "scale-bits"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd7aca73785181cc41f0bbe017263e682b585ca660540ba569133901d013ecf"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "scale-borrow"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/scale-borrow?rev=f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444#f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444"
+source = "git+https://github.com/gilescope/scale-borrow?rev=a342a594c4ee8d6946f07c4229c503798f0a71da#a342a594c4ee8d6946f07c4229c503798f0a71da"
 dependencies = [
- "bitvec",
  "hex",
  "parity-scale-codec",
  "scale-info",
+ "scale-value",
+]
+
+[[package]]
+name = "scale-decode"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d823d4be477fc33321f93d08fb6c2698273d044f01362dc27573a750deb7c233"
+dependencies = [
+ "parity-scale-codec",
+ "scale-bits",
+ "scale-info",
+ "thiserror",
 ]
 
 [[package]]
 name = "scale-info"
-version = "2.1.2"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c46be926081c9f4dd5dd9b6f1d3e3229f2360bc6502dd8836f84a93b7c75e99a"
+checksum = "88d8a765117b237ef233705cc2cc4c6a27fccd46eea6ef0c8c6dae5f3ef407f8"
 dependencies = [
  "bitvec",
  "cfg-if",
@@ -2185,9 +2189,9 @@ dependencies = [
 
 [[package]]
 name = "scale-info-derive"
-version = "2.1.2"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50e334bb10a245e28e5fd755cabcafd96cfcd167c99ae63a46924ca8d8703a3c"
+checksum = "cdcd47b380d8c4541044e341dcd9475f55ba37ddc50c908d945fc036a8642496"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -2197,15 +2201,15 @@ dependencies = [
 
 [[package]]
 name = "scale-value"
-version = "0.2.1"
-source = "git+https://github.com/gilescope/scale-value?branch=wasm32#b621c1966f319879c1faf552adf1c7936c088d5b"
+version = "0.6.0"
+source = "git+https://github.com/paritytech/scale-value.git#4cd2d62b226f26c132f37b0b7be41444e8ca0157"
 dependencies = [
- "bitvec",
  "either",
  "frame-metadata",
  "parity-scale-codec",
+ "scale-bits",
+ "scale-decode",
  "scale-info",
- "serde",
  "thiserror",
  "yap",
 ]
@@ -2213,7 +2217,7 @@ dependencies = [
 [[package]]
 name = "scale-value-to-borrowed"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=986d53abee3ba5f021e52cc096d09a0dc2f3db23#986d53abee3ba5f021e52cc096d09a0dc2f3db23"
+source = "git+https://github.com/gilescope/scale-value-to-borrowed?rev=49987d24fb2a116cc4ecf39bb1d9b7506178db7d#49987d24fb2a116cc4ecf39bb1d9b7506178db7d"
 dependencies = [
  "scale-borrow",
  "scale-value",
@@ -3071,13 +3075,6 @@ name = "windows_x86_64_msvc"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40009d85759725a34da6d89a94e63d7bdc50a862acf0dbc7c8e488f1edcb6f5"
-
-[[package]]
-name = "winit"
-version = "0.27.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb796d6fbd86b2fd896c9471e6f04d39d750076ebe5680a3958f00f5ab97657c"
-replace = "winit 0.27.5 (git+https://github.com/gilescope/winit.git?branch=web-touch-event)"
 
 [[package]]
 name = "winit"

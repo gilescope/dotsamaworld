@@ -220,35 +220,6 @@ impl Vertex {
 	}
 }
 
-// #[repr(C)]
-// #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-// struct TextureVertex {
-//     position: [f32; 3],
-//     tex_coords: [f32; 2],
-// }
-
-// impl TextureVertex {
-//     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-//         use std::mem;
-//         wgpu::VertexBufferLayout {
-//             array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-//             step_mode: wgpu::VertexStepMode::Vertex,
-//             attributes: &[
-//                 wgpu::VertexAttribute {
-//                     offset: 0,
-//                     shader_location: 0,
-//                     format: wgpu::VertexFormat::Float32x3,
-//                 },
-//                 wgpu::VertexAttribute {
-//                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-//                     shader_location: 1,
-//                     format: wgpu::VertexFormat::Float32x2, // NEW!
-//                 },
-//             ]
-//         }
-//     }
-// }
-
 // We don't use blue. r, g, color is texture co-ordinates
 //
 // counter clockwise to be visible
@@ -404,7 +375,7 @@ impl Instance {
 					// While our vertex shader only uses locations 0, and 1 now, in later tutorials
 					// we'll be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict
 					// with them later
-					shader_location: 5,
+					shader_location: 2,
 					format: wgpu::VertexFormat::Float32x3,
 				},
 				// A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a
@@ -412,7 +383,7 @@ impl Instance {
 				// the shader.
 				wgpu::VertexAttribute {
 					offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-					shader_location: 6,
+					shader_location: 3,
 					format: wgpu::VertexFormat::Uint32,
 				},
 			],
@@ -1124,35 +1095,43 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 			// let mut data_update: Option<DataUpdate> = None;
 			if let Ok(render_update) = &mut UPDATE_QUEUE.lock() {
-				for (instance, height) in &render_update.cube_instances {
-					cube_instance_data.push(*instance);
-					cube_target_heights.push(*height);
-				}
-				//TODO: drain not clone!
-				block_instance_data.extend(render_update.block_instances.clone());
-				chain_instance_data.extend(render_update.chain_instances.clone());
+				if render_update.any() {
+					// if render_update.cube_instances.len() > 0 {
+					// 	log!("Got update {:?}", render_update.cube_instances[0].0.position[0]);
+					// }
+					// log!("Got block {:?}", render_update.block_instances.len());
+					// log!("Got chain {:?}", render_update.count());
 
-				for instance in &render_update.textured_instances {
-					let key = if instance.color > 99_000 {
-						(1, instance.color - 100_000)
-					} else {
-						(0, instance.color)
-					};
-					let texture = texture_map.get(&key);
-					if let Some(texture_index) = texture {
-						textured_instance_data.push(Instance{color: *texture_index as u32, ..*instance});
+					for (instance, height) in &render_update.cube_instances {
+						cube_instance_data.push(*instance);
+						cube_target_heights.push(*height);
 					}
-				}
+					//TODO: drain not clone!
+					block_instance_data.extend(render_update.block_instances.clone());
+					chain_instance_data.extend(render_update.chain_instances.clone());
 
-				if let Some(basetime) = render_update.basetime {
-					// log!("Updated basetime");
-					*BASETIME.lock().unwrap() = basetime.into();
-				}
+					for instance in &render_update.textured_instances {
+						let key = if instance.color > 99_000 {
+							(1, instance.color - 100_000)
+						} else {
+							(0, instance.color)
+						};
+						let texture = texture_map.get(&key);
+						if let Some(texture_index) = texture {
+							textured_instance_data.push(Instance{color: *texture_index as u32, ..*instance});
+						}
+					}
 
-				render_update.chain_instances.truncate(0);
-				render_update.block_instances.truncate(0);
-				render_update.cube_instances.truncate(0);
-				render_update.textured_instances.truncate(0);
+					if let Some(basetime) = render_update.basetime {
+						// log!("Updated basetime");
+						*BASETIME.lock().unwrap() = basetime.into();
+					}
+
+					render_update.chain_instances.truncate(0);
+					render_update.block_instances.truncate(0);
+					render_update.cube_instances.truncate(0);
+					render_update.textured_instances.truncate(0);
+				}
 			}
 
 			rain(&mut cube_instance_data, &mut cube_target_heights);
@@ -2148,11 +2127,10 @@ fn source_data(
 		loop {
 			if let Some(msg) = REQUESTS.lock().unwrap().pop() {
 				bridge.send(msg);
-			// log!("Sent bridge message");
 			} else {
 				bridge.send(BridgeMessage::GetNewBlocks);
 			}
-			async_std::task::sleep(Duration::from_millis(15)).await;
+			async_std::task::sleep(Duration::from_millis(300)).await;
 		}
 	};
 
@@ -2549,6 +2527,17 @@ impl RenderUpdate {
 			self.basetime = update.basetime;
 		}
 	}
+
+	fn any(&self) -> bool {
+		self.count() > 0
+	}
+
+	fn count(&self) -> usize {
+		self.chain_instances.len() +
+		self.block_instances.len() +
+		self.cube_instances.len() +
+		self.textured_instances.len()
+	}
 }
 
 impl RenderDetails {
@@ -2622,9 +2611,11 @@ fn render_block(
 			let mut base_time = *BASETIME.lock().unwrap();
 			if base_time == 0 {
 				base_time = block.timestamp.unwrap_or(0);
-				// log!("BASETIME set to {}", base_time);
-				*BASETIME.lock().unwrap() = base_time;
-				render.basetime = Some(NonZeroI64::new(base_time).unwrap());
+				if  base_time != 0 {
+					// log!("BASETIME set to {}", base_time);
+					*BASETIME.lock().unwrap() = base_time;
+					render.basetime = Some(NonZeroI64::new(base_time).unwrap());
+				}
 			}
 
 			// let block_num = if is_self_sovereign {

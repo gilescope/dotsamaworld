@@ -37,7 +37,7 @@ futures = { version = "0.3.13", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
-parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
+parity-scale-codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = [
     "derive",
     "full",
     "bit-vec",
@@ -54,29 +54,34 @@ form_urlencoded = "*"
 # async-tungstenite = "*"
 # color-eyre = { version = "0.5", default-features = false }
 # dashmap = { version = "*" }
-open = { git = "https://github.com/gilescope/open-rs.git", rev = "255025b420dbfec81d0c28e67055402e14295921" }
+# open = { git = "https://github.com/gilescope/open-rs.git", rev = "255025b420dbfec81d0c28e67055402e14295921" }
 #
 # substrate deps
 #
 
 # frame-metadata = "15.0.0"
-frame-metadata = { git = "https://github.com/integritee-network/frame-metadata.git", default-features = false, features = [
-    "v14",
-    "full_derive",
-] }
+# frame-metadata = { git = "https://github.com/integritee-network/frame-metadata.git", default-features = false, features = [
+#     "v14",
+#     "full_derive",
+# ] }
+frame-metadata = { git="https://github.com/paritytech/frame-metadata.git", default-features = false, features = ["v14", "decode"] }
+
 
 scale-info = { version = "*", features = ["serde"] }
-scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
+
+scale-value = {  git="https://github.com/paritytech/scale-value.git",  default-features = false, features = ["from_string"] }
+# scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
 # scale-value = {path="/home/gilescope/git/scale-value" }
+
 scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
     "bitvec",
     "display",
-], rev = "f2fe9b4145b4c4a2ffb13da11c6cf3bf0322d444" }
+], rev = "a342a594c4ee8d6946f07c4229c503798f0a71da" }
 scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features = [
-    "bitvec",
-], rev = "986d53abee3ba5f021e52cc096d09a0dc2f3db23" }
+    
+], rev = "49987d24fb2a116cc4ecf39bb1d9b7506178db7d" }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
-polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "1da872d87bfe3e560e88ee80ee070b05412b3d8c" }
+polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "cce7832ca6ec8ef044ccc2905807fd07a089610d" }
 # polkadyn = { path = "/home/gilescope/git/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
@@ -202,7 +207,10 @@ incremental = true
 [profile.dev.package.backtrace]
 opt-level = 3
 
-
-[replace]
+# Till v16 published
+[patch.crates-io]
+"frame-metadata"={ git="https://github.com/paritytech/frame-metadata.git" }
+# [replace]
+# Waiting on https://github.com/rust-windowing/winit/pull/2188 to be merged.
 # "winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
-"winit:0.27.5"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }
+"winit"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }

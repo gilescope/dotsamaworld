@@ -171,6 +171,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> 
 					// collator ip?
 					(None, "rpc.polkadot.io"),
 					(para_id!(1000), "statemint-rpc.polkadot.io"), //1st parachain.
+					(para_id!(1001), "polkadot-collectives-rpc.polkadot.io"),
 					//
 					// Auction Batch 1
 					(para_id!(2000), "acala.polkawallet.io"),     // 1st auction winner
