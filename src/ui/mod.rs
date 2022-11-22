@@ -139,7 +139,7 @@ pub fn ui_bars_system(
 						} else {
 							if ui.add(Link::new(format!("Decode Extrinsic #: {}", extrinsic))).clicked() {
 								let encoded: String = form_urlencoded::Serializer::new(String::new())
-									.append_pair("rpc", &chain_info.chain_ws)
+									.append_pair("rpc", &chain_info.chain_ws[0])
 									.finish();
 
 								// let is_relay = chain_info.chain_url.is_relay();
@@ -157,7 +157,7 @@ pub fn ui_bars_system(
 						if ui.add(Link::new(format!("See Block #: {}", block_number))).clicked() {
 							log!("click block detected");
 							let encoded: String = form_urlencoded::Serializer::new(String::new())
-								.append_pair("rpc", &chain_info.chain_ws)
+								.append_pair("rpc", &chain_info.chain_ws[0])
 								.finish();
 
 							// let is_relay = chain_info.chain_url.is_relay();

@@ -19,7 +19,6 @@ use std::{
 	collections::{hash_map::DefaultHasher, HashMap},
 	convert::TryFrom,
 	hash::Hash,
-	num::NonZeroU32,
 	sync::atomic::Ordering,
 	time::Duration,
 };
@@ -168,9 +167,9 @@ where
 
 		let url = &chain_info.chain_ws;
 		#[cfg(not(target_arch = "wasm32"))]
-		let mut source = CachedDataSource::new(RawDataSource::new(url));
+		let mut source = CachedDataSource::new(RawDataSource::new(url.clone()));
 		#[cfg(target_arch = "wasm32")]
-		let mut source = RawDataSource::new(url);
+		let mut source = RawDataSource::new(url.clone());
 
 		let para_id = chain_info.chain_url.para_id;
 		let mut links = vec![];
@@ -264,7 +263,7 @@ where
 					if block_hash.is_none() {
 						log!(
 							"should be able to get from relay chain hash for block num {} of url {}",
-							block_number, url
+							block_number, url[0]
 						);
 						// TODO: timestamp probably incorrect
 

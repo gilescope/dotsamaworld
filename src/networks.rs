@@ -1,4 +1,3 @@
-use core::num::NonZeroU32;
 use serde::{Deserialize, Serialize};
 use std::fmt::write;
 
@@ -57,14 +56,14 @@ macro_rules! para_id {
 }
 
 /// Return the network(s) to visulise
-pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> {
+pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str>)>> {
 	match selected_env {
 		Env::Test => {
 			vec![
 				vec![
-					(None, "westend-rpc.polkadot.io"),
-					(para_id!(1000), "westmint-rpc.polkadot.io"),
-					(para_id!(1001), "westend-collectives-rpc.polkadot.io"),
+					(None, vec!["westend-rpc.polkadot.io"]),
+					(para_id!(1000), vec!["westmint-rpc.polkadot.io"]),
+					(para_id!(1001), vec!["westend-collectives-rpc.polkadot.io"]),
 					// (para_id!(2000), "fullnode-collator.charcoal.centrifuge.io"),
 					// (para_id!(2000), "teerw1.integritee.network"),
 					// (para_id!(2000), "westend.kylin-node.co.uk"),
@@ -110,51 +109,51 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> 
 			vec![
 				vec![
 					// Ordering should really be done on who won the auction first!
-					(None, "kusama-rpc.polkadot.io"),
-					(para_id!(1000), "statemine-rpc.polkadot.io"),
+					(None, vec!["kusama-rpc.polkadot.io"]),
+					(para_id!(1000), vec!["statemine-rpc.polkadot.io"]),
 					// (para_id!(1001), "kusama.api.encointer.org"),
 					// //
 					// // Auction Batch 1
-					(para_id!(2000), "karura-rpc-0.aca-api.network"), // 1st
-					(para_id!(2023), "wss.api.moonriver.moonbeam.network"), // 2nd.
-					(para_id!(2007), "rpc.shiden.astar.network"),     // 3rd
-					(para_id!(2004), "khala-api.phala.network/ws"),   // 4th
-					(para_id!(2001), "hk.p.bifrost-rpc.liebi.com/ws"), // 5th
+					(para_id!(2000), vec!["karura-rpc-0.aca-api.network"]), // 1st
+					(para_id!(2023), vec!["wss.api.moonriver.moonbeam.network"]), // 2nd.
+					(para_id!(2007), vec!["rpc.shiden.astar.network"]),     // 3rd
+					(para_id!(2004), vec!["khala-api.phala.network/ws"]),   // 4th
+					(para_id!(2001), vec!["hk.p.bifrost-rpc.liebi.com/ws"]), // 5th
 					// //
 					// // Auction Batch 2
-					(para_id!(2086), "kilt-rpc.dwellir.com"),          // 6th
-					(para_id!(2084), "calamari-rpc.dwellir.com"),      // 7th
-					(para_id!(2090), "basilisk-rpc.dwellir.com"),      // 8th
-					(para_id!(2088), "fullnode.altair.centrifuge.io"), //9th
-					(para_id!(2085), "heiko-rpc.parallel.fi"),         // 10th
-					(para_id!(2092), "kintsugi-rpc.dwellir.com"),      // 11th
+					(para_id!(2086), vec!["kilt-rpc.dwellir.com"]),          // 6th
+					(para_id!(2084), vec!["calamari-rpc.dwellir.com"]),      // 7th
+					(para_id!(2090), vec!["basilisk-rpc.dwellir.com"]),      // 8th
+					(para_id!(2088), vec!["fullnode.altair.centrifuge.io"]), //9th
+					(para_id!(2085), vec!["heiko-rpc.parallel.fi"]),         // 10th
+					(para_id!(2092), vec!["kintsugi-rpc.dwellir.com"]),      // 11th
 					// //
 					// // Auction Batch 3
-					(para_id!(2087), "picasso-rpc.composable.finance"), // 12th
-					(para_id!(2097), "pioneer-1-rpc.bit.country"),      // 13th
-					(para_id!(2095), "us-ws-quartz.unique.network"),    // 14th
+					(para_id!(2087), vec!["picasso-rpc.composable.finance"]), // 12th
+					(para_id!(2097), vec!["pioneer-1-rpc.bit.country"]),      // 13th
+					(para_id!(2095), vec!["us-ws-quartz.unique.network"]),    // 14th
 					// //15th genshiro
 
 					// // Auction Batch 4
-					(para_id!(2100), "para.subsocial.network"),    // 16th
-					(para_id!(2101), "zeitgeist-rpc.dwellir.com"), // 17th
+					(para_id!(2100), vec!["para.subsocial.network"]),    // 16th
+					(para_id!(2101), vec!["zeitgeist-rpc.dwellir.com"]), // 17th
 					//Sakura 18th
-					(para_id!(2012), "rpc-shadow.crust.network"), // 19th
-					(para_id!(2048), "kusama.rpc.robonomics.network"), // 20th
+					(para_id!(2012), vec!["rpc-shadow.crust.network"]), // 19th
+					(para_id!(2048), vec!["kusama.rpc.robonomics.network"]), // 20th
 					// //
 					// // Auction Batch 5
-					(para_id!(2015), "kusama.api.integritee.network"), // 21st
-					(para_id!(2105), "crab-parachain-rpc.darwinia.network"), // 22nd
-					(para_id!(2106), "rpc.litmus-parachain.litentry.io"), // 23rd
+					(para_id!(2015), vec!["kusama.api.integritee.network"]), // 21st
+					(para_id!(2105), vec!["crab-parachain-rpc.darwinia.network"]), // 22nd
+					(para_id!(2106), vec!["rpc.litmus-parachain.litentry.io"]), // 23rd
 					//"ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
-					(para_id!(2107), "rpc.api.kico.dico.io"), // 25th
+					(para_id!(2107), vec!["rpc.api.kico.dico.io"]), // 25th
 					// //
 					// // Auction Batch 6
-					(para_id!(2110), "prod-kusama-collator-01.mangatafinance.cloud"), // 26th
+					(para_id!(2110), vec!["prod-kusama-collator-01.mangatafinance.cloud"]), // 26th
 					// // 27th renewal
 					// // 28th renewal     double click faster, yaw and pitch
 					// // 29th renewal
-					(para_id!(2114), "rpc.turing.oak.tech"), /* 30th
+					(para_id!(2114), vec!["rpc.turing.oak.tech"]), /* 30th
 															  // * Auction Batch 7
 															  // * "kusama.kylin-node.co.uk", 31st not online yet
 															  // * 32nd renewal
@@ -169,30 +168,30 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> 
 					// TODO: how can we dynamically discover
 					// nodes we can hit? - can we track back to the
 					// collator ip?
-					(None, "rpc.polkadot.io"),
-					(para_id!(1000), "statemint-rpc.polkadot.io"), //1st parachain.
-					(para_id!(1001), "polkadot-collectives-rpc.polkadot.io"),
+					(None, vec!["rpc.polkadot.io"]),
+					(para_id!(1000), vec!["statemint-rpc.polkadot.io"]), //1st parachain.
+					(para_id!(1001), vec!["polkadot-collectives-rpc.polkadot.io"]),
 					//
 					// Auction Batch 1
-					(para_id!(2000), "acala.polkawallet.io"),     // 1st auction winner
-					(para_id!(2004), "wss.api.moonbeam.network"), // 2nd
-					(para_id!(2006), "rpc.astar.network"),    // 3rd
-					(para_id!(2012), "rpc.parallel.fi"),          // 4th
-					// //(Some(2002), "rpc-para.clover.finance"),  // 5th - closed.
+					(para_id!(2000), vec!["acala.polkawallet.io"]),     // 1st auction winner
+					(para_id!(2004), vec!["wss.api.moonbeam.network"]), // 2nd
+					(para_id!(2006), vec!["rpc.astar.network"]),    // 3rd
+					(para_id!(2012), vec!["rpc.parallel.fi"]),          // 4th
+					// //(Some(2002), vec!["rpc-para.clover.finance"),  // 5th - closed.
 					// //
 					// // Auction Batch 2
-					(para_id!(2021), "rpc.efinity.io"),                           // 6th
-					(para_id!(2019), "rpc.composable.finance"),                   // 7th
-					(para_id!(2031), "fullnode.parachain.centrifuge.io"),         // 8th
-					(para_id!(2034), "rpc-01.hydradx.io"),                        // 9th
-					(para_id!(2032), "interlay.api.onfinality.io:443/public-ws"), // 10th
-					(para_id!(2026), "eden-rpc.dwellir.com"),                     // noodle 11th
+					(para_id!(2021), vec!["rpc.efinity.io"]),                           // 6th
+					(para_id!(2019), vec!["rpc.composable.finance"]),                   // 7th
+					(para_id!(2031), vec!["fullnode.parachain.centrifuge.io"]),         // 8th
+					(para_id!(2034), vec!["rpc-01.hydradx.io"]),                        // 9th
+					(para_id!(2032), vec!["interlay.api.onfinality.io:443/public-ws"]), // 10th
+					(para_id!(2026), vec!["eden-rpc.dwellir.com"]),                     // noodle 11th
 					// //
 					// // Auction Batch 3
-					(para_id!(2011), "node.pol.equilibrium.io"),        // 12th
-					(para_id!(2035), "wss://api.phala.network:443/ws"), //13th
-					(para_id!(2037), "ws.unique.network"),              // 14th
-					(para_id!(2013), "rpc.litentry-parachain.litentry.io"), /* 15th
+					(para_id!(2011), vec!["node.pol.equilibrium.io"]),        // 12th
+					(para_id!(2035), vec!["wss://api.phala.network:443/ws"]), //13th
+					(para_id!(2037), vec!["ws.unique.network"]),              // 14th
+					(para_id!(2013), vec!["rpc.litentry-parachain.litentry.io"]), /* 15th
 					                                //    * "mainnet.polkadex.trade", // 16th (not on line yet)
 					                                //    * 17th origin trail (not live yet)
 					                                //    * "k-ui.kapex.network", */
@@ -341,9 +340,9 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, &'static str)>> 
 			// so both can exist at the same time.
 			vec![
 				vec![
-					(None, "ws://127.0.0.1:9900"),
-					(para_id!(1000), "ws://127.0.0.1:9910"),
-					(para_id!(2000), "ws://127.0.0.1:9920"),
+					(None, vec!["ws://127.0.0.1:9900"]),
+					(para_id!(1000), vec!["ws://127.0.0.1:9910"]),
+					(para_id!(2000), vec!["ws://127.0.0.1:9920"]),
 				],
 				// vec!["ws://127.0.0.1:9944", "ws://127.0.0.1:9966", "ws://127.0.0.1:9920"]
 			]

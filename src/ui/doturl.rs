@@ -1,6 +1,5 @@
 use crate::Env;
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroU32;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] //TODO use scale
 pub struct DotUrl {

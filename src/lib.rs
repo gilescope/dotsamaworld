@@ -30,7 +30,6 @@ use std::{
 	convert::AsRef,
 	f32::consts::PI,
 	iter,
-	num::NonZeroU32,
 	sync::{
 		atomic::{AtomicI32, AtomicU32, Ordering},
 		Arc, Mutex,
@@ -145,7 +144,7 @@ static PAUSE_DATA_FETCH: AtomicU32 = AtomicU32::new(0);
 /// Immutable once set up.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChainInfo {
-	pub chain_ws: String,
+	pub chain_ws: Vec<String>,
 	// Negative is other direction from center.
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
@@ -875,14 +874,14 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			contents: bytemuck::cast_slice(&cube_instance_data),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-	let mut cube_instance_data_count = cube_instance_data.len();
+	// let mut cube_instance_data_count = cube_instance_data.len();
 	let mut selected_instance_buffer =
 		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("selected Instance Buffer"),
 			contents: bytemuck::cast_slice(&selected_instance_data),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-	let mut selected_instance_data_count = selected_instance_data.len();
+	// let mut selected_instance_data_count = selected_instance_data.len();
 
 	// let mut loaded_textures = false;
 	// let diffuse_texture_view: wgpu::TextureView; 
@@ -1823,17 +1822,21 @@ fn resize(
 
 // struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);
 
-fn chain_name_to_url(chain_name: &str) -> String {
-	let mut chain_name = chain_name.to_string();
-	if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
-		chain_name = format!("wss://{}", chain_name);
-	}
+fn chain_name_to_url(chain_names: &Vec<&str>) -> Vec<String> {
+	let mut results = Vec::new();
+	for chain_name in chain_names {
+		let mut chain_name = chain_name.to_string();
+		if !chain_name.starts_with("ws:") && !chain_name.starts_with("wss:") {
+			chain_name = format!("wss://{}", chain_name);
+		}
 
-	if chain_name[5..].contains(':') {
-		chain_name
-	} else {
-		format!("{chain_name}:443")
+		results.push(if chain_name[5..].contains(':') {
+			chain_name
+		} else {
+			format!("{chain_name}:443")
+		});
 	}
+	results
 }
 
 // // fn start_background_audio(asset_server: Res<AssetServer>, audio: Res<Audio>) {
@@ -2054,8 +2057,8 @@ fn source_data(
 				.as_slice()
 				.iter()
 				.enumerate()
-				.map(|(chain_index, (para_id, chain_name))| {
-					let url = chain_name_to_url(chain_name);
+				.map(|(chain_index, (para_id, chain_names))| {
+					let url = chain_name_to_url(chain_names);
 
 					// #[cfg(not(target_arch="wasm32"))]
 					// let para_id =
