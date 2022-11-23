@@ -40,7 +40,7 @@ fn vs_main(
     // Is texture?
     if model.color[2] == -2.0 {
         // TODO: inject this number
-        let offset = (1.0 / 40.0) * f32(instance.instance_color);
+        let offset = (1.0 / 45.0) * f32(instance.instance_color);
         out.color = vec4<f32>(model.color[0], offset + model.color[1], 0.0, 0.0);
     } else {
         out.color = vec4<f32>(model.color, 1.0) + (
@@ -54,10 +54,10 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Fog constants
-    let density = -(0.001 * 0.001);
+    let density = -(0.0004 * 0.001);
     let LOG2 = 1.442695;
     let log_density = density * LOG2;
-    //let fog_color = vec4<f32>(230./255. * 1.0,0.0,122./255. * 1.0,1.0);
+    // let fog_color = vec4<f32>(230./255. * 1.0,0.0,122./255. * 1.0,1.0);
     let fog_color = vec4<f32>(1.0,1.0,1.0,1.0);
 
     // Calc fog factor    
