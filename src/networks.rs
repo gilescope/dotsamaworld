@@ -173,7 +173,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str
 					(para_id!(1001), vec!["polkadot-collectives-rpc.polkadot.io"]),
 					//
 					// Auction Batch 1
-					(para_id!(2000), vec!["acala-rpc-0.aca-api.network", "acala.polkawallet.io"]),     // 1st auction winner
+					(para_id!(2000), vec!["acala-rpc-1.aca-api.network", "acala.polkawallet.io"]),     // 1st auction winner
 					(para_id!(2004), vec!["wss.api.moonbeam.network"]), // 2nd
 					(para_id!(2006), vec!["rpc.astar.network"]),    // 3rd
 					(para_id!(2012), vec!["rpc.parallel.fi"]),          // 4th

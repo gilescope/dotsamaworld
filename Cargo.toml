@@ -81,7 +81,7 @@ scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-b
     
 ], rev = "49987d24fb2a116cc4ecf39bb1d9b7506178db7d" }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
-polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "b558fb10407d53df8ba731c851c33c8f3df6b017" }
+polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "6008ee0f7fbf90975e458f2fae58889985d7eac5" }
 # polkadyn = { path = "/home/gilescope/git/polkadyn" }
 # desub = { git = "https://github.com/paritytech/desub/" }
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
