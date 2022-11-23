@@ -448,7 +448,7 @@ where
 					exts.push(entity);
 				}
 			} else {
-				log!("can't decode block ext {} {} because {:?}", i, &blockurl, decode_result);
+				log!("can't decode block ext {} {}", i, &blockurl);
 				exts.push(the_extrinsic.derived);
 			}
 		}
@@ -966,18 +966,18 @@ async fn process_extrinsic<'a, 'scale>(
 			},
 			(_, variant) => {
 				if variant.contains("batch") {
-					log!("found batch {:?}", payload);
+					// log!("found batch {:?}", payload);
 					if let Some(args) = payload.get("calls") {
 						for (_, instruction) in args {
 							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) =
 								instruction.only3()
 							{
-								log!(
-									"found batch instructionC {} {} {:?}",
-									inner_pallet,
-									inner_variant,
-									instruction
-								);
+								// log!(
+								// 	"found batch instructionC {} {} {:?}",
+								// 	inner_pallet,
+								// 	inner_variant,
+								// 	instruction
+								// );
 								children.push(DataEntity::Extrinsic {
 									args: vec![format!("{}", instruction)],
 									contains: vec![],

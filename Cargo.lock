@@ -1893,7 +1893,7 @@ dependencies = [
 [[package]]
 name = "polkadyn"
 version = "0.1.0"
-source = "git+https://github.com/gilescope/polkadyn?rev=cce7832ca6ec8ef044ccc2905807fd07a089610d#cce7832ca6ec8ef044ccc2905807fd07a089610d"
+source = "git+https://github.com/gilescope/polkadyn?rev=b558fb10407d53df8ba731c851c33c8f3df6b017#b558fb10407d53df8ba731c851c33c8f3df6b017"
 dependencies = [
  "frame-metadata",
  "getrandom",

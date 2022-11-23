@@ -184,7 +184,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str
 					(para_id!(2019), vec!["rpc.composable.finance"]),                   // 7th
 					(para_id!(2031), vec!["fullnode.parachain.centrifuge.io"]),         // 8th
 					(para_id!(2034), vec!["rpc.hydradx.cloud", "rpc-01.hydradx.io"]),                        // 9th
-					(para_id!(2032), vec![ "interlay.api.onfinality.io:443/public-ws"]), // 10th 
+					// (para_id!(2032), vec![ "interlay.api.onfinality.io:443/public-ws"]), // 10th 
 					(para_id!(2026), vec!["wss://nodle-parachain.api.onfinality.io:433/public-ws","eden-rpc.dwellir.com"]),                     // noodle 11th
 					// //
 					// // Auction Batch 3
