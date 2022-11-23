@@ -40,7 +40,7 @@ fn vs_main(
     // Is texture?
     if model.color[2] == -2.0 {
         // TODO: inject this number
-        let offset = (1.0 / 45.0) * f32(instance.instance_color);
+        let offset = (1.0 / 56.0) * f32(instance.instance_color);
         out.color = vec4<f32>(model.color[0], offset + model.color[1], 0.0, 0.0);
     } else {
         out.color = vec4<f32>(model.color, 1.0) + (

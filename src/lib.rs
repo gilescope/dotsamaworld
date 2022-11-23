@@ -594,7 +594,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// };
 	let mut camera = camera::Camera::new((-200.0, 100.0, 0.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
 	let mut projection =
-		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 4000.0);
+		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 400000.0);
 	let mut camera_controller = input::CameraController::new(4.0, 0.4);
 
 	let mut camera_uniform = CameraUniform::new();
@@ -722,9 +722,17 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		usage: wgpu::BufferUsages::INDEX,
 	});
 
+
+    // let r = 230./255.;
+	// let b = 122./255.;
+
+	// let c = as_rgba_u32(-10., -10., -10., 1.0);
+	let c = as_rgba_u32(0.0, 0.0, 0.0, 1.0);
 	let ground_instance_data: Vec<Instance> = vec![
-	// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color: as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
-	// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
+		// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color: as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
+		Instance{ position: [-ground_width/2.0,-500.,-ground_width/2.0], color: c },
+		Instance{ position: [-ground_width/2.0,500.,-ground_width/2.0], color: c  },
+		// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 
 	];
 
@@ -1422,12 +1430,24 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	map.insert((0,2092), index); index += 1;
 	map.insert((0,2095), index); index += 1;
 	map.insert((0,2096), index); index += 1;
+	map.insert((0,2097), index); index += 1;
 	map.insert((0,2100), index); index += 1;
+	map.insert((0,2102), index); index += 1;
 	map.insert((0,2101), index); index += 1;
 	map.insert((0,2105), index); index += 1;
 	map.insert((0,2106), index); index += 1;
 	map.insert((0,2107), index); index += 1;
+	map.insert((0,2110), index); index += 1;
+	map.insert((0,2113), index); index += 1;
 	map.insert((0,2114), index); index += 1;
+	map.insert((0,2115), index); index += 1;
+	map.insert((0,2118), index); index += 1;
+	map.insert((0,2119), index); index += 1;
+	map.insert((0,2121), index); index += 1;
+	map.insert((0,2123), index); index += 1;
+	map.insert((0,2124), index); index += 1;
+	map.insert((0,2125), index); index += 1;
+	map.insert((0,2129), index); index += 1;
 
 	map.insert((1, 0), index); index += 1;
 	map.insert((1, 1000), index); index += 1;
@@ -1443,15 +1463,16 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	map.insert((1, 2021), index); index += 1;
 	map.insert((1, 2026), index); index += 1;
 	// map.insert((1, 2031), index); index += 1;
-	// map.insert((1, 2032), index); index += 1;
-	// map.insert((1, 2034), index); index += 1;
-	// map.insert((1, 2035), index); index += 1;
-	// map.insert((1, 2037), index); index += 1;
+	map.insert((1, 2032), index); index += 1;
+	map.insert((1, 2034), index); index += 1;
+	map.insert((1, 2035), index); index += 1;
+	map.insert((1, 2037), index); index += 1;
 	//TODO: MAX height achieved!!! need to go wide...
 	// or have another texture buffer.
 
 	// images must be inserted in same order as they are in the map.
 
+	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
 	//sips -z 200 600 *.jpeg to format them all to same aspect.
 	let mut images = vec![];	
 	images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
@@ -1475,12 +1496,24 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	images.push(include_bytes!("../assets/branding/0-2092.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2095.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2096.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2097.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2100.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2102.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2101.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2105.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2106.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2107.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2110.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2113.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/0-2114.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2115.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2118.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2119.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2121.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2123.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2124.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2125.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/0-2129.jpeg").to_vec());
 
 	images.push(include_bytes!("../assets/branding/1.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-1000.jpeg").to_vec());
@@ -1496,10 +1529,10 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
 	// images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
-	// images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
-	// images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
-	// images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
-	// images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
 
 	//MAX: 16k for chrome, safari. 8k height for firefox.
 
