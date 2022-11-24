@@ -50,6 +50,11 @@ use {
 	winit::platform::web::WindowBuilderExtWebSys,
 };
 
+//Block space calculations:
+//TODO: free_weight = total weight of block - used weight 
+// average_extrinsic_weight = (total used weight / extrinsic count)
+// capacity extrinsics = free weight / average_extrinsic_weight
+
 // Define macros before mods
 macro_rules! log {
     // Note that this is using the `log` function imported above during
@@ -564,6 +569,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// Display the application
 
 	let mut frame_time = Utc::now().timestamp();
+	let mut tx_time = Utc::now().timestamp();
 	// let instance_buffer: wgpu::Buffer;
 
 	// let instance_buffer = device.create_buffer_init(
@@ -738,12 +744,14 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let mut chain_instance_data = vec![];
 	let mut block_instance_data = vec![];
-	let mut cube_instance_data = vec![];
+	let mut extrinsic_instance_data = vec![];
+	let mut event_instance_data = vec![];
 	let mut selected_instance_data = vec![];
 	let mut textured_instance_data: Vec<Instance> = vec![];
 
 
-	let mut cube_target_heights: Vec<f32> = vec![];
+	let mut extrinsic_target_heights: Vec<f32> = vec![];
+	let mut event_target_heights: Vec<f32> = vec![];
 	//let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
 	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -805,6 +813,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let mut frames = 0u64;
 	let mut fps = 0;
+	let mut tx = 0u64;
+	let mut tps = 0;
 
 	let initial_event = DataSourceChangedEvent {
 		//source: "dotsama:/1//10504599".to_string(),
@@ -876,10 +886,16 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			usage: wgpu::BufferUsages::VERTEX,
 		});
 	let mut block_instance_data_count = block_instance_data.len();
-	let mut cube_instance_buffer =
+	let mut extrinsic_instance_buffer =
 		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("cube Instance Buffer"),
-			contents: bytemuck::cast_slice(&cube_instance_data),
+			contents: bytemuck::cast_slice(&extrinsic_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+	let mut event_instance_buffer =
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("cube Instance Buffer"),
+			contents: bytemuck::cast_slice(&event_instance_data),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
 	// let mut cube_instance_data_count = cube_instance_data.len();
@@ -1039,7 +1055,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 							//TODO: push this non-crazyness higher!
 
 							//let location = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
-							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data, scale_x, scale_y, &size, location);
+							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, 
+								&extrinsic_instance_data, &event_instance_data, 
+								&mut selected_instance_data, scale_x, scale_y, &size, location);
 						}
 
 						let val = last_touch_location.entry(*id).or_insert((*location, now, None));
@@ -1052,7 +1070,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						if let ElementState::Pressed = state {
 							// If we're over an egui area we should not be trying to select anything.
 							if !platform.context().is_pointer_over_area() {
-								try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &cube_instance_data, &mut selected_instance_data,
+								try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, &extrinsic_instance_data, &event_instance_data, &mut selected_instance_data,
 								scale_x, scale_y, &size, &position);
 							} else {
 								log!("suppressing click as on egui");
@@ -1109,9 +1127,16 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					// log!("Got block {:?}", render_update.block_instances.len());
 					// log!("Got chain {:?}", render_update.count());
 
-					for (instance, height) in &render_update.cube_instances {
-						cube_instance_data.push(*instance);
-						cube_target_heights.push(*height);
+					for (instance, height) in &render_update.extrinsic_instances {
+						extrinsic_instance_data.push(*instance);
+						extrinsic_target_heights.push(*height);
+					}
+					
+					tx += render_update.extrinsic_instances.len() as u64;
+
+					for (instance, height) in &render_update.event_instances {
+						event_instance_data.push(*instance);
+						event_target_heights.push(*height);
 					}
 					//TODO: drain not clone!
 					block_instance_data.extend(render_update.block_instances.clone());
@@ -1136,12 +1161,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 					render_update.chain_instances.truncate(0);
 					render_update.block_instances.truncate(0);
-					render_update.cube_instances.truncate(0);
+					render_update.extrinsic_instances.truncate(0);
+					render_update.event_instances.truncate(0);
 					render_update.textured_instances.truncate(0);
 				}
 			}
 
-			rain(&mut cube_instance_data, &mut cube_target_heights);
+			//todo rain in gpu
+			rain(&mut extrinsic_instance_data, &mut extrinsic_target_heights);
+			rain(&mut event_instance_data, &mut event_target_heights);
 
 			// TODO: when refreshing a buffer can we append to it???
 			if ground_instance_data_count != ground_instance_data.len() {
@@ -1175,10 +1203,17 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			//TODO: at the moment we have to do this every time due to rain.
 			// if cube_instance_data_count != cube_instance_data.len() {
 				// cube_instance_data_count = cube_instance_data.len();
-				cube_instance_buffer =
+				extrinsic_instance_buffer =
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some("cube Instance Buffer"),
-					contents: bytemuck::cast_slice(&cube_instance_data),
+					contents: bytemuck::cast_slice(&extrinsic_instance_data),
+					usage: wgpu::BufferUsages::VERTEX,
+				});
+
+				event_instance_buffer =
+				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+					label: Some("cube Instance Buffer"),
+					contents: bytemuck::cast_slice(&event_instance_data),
 					usage: wgpu::BufferUsages::VERTEX,
 				});
 			// }
@@ -1220,6 +1255,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				&mut inspector,
 				&mut destination,
 				fps,
+				tps, 
 				selected_details,
 			);
 
@@ -1349,9 +1385,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					0..block_instance_data.len() as _,
 				);
 
-				// Draw cubes
-				render_pass.set_vertex_buffer(1, cube_instance_buffer.slice(..));
-				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..cube_instance_data.len() as _);
+				// Draw cubes - todo these draw calls can be combined.
+				render_pass.set_vertex_buffer(1, extrinsic_instance_buffer.slice(..));
+				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..extrinsic_instance_data.len() as _);
+				render_pass.set_vertex_buffer(1, event_instance_buffer.slice(..));
+				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..event_instance_data.len() as _);
 
 				render_pass.set_vertex_buffer(1, selected_instance_buffer.slice(..));
 				render_pass.draw_indexed(
@@ -1381,6 +1419,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				fps = frames as u32;
 				frames = 0;
 				frame_time = Utc::now().timestamp();
+			}
+			if Utc::now().timestamp() - tx_time > 12 {
+				tps = (tx / 12_u64) as u32;
+				tx = 0;
+				tx_time = Utc::now().timestamp();
 			}
 
 			egui_rpass.remove_textures(tdelta).expect("remove texture ok");
@@ -1695,7 +1738,8 @@ fn try_select(
 	camera: &camera::Camera,
 	projection: &camera::Projection,
 	opengl_to_wgpu_matrix_mat4: glam::Mat4,
-	cube_instance_data: &[Instance],
+	extrinsic_instance_data: &[Instance],
+	event_instance_data: &[Instance],
 	selected_instance_data: &mut Vec<Instance>,
 	scale_x: f32,
 	scale_y: f32,
@@ -1739,7 +1783,7 @@ fn try_select(
 	let selected = get_selected(
 		pos_clicked,
 		ray_direction_clicked,
-		cube_instance_data,
+		event_instance_data,
 		glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
 	);
 	log!("selected = {:?}", selected);
@@ -1754,7 +1798,27 @@ fn try_select(
 		selected_instance_data
 			.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
 
-		(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetDetails(index));
+		(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetEventDetails(index));
+	} else {
+		let selected = get_selected(
+			pos_clicked,
+			ray_direction_clicked,
+			extrinsic_instance_data,
+			glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
+		);
+		if let Some((index, instance)) = selected {
+			// ground_instance_data.push(Instance { position: near_clicked.into(), color:
+			// as_rgba_u32(0.3, 0.3, 0.3, 1.) });
+			let mut pos = instance.position;
+			pos[0] += -0.1;
+			pos[1] += -0.1;
+			pos[2] += -0.1;
+			selected_instance_data.clear();
+			selected_instance_data
+				.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
+
+			(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetExtrinsicDetails(index));
+		}
 	}
 }
 
@@ -2429,7 +2493,7 @@ pub struct MessageSource {
 	pub link_type: LinkType,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum LinkType {
 	Teleport,
 	ReserveTransfer,
@@ -2562,7 +2626,8 @@ pub fn timestamp_to_x(timestamp: i64) -> f32 {
 pub struct RenderUpdate {
 	chain_instances: Vec<Instance>,
 	block_instances: Vec<Instance>,
-	cube_instances: Vec<(Instance, f32)>,
+	extrinsic_instances: Vec<(Instance, f32)>,
+	event_instances: Vec<(Instance, f32)>,
 	textured_instances: Vec<Instance>,
 	basetime: Option<NonZeroI64>,
 }
@@ -2571,14 +2636,16 @@ pub struct RenderUpdate {
 pub struct RenderDetails {
 	chain_instances: Vec<Details>,
 	block_instances: Vec<Details>,
-	cube_instances: Vec<Details>,
+	extrinsic_instances: Vec<Details>,
+	event_instances: Vec<Details>,
 }
 
 impl RenderUpdate {
 	fn extend(&mut self, update: RenderUpdate) {
 		self.chain_instances.extend(update.chain_instances);
 		self.block_instances.extend(update.block_instances);
-		self.cube_instances.extend(update.cube_instances);
+		self.extrinsic_instances.extend(update.extrinsic_instances);
+		self.event_instances.extend(update.event_instances);
 		self.textured_instances.extend(update.textured_instances);
 		if update.basetime.is_some() {
 			self.basetime = update.basetime;
@@ -2592,7 +2659,8 @@ impl RenderUpdate {
 	fn count(&self) -> usize {
 		self.chain_instances.len() +
 		self.block_instances.len() +
-		self.cube_instances.len() +
+		self.extrinsic_instances.len() +
+		self.event_instances.len() +
 		self.textured_instances.len()
 	}
 }
@@ -2601,7 +2669,8 @@ impl RenderDetails {
 	fn extend(&mut self, update: RenderDetails) {
 		self.chain_instances.extend(update.chain_instances);
 		self.block_instances.extend(update.block_instances);
-		self.cube_instances.extend(update.cube_instances);
+		self.extrinsic_instances.extend(update.extrinsic_instances);
+		self.event_instances.extend(update.event_instances);
 	}
 }
 
@@ -2902,7 +2971,8 @@ fn render_block(
 				// &mut polylines,
 				// &encoded,
 				// &mut handles,
-				&mut render.cube_instances,
+				&mut render.extrinsic_instances,
+				&mut render.event_instances,
 				render_details, // &mut event_dest, // &mut event_instances,
 			);
 
@@ -2918,7 +2988,8 @@ fn render_block(
 				// &mut polylines,
 				// &encoded,
 				// &mut handles,
-				&mut render.cube_instances,
+				&mut render.extrinsic_instances,
+				&mut render.event_instances,
 				render_details, // &mut event_dest, // &mut event_instances,
 			);
 			//event.send(RequestRedraw);
@@ -2978,6 +3049,7 @@ fn add_blocks(
 	// polylines: &mut ResMut<Assets<Polyline>>,
 	// encoded: &str,
 	extrinsic_instances: &mut Vec<(Instance, f32)>,
+	event_instances: &mut Vec<(Instance, f32)>,
 	render_details: &mut RenderDetails,
 ) {
 	let rflip = chain_info.chain_url.rflip();
@@ -3036,7 +3108,9 @@ fn add_blocks(
 				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
 				// let mut create_source = vec![];
+				
 				for (link, _link_type) in block.end_link() {
+					log!("end link typw {:?}!", _link_type);
 					//if this id already exists then this is the destination, not the source...
 					for id in links.iter() {
 						if id.id == *link {
@@ -3133,7 +3207,7 @@ fn add_blocks(
 				// extrinsic_details.url = format!("https://polkadot.subscan.io/extrinsic/{}-{}",
 				// extrinsic_details.doturl.block_number.unwrap(),
 				// extrinsic_details.doturl.extrinsic.unwrap());
-				render_details.cube_instances.push(block.details().clone());
+				render_details.extrinsic_instances.push(block.details().clone());
 
 
 				// for source in create_source {
@@ -3202,7 +3276,7 @@ fn add_blocks(
 			next_y[event_num % 81] += DOT_HEIGHT; // * height;
 
 			let (x, y, z) = (px, rain_height[event_num % 81] * build_dir, pz * rflip);
-			extrinsic_instances.push((
+			event_instances.push((
 				Instance {
 					position: glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into(),
 					// scale: base_y + target_y * build_dir,
@@ -3217,7 +3291,7 @@ fn add_blocks(
 			// details.doturl.block_number.unwrap(),
 			// block_event_index);
 
-			render_details.cube_instances.push(entity.details.clone());
+			render_details.event_instances.push(entity.details.clone());
 
 			for (link, link_type) in &event.start_link {
 				// println!("inserting source of rainbow (an event)!");
@@ -3790,7 +3864,8 @@ pub mod html_body {
 pub enum BridgeMessage {
 	SetDatasource(Sovereigns, Option<DotUrl>, u32), //data epoc
 	GetNewBlocks,
-	GetDetails(u32),
+	GetExtrinsicDetails(u32),
+	GetEventDetails(u32),
 }
 
 //from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE

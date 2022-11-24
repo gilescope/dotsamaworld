@@ -121,7 +121,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str
 					(Some(2090), vec!["basilisk-rpc.dwellir.com"]),      // 8th
 					(Some(2088), vec!["fullnode.altair.centrifuge.io"]), //9th
 					(Some(2085), vec!["heiko-rpc.parallel.fi"]),         // 10th
-					(Some(2092), vec!["kintsugi.api.onfinality.io:443/public-ws", "api-kusama.interlay.io:443/parachain", "kintsugi-rpc.dwellir.com"]),      // 11th
+					(Some(2092), vec!["wss://api-kusama.interlay.io:443/parachain","wss://kintsugi.api.onfinality.io:443/public-ws",  "kintsugi-rpc.dwellir.com"]),      // 11th
 					// //
 					// kusama Auction Batch 3
 					(Some(2087), vec!["picasso-rpc.composable.finance"]), // 12th

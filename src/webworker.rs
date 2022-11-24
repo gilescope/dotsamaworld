@@ -68,9 +68,15 @@ impl Worker for IOWorker {
 					scope.respond(id, WorkerResponse::RenderUpdate(results));
 				}
 			},
-			BridgeMessage::GetDetails(cube_index) => {
+			BridgeMessage::GetEventDetails(cube_index) => {
 				let details =
-					DETAILS.lock().unwrap().cube_instances[cube_index as usize].clone();
+					DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
+				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
+			},
+			BridgeMessage::GetExtrinsicDetails(cube_index) => {
+				let details =
+					DETAILS.lock().unwrap().extrinsic_instances[cube_index as usize].clone();
 				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
 				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},

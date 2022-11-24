@@ -33,6 +33,7 @@ pub fn ui_bars_system(
 	inspector: &mut Inspector,
 	destination: &mut Destination,
 	fps: u32,
+	tps: u32,
 	selected_details: Option<(u32, Details, ChainInfo)>,
 ) {
 	if selected_details.is_some() {
@@ -329,8 +330,8 @@ pub fn ui_bars_system(
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
 					ui.heading(format!(
-						"{:03.0} fps. x={:03.0} y={:03.0} z={:03.0} {} ",
-						fps, x, y, z, newdate
+						"{:03.0} tps. {:03.0} fps. x={:03.0} y={:03.0} z={:03.0} {} ",
+						tps, fps, x, y, z, newdate
 					));
 				});
 			});
