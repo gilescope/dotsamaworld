@@ -1456,17 +1456,27 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	map.insert((1, 2002), index); index += 1;
 	map.insert((1, 2004), index); index += 1;
 	map.insert((1, 2006), index); index += 1;
+	map.insert((1, 2007), index); index += 1;
 	map.insert((1, 2011), index); index += 1;
 	map.insert((1, 2012), index); index += 1;
 	map.insert((1, 2013), index); index += 1;
 	map.insert((1, 2019), index); index += 1;
 	map.insert((1, 2021), index); index += 1;
 	map.insert((1, 2026), index); index += 1;
-	// map.insert((1, 2031), index); index += 1;
+	map.insert((1, 2030), index); index += 1;
+	map.insert((1, 2031), index); index += 1;
 	map.insert((1, 2032), index); index += 1;
 	map.insert((1, 2034), index); index += 1;
 	map.insert((1, 2035), index); index += 1;
 	map.insert((1, 2037), index); index += 1;
+	map.insert((1, 2039), index); index += 1;
+	map.insert((1, 2043), index); index += 1;
+	map.insert((1, 2046), index); index += 1;
+	map.insert((1, 2048), index); index += 1;
+	map.insert((1, 2051), index); index += 1;
+	map.insert((1, 2052), index); index += 1;
+	map.insert((1, 2086), index); index += 1;
+
 	//TODO: MAX height achieved!!! need to go wide...
 	// or have another texture buffer.
 
@@ -1522,17 +1532,26 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	images.push(include_bytes!("../assets/branding/1-2002.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2004.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2006.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2007.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2011.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2012.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2013.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2019.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
-	// images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2030.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
 	images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2039.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2043.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2046.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2048.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2051.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2052.jpeg").to_vec());
+	images.push(include_bytes!("../assets/branding/1-2086.jpeg").to_vec());
 
 	//MAX: 16k for chrome, safari. 8k height for firefox.
 
