@@ -343,18 +343,21 @@ pub fn ui_bars_system(
 use egui::Ui;
 
 fn open_url(url: &str) {
-	let window = web_sys::window().unwrap();
-	let agent = window.navigator().user_agent().unwrap();
-	log!("agent {}", agent);
-	if agent.contains("Safari") {
-		if let Err(e) = window.location().assign(url)
-		{
-			log!("Error opening link {:?}", e);
-		}
-	} else {
-		if let Err(e) = web_sys::window().unwrap().open_with_url(url)
-		{
-			log!("Error opening link {:?}", e);
+	#[cfg(target_family = "wasm")]
+	{
+		let window = web_sys::window().unwrap();
+		let agent = window.navigator().user_agent().unwrap();
+		log!("agent {}", agent);
+		if agent.contains("Safari") {
+			if let Err(e) = window.location().assign(url)
+			{
+				log!("Error opening link {:?}", e);
+			}
+		} else {
+			if let Err(e) = web_sys::window().unwrap().open_with_url(url)
+			{
+				log!("Error opening link {:?}", e);
+			}
 		}
 	}
 }

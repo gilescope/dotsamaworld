@@ -8,11 +8,10 @@ resolver = "2"
 default-run = "app"
 
 [features]
-default = ["normalmouse"]
+default = []
 # 3d mouse support (it's best not to have both features enabled at once).
 spacemouse = []
-normalmouse = []
-adaptive-fps = []
+bake = ["jpeg-encoder"]
 
 [dependencies]
 glam = "*"
@@ -94,6 +93,7 @@ egui = { version = "0.19", default-features = false }
 # image = { version = "0.24", features = ["jpeg"], default-features = false }
 
 jpeg-decoder = { version = "0.3", default-features = false }
+jpeg-encoder = {version = "*", optional = true }
 
 # bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
 # bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }

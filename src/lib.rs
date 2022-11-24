@@ -36,7 +36,6 @@ use std::{
 	},
 	time::Duration,
 };
-use webworker::WorkerResponse;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
 	dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
@@ -44,10 +43,15 @@ use winit::{
 	event_loop::EventLoop,
 	window::{Window, WindowId},
 };
+use jpeg_decoder::Decoder;
+
 #[cfg(target_arch = "wasm32")]
 use {
 	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
 	winit::platform::web::WindowBuilderExtWebSys,
+	wasm_bindgen_futures::JsFuture,
+	web_sys::Response,
+	webworker::WorkerResponse,
 };
 
 //Block space calculations:
@@ -396,10 +400,15 @@ impl Instance {
 }
 
 async fn async_main() -> std::result::Result<(), ()> {
+	#[cfg(target_family = "wasm")]
 	let url = web_sys::window().unwrap()
         .location()
        .search().expect("no search exists");
+	#[cfg(not(target_family = "wasm"))]
+	let url = "";
+
 	let url = url::Url::parse(&format!("http://dotsama.world/{}", url)).unwrap();
+
 	let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
 	
 	log!("url : {:?}", params.get("env"));
@@ -468,7 +477,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 	#[cfg(target_family = "wasm")]
 	wasm_bindgen_futures::spawn_local(run(event_loop, window, params));
 	#[cfg(not(target_family = "wasm"))]
-	run(event_loop, window).await;
+	run(event_loop, window, params).await;
 
 	log!("event loop finished");
 	Ok::<(), ()>(())
@@ -1443,11 +1452,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler,
 	HashMap<(u32,u32), usize>
 ) {
-	use wasm_bindgen_futures::JsFuture;
-	use web_sys::Response;
-	use jpeg_decoder::Decoder;
 	// let chain_str = "0-2000";//details.doturl.chain_str();
-	let window = web_sys::window().unwrap();
+	// let window = web_sys::window().unwrap();
 	let mut width = 0;
 	let mut height = 0;
 	let mut map = HashMap::new();
@@ -1528,73 +1534,81 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
 	//sips -z 200 600 *.jpeg to format them all to same aspect.
 	let mut images = vec![];	
-	images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-1001.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2000.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2001.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2004.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2007.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2011.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2012.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2015.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2023.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2048.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2084.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2085.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2086.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2087.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2088.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2090.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2092.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2095.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2096.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2097.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2100.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2102.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2101.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2105.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2106.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2107.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2110.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2113.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2114.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2115.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2118.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2119.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2121.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2123.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2124.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2125.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/0-2129.jpeg").to_vec());
+	#[cfg(feature = "raw_images")]
+	{
+		images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-1001.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2000.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2001.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2004.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2007.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2011.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2012.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2015.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2023.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2048.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2084.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2085.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2086.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2087.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2088.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2090.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2092.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2095.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2096.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2097.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2100.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2102.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2101.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2105.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2106.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2107.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2110.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2113.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2114.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2115.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2118.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2119.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2121.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2123.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2124.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2125.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-2129.jpeg").to_vec());
 
-	images.push(include_bytes!("../assets/branding/1.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-1000.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-1001.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2000.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2002.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2004.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2006.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2007.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2011.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2012.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2013.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2019.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2030.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2039.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2043.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2046.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2048.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2051.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2052.jpeg").to_vec());
-	images.push(include_bytes!("../assets/branding/1-2086.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-1000.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-1001.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2000.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2002.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2004.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2006.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2007.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2011.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2012.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2013.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2019.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2021.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2026.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2030.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2031.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2032.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2034.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2035.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2037.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2039.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2043.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2046.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2048.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2051.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2052.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/1-2086.jpeg").to_vec());
+	}
+
+	#[cfg(not(feature = "raw_images"))]
+	{
+		images.push(include_bytes!("../assets/branding/baked.jpeg").to_vec());
+	}
 
 	//MAX: 16k for chrome, safari. 8k height for firefox.
 
@@ -1677,6 +1691,18 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	}
 	log!("found images {found}");
 	let diffuse_rgba = diffuse_rgba2.as_slice();
+	
+	#[cfg(feature = "bake")]
+	{
+		let diffuse_rgba : Vec<u8> = diffuse_rgba.iter().enumerate().filter_map(|(i,pixel)|
+			if i % 4 == 3 { None } else { Some(*pixel) }
+		).collect();
+		use jpeg_encoder::{Encoder, ColorType};
+		let mut encoder = Encoder::new_file("some.jpeg", 90).unwrap();
+		encoder.encode(&diffuse_rgba[..], width as u16, height as u16, ColorType::Rgb).unwrap();
+		println!("hi");
+		panic!("done");
+	}
 
 	let texture_size = wgpu::Extent3d {
 		width,
@@ -1978,9 +2004,9 @@ fn chain_name_to_url(chain_names: &Vec<&str>) -> Vec<String> {
 // struct SourceDataTask(bevy_tasks::FakeTask);
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn send_it_to_desktop(update: RenderUpdate) {
+async fn send_it_to_desktop(update: (RenderUpdate, RenderDetails)) {
 	// log!("Got some results....! yay they're already in the right place. {}", blocks.len());
-	UPDATE_QUEUE.lock().unwrap().extend(update);
+	UPDATE_QUEUE.lock().unwrap().extend(update.0);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -2266,7 +2292,7 @@ fn do_datasources(sovereigns: Sovereigns, as_of: Option<DotUrl>) {
 	for relay in sovereigns.relays.into_iter() {
 		let mut relay2: Vec<(ChainInfo, _)> = vec![];
 		let mut send_map: HashMap<
-			NonZeroU32,
+			u32,
 			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
 		> = Default::default();
 		for chain in relay.into_iter() {
