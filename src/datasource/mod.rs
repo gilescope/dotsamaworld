@@ -1775,23 +1775,23 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn test_decode_blockweight2() {
-		let weight = hex::decode("b2ff891700000007d12da07f8600").unwrap();
-		// 8 8 8 8 8 8
-		//  
-/*		weights: FrameSupportDispatchPerDispatchClassWeight {
-	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
-	 hex: 
-*/
-		for i in 0..6 {
-			let size= 4;
-			let j = i * size;
-			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
-			println!("{:?}", d);
-			if d.is_err() {
-				panic!("stopped at {}", i);
-			}
-		}
-	}
+// 	#[test]
+// 	fn test_decode_blockweight2() {
+// 		let weight = hex::decode("b2ff891700000007d12da07f8600").unwrap();
+// 		// 8 8 8 8 8 8
+// 		//  
+// /*		weights: FrameSupportDispatchPerDispatchClassWeight {
+// 	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
+// 	 hex: 
+// */
+// 		for i in 0..6 {
+// 			let size= 4;
+// 			let j = i * size;
+// 			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
+// 			println!("{:?}", d);
+// 			if d.is_err() {
+// 				panic!("stopped at {}", i);
+// 			}
+// 		}
+// 	}
 }
