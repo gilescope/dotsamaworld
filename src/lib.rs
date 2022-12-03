@@ -157,6 +157,7 @@ pub struct ChainInfo {
 	// Negative is other direction from center.
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
+	pub chain_name: String,
 }
 
 pub struct DataSourceChangedEvent {
@@ -491,6 +492,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// };
 	let ground_width = 1000000.0f32;
 	let touch_sensitivity = 2.0f64;
+	let sample_count = 1;
 
 	let mut q = params.get("q").unwrap_or(&"dotsama:live".to_string()).clone();
 	if !q.contains(':') {
@@ -637,7 +639,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
-                            multisampled: false,
+                            multisampled: sample_count > 1,
                             view_dimension: wgpu::TextureViewDimension::D2,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
@@ -681,7 +683,6 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		label: Some("camera_bind_group"),
 	});
 
-	let sample_count = 1;
 	let mut depth_texture = texture::Texture::create_depth_texture(
 		&device,
 		&surface_config,
@@ -919,6 +920,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// let mut loaded_textures = false;
 	// let diffuse_texture_view: wgpu::TextureView; 
 	// let diffuse_sampler : wgpu::Sampler;
+
+	// Don't try and select something if your in the middle of moving
+	let mut last_movement_time = Utc::now();
 	event_loop.run(move |event, _, _control_flow| {
 		let now = Utc::now();
 
@@ -983,12 +987,13 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					// 	false
 					// };
 					if !touch_in_egui {
+						// Are two fingers being used? (pinch to zoom / rotate)
 						let mut our_finger = None;
 						let mut other_finger = None;
 						for (other_id, (last_touch_location, last_time, previous)) in last_touch_location.iter() {
 							if let Some((prev_loc, prev_time)) = previous {
-								if (now - *last_time).num_milliseconds() < 500
-								&& (now - *prev_time).num_milliseconds() < 1000 {
+								if (now - *last_time).num_milliseconds() < 200
+								&& (now - *prev_time).num_milliseconds() < 500 {
 									if other_id != id {
 										other_finger = Some((last_touch_location, prev_loc));
 									} else {
@@ -999,7 +1004,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						}
 
 						// We have previous and current locations of two fingers.
-						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
+						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {						
 							let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
 								let x_diff = loc1.x - loc2.x;
 								let y_diff = loc1.y - loc2.y;
@@ -1007,6 +1012,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 							};
 							let cur_dist = dist(cur1, cur2);
 							let prev_dist = dist(prev1, prev2);
+							//TODO: if dist less than X then it's a 2 fingers together
+							// rotate if that.
 
 							//TODO: could use pressure to boost?
 							if cur_dist > prev_dist {
@@ -1023,6 +1030,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 							*SELECTED.lock().unwrap() = None;
 							selected_instance_data.clear();
 						} else {
+
+							//TODO: distingush from one finger touch move and a select.
+
+							// one finger move touch.
 							log!("Touch! {:?}", &location);
 							// if *id == 0 {
 							if let Some((last_touch_location, last_time, _prev)) = last_touch_location.get(id) {
@@ -1030,7 +1041,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 									// LOL Gotcha: touch y 0 starts from the bottom!
 
 									let x_diff = last_touch_location.x - location.x;
-									let y_diff = last_touch_location.y - location.y;
+									let y_diff = last_touch_location.y - location.y;	
+									
+									// If the distance is small then this is the continuation of a move
+									// rather than a new touch.
 									if x_diff.abs() + y_diff.abs() < 200. {
 										// camera_controller.rotate_horizontal -= (x_diff / touch_sensitivity) as f32;
 										// camera_controller.rotate_vertical += (y_diff / touch_sensitivity) as f32;
@@ -1059,11 +1073,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 										per_frame_horiz, millies_elapsed );
 									}
 								}
-							} //else {
+							}
 
-							//TODO: push this non-crazyness higher!
-
-							//let location = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
 							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, 
 								&extrinsic_instance_data, &event_instance_data, 
 								&mut selected_instance_data, scale_x, scale_y, &size, location);
@@ -2201,7 +2212,7 @@ fn source_data(
 				.as_slice()
 				.iter()
 				.enumerate()
-				.map(|(chain_index, (para_id, chain_names))| {
+				.map(|(chain_index,  (para_id,chain_name, chain_names))| {
 					let url = chain_name_to_url(chain_names);
 
 					// #[cfg(not(target_arch="wasm32"))]
@@ -2227,6 +2238,7 @@ fn source_data(
 						} else {
 							(chain_index + 2) as isize
 						},
+						chain_name: chain_name.clone(),
 						chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
 						// chain_name: parachain_name,
 					}

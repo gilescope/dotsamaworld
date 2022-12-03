@@ -51,14 +51,14 @@ impl Env {
 
 
 /// Return the network(s) to visulise
-pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str>)>> {
+pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, String, Vec<&'static str>)>> {
 	match selected_env {
 		Env::Test => {
 			vec![
 				vec![
-					(None, vec!["westend-rpc.polkadot.io"]),
-					(Some(1000), vec!["westmint-rpc.polkadot.io"]),
-					(Some(1001), vec!["westend-collectives-rpc.polkadot.io"]),
+					(None, "Westend".into(), vec!["westend-rpc.polkadot.io"]),
+					(Some(1000), "Westmint".into(), vec!["westmint-rpc.polkadot.io"]),
+					(Some(1001), "Collectives".into(), vec!["westend-collectives-rpc.polkadot.io"]),
 					// (Some(2000), "fullnode-collator.charcoal.centrifuge.io"),
 					// (Some(2000), "teerw1.integritee.network"),
 					// (Some(2000), "westend.kylin-node.co.uk"),
@@ -104,130 +104,130 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str
 			vec![
 				vec![
 					// Ordering should really be done on who won the auction first!
-					(None, vec!["kusama-rpc.polkadot.io"]),
-					(Some(1000), vec!["statemine-rpc.polkadot.io"]),
+					(None, "Kusama".into(), vec!["kusama-rpc.polkadot.io"]),
+					(Some(1000), "Statemine".into() ,vec!["statemine-rpc.polkadot.io"]),
 					// (Some(1001), "kusama.api.encointer.org"),
 					// //
 					// kusama Auction Batch 1
-					(Some(2000), vec!["karura-rpc-0.aca-api.network"]), // 1st
-					(Some(2023), vec!["wss.api.moonriver.moonbeam.network"]), // 2nd.
-					(Some(2007), vec!["rpc.shiden.astar.network"]),     // 3rd
-					(Some(2004), vec!["khala-api.phala.network/ws"]),   // 4th
-					(Some(2001), vec!["hk.p.bifrost-rpc.liebi.com/ws"]), // 5th
+					(Some(2000), "Karura".into(), vec!["karura-rpc-0.aca-api.network"]), // 1st
+					(Some(2023), "Moonriver".into(), vec!["wss.api.moonriver.moonbeam.network"]), // 2nd.
+					(Some(2007), "Shiden".into(), vec!["rpc.shiden.astar.network"]),     // 3rd
+					(Some(2004), "Khala".into(), vec!["khala-api.phala.network/ws"]),   // 4th
+					(Some(2001), "Bifrost".into(), vec!["hk.p.bifrost-rpc.liebi.com/ws"]), // 5th
 					// //
 					// kusama Auction Batch 2
-					(Some(2086), vec!["kilt-rpc.dwellir.com"]),          // 6th
-					(Some(2084), vec!["ws.calamari.systems", "calamari-rpc.dwellir.com"]),      // 7th
-					(Some(2090), vec!["basilisk-rpc.dwellir.com"]),      // 8th
-					(Some(2088), vec!["fullnode.altair.centrifuge.io"]), //9th
-					(Some(2085), vec!["heiko-rpc.parallel.fi"]),         // 10th
-					(Some(2092), vec!["wss://api-kusama.interlay.io:443/parachain","wss://kintsugi.api.onfinality.io:443/public-ws",  "kintsugi-rpc.dwellir.com"]),      // 11th
+					(Some(2086), "Kilt".into(), vec!["kilt-rpc.dwellir.com"]),          // 6th
+					(Some(2084), "Calamari".into(), vec!["ws.calamari.systems", "calamari-rpc.dwellir.com"]),      // 7th
+					(Some(2090), "Basilisk".into(), vec!["basilisk-rpc.dwellir.com"]),      // 8th
+					(Some(2088), "Altair".into(), vec!["fullnode.altair.centrifuge.io"]), //9th
+					(Some(2085), "Heiko".into(), vec!["heiko-rpc.parallel.fi"]),         // 10th
+					(Some(2092), "Kintsugi".into(), vec!["wss://api-kusama.interlay.io:443/parachain","wss://kintsugi.api.onfinality.io:443/public-ws",  "kintsugi-rpc.dwellir.com"]),      // 11th
 					// //
 					// kusama Auction Batch 3
-					(Some(2087), vec!["picasso-rpc.composable.finance"]), // 12th
-					(Some(2097), vec!["pioneer.api.onfinality.io/public-ws", "pioneer-1-rpc.bit.country"]),      // 13th
-					(Some(2095), vec!["us-ws-quartz.unique.network"]),    // 14th
+					(Some(2087), "Picasso".into(), vec!["picasso-rpc.composable.finance"]), // 12th
+					(Some(2097), "Pioneer".into(), vec!["pioneer.api.onfinality.io/public-ws", "pioneer-1-rpc.bit.country"]),      // 13th
+					(Some(2095), "Unique".into(), vec!["us-ws-quartz.unique.network"]),    // 14th
 					// //15th genshiro
 
 					// kusama Auction Batch 4
-					(Some(2100), vec!["para.f3joule.space", "para.subsocial.network"]),    // 16th
-					(Some(2101), vec!["zeitgeist-rpc.dwellir.com"]), // 17th
+					(Some(2100), "SubSocial".into(), vec!["para.f3joule.space", "para.subsocial.network"]),    // 16th
+					(Some(2101), "Zeitgeist".into(), vec!["zeitgeist-rpc.dwellir.com"]), // 17th
 					//Sakura 18th
-					(Some(2012), vec!["rpc-shadow.crust.network"]), // 19th
-					(Some(2048), vec!["kusama.rpc.robonomics.network"]), // 20th
+					(Some(2012), "CrustShadow".into(), vec!["rpc-shadow.crust.network"]), // 19th
+					(Some(2048), "Robonomics".into(), vec!["kusama.rpc.robonomics.network"]), // 20th
 					// //
 					// kusama Auction Batch 5
-					(Some(2015), vec!["kusama.api.integritee.network"]), // 21st
-					(Some(2105), vec!["crab-parachain-rpc.darwinia.network"]), // 22nd
-					(Some(2106), vec!["rpc.litmus-parachain.litentry.io"]), // 23rd
+					(Some(2015), "Integritee".into(), vec!["kusama.api.integritee.network"]), // 21st
+					(Some(2105), "Crab".into(), vec!["crab-parachain-rpc.darwinia.network"]), // 22nd
+					(Some(2106), "LitEntry".into(), vec!["rpc.litmus-parachain.litentry.io"]), // 23rd
 					//"ws.parachain-collator-1.c1.sora2.soramitsu.co.jp", // 24th
-					(Some(2107), vec!["rpc.kico.dico.io", "rpc.api.kico.dico.io"]), // 25th
+					(Some(2107), "Kiko".into(), vec!["rpc.kico.dico.io", "rpc.api.kico.dico.io"]), // 25th
 					// //
 					// kusama Auction Batch 6
-					(Some(2110), vec!["prod-kusama-collator-01.mangatafinance.cloud"]), // 26th
+					(Some(2110), "Mangata".into(), vec!["prod-kusama-collator-01.mangatafinance.cloud"]), // 26th
 					// // 27th renewal moonriver
 					// // 28th renewal kilt 
 					// // 29th renewal karura
-					(Some(2114), vec!["rpc.turing.oak.tech"]), // 30th Oak Turing network
+					(Some(2114), "Turing".into(), vec!["rpc.turing.oak.tech"]), // 30th Oak Turing network
 															
 					// kusama Auction Batch 7
-					(Some(2102), vec!["wss://pichiu.api.onfinality.io:443/public-ws"]), // * 31st not online yet
+					(Some(2102), "Pichiu".into(), vec!["wss://pichiu.api.onfinality.io:443/public-ws"]), // * 31st not online yet
 					// * 32nd renewal khala
-					(Some(2115), vec!["kusama.dorafactory.org"]), // * Dora Factory 33rd
+					(Some(2115), "Dora".into(), vec!["kusama.dorafactory.org"]), // * Dora Factory 33rd
 					// * 34nd renewal bifrost
 					// * 35nd renewal shiden
 
 					// kusama Auction Batch 8
-					(Some(2118), vec!["wss.mainnet.listen.io"]),//* Listen 36th 
-					(Some(2119), vec!["wss://bajun.api.onfinality.io:443/public-ws"]),//* 37th Bajun 
-					(Some(2113), vec!["kabocha.jelliedowl.net"]), // 38th Kabocha
+					(Some(2118), "Listen".into(), vec!["wss.mainnet.listen.io"]),//* Listen 36th 
+					(Some(2119), "Bajun".into(), vec!["wss://bajun.api.onfinality.io:443/public-ws"]),//* 37th Bajun 
+					(Some(2113), "Kabocha".into(), vec!["kabocha.jelliedowl.net"]), // 38th Kabocha
 					// (Some(2116), vec![]),// 39th Tanganika Network
-					(Some(2121), vec!["imbue-kusama.imbue.network"]),// 40th Imbue network
+					(Some(2121), "Imbue".into(), vec!["imbue-kusama.imbue.network"]),// 40th Imbue network
 					//41: Calimari renewal
 
 					// kusama auction batch 9
-					(Some(2124), vec!["rpc-amplitude.pendulumchain.tech"]),// 42: Amplitude
-					(Some(2125), vec!["tinker.invarch.network"]),// 43: Tinkernet
+					(Some(2124), "Amplitude".into(), vec!["rpc-amplitude.pendulumchain.tech"]),// 42: Amplitude
+					(Some(2125), "Tinker".into(), vec!["tinker.invarch.network"]),// 43: Tinkernet
 					// 44: renewal kinsugi
 					// 45: renewal heiko finance
 					// 46: renewal Altair
 					// 47: renewal Basilisk
 
 					// Kusama Auction Batch 10
-					(Some(2123), vec!["intern.gmordie.com"]),// 48: GM Parachain
+					(Some(2123), "GM".into(), vec!["intern.gmordie.com"]),// 48: GM Parachain
 					// 49: parathread 2130
 					// 50: renewal subsocial
-					(Some(2129), vec!["snow-rpc.icenetwork.io"]),// 51: Snow
+					(Some(2129), "Snow".into(), vec!["snow-rpc.icenetwork.io"]),// 51: Snow
 					// 52: renewal bit.country
 				],
 				vec![
 					// TODO: how can we dynamically discover
 					// nodes we can hit? - can we track back to the
 					// collator ip?
-					(None, vec!["rpc.polkadot.io"]),
-					(Some(1000), vec!["statemint-rpc.polkadot.io"]), //1st parachain.
-					(Some(1001), vec!["polkadot-collectives-rpc.polkadot.io"]),
+					(None, "Polkadot".into(), vec!["rpc.polkadot.io"]),
+					(Some(1000), "Statemint".into(), vec!["statemint-rpc.polkadot.io"]), //1st parachain.
+					(Some(1001), "Collectives".into(), vec!["polkadot-collectives-rpc.polkadot.io"]),
 					//
 					// polkadot Auction Batch 1
-					(Some(2000), vec!["acala-rpc-1.aca-api.network", "acala.polkawallet.io"]),     // 1st auction winner
-					(Some(2004), vec!["wss.api.moonbeam.network"]), // 2nd
-					(Some(2006), vec!["rpc.astar.network"]),    // 3rd
-					(Some(2012), vec!["rpc.parallel.fi"]),          // 4th
+					(Some(2000), "Acala".into(), vec!["acala-rpc-1.aca-api.network", "acala.polkawallet.io"]),     // 1st auction winner
+					(Some(2004), "Moonbeam".into(), vec!["wss.api.moonbeam.network"]), // 2nd
+					(Some(2006), "Astar".into(), vec!["rpc.astar.network"]),    // 3rd
+					(Some(2012), "Parallel".into(), vec!["rpc.parallel.fi"]),          // 4th
 					// //(Some(2002), vec!["rpc-para.clover.finance"),  // 5th - closed.
 					// //
 					// polkadot Auction Batch 2
-					(Some(2021), vec!["rpc.efinity.io"]),                           // 6th
-					(Some(2019), vec!["rpc.composable.finance"]),                   // 7th
-					(Some(2031), vec!["fullnode.parachain.centrifuge.io"]),         // 8th
-					(Some(2034), vec!["rpc.hydradx.cloud", "rpc-01.hydradx.io"]),                        // 9th
+					(Some(2021), "efinity".into(), vec!["rpc.efinity.io"]),                           // 6th
+					(Some(2019), "Composable".into(), vec!["rpc.composable.finance"]),                   // 7th
+					(Some(2031), "Centrifuge".into(), vec!["fullnode.parachain.centrifuge.io"]),         // 8th
+					(Some(2034), "HydraDX".into(),vec!["rpc.hydradx.cloud", "rpc-01.hydradx.io"]),                        // 9th
 					// (Some(2032), vec![ "interlay.api.onfinality.io:443/public-ws"]), // 10th 
-					(Some(2026), vec!["wss://nodle-parachain.api.onfinality.io:443/public-ws","eden-rpc.dwellir.com"]),                     // noodle 11th
+					(Some(2026), "Noodle".into(), vec!["wss://nodle-parachain.api.onfinality.io:443/public-ws","eden-rpc.dwellir.com"]),                     // noodle 11th
 					// //
 					// polkadot Auction Batch 3
-					(Some(2011), vec!["node.pol.equilibrium.io"]),        // 12th
-					(Some(2035), vec!["wss://api.phala.network:443/ws"]), //13th
-					(Some(2037), vec!["ws.unique.network"]),              // 14th
-					(Some(2013), vec!["rpc.litentry-parachain.litentry.io"]), // 15th
+					(Some(2011), "Equilibrium".into(), vec!["node.pol.equilibrium.io"]),        // 12th
+					(Some(2035), "Phala".into(), vec!["wss://api.phala.network:443/ws"]), //13th
+					(Some(2037), "Unique".into(), vec!["ws.unique.network"]),              // 14th
+					(Some(2013), "LitEntry".into(), vec!["rpc.litentry-parachain.litentry.io"]), // 15th
 					                                //    * "mainnet.polkadex.trade", // 16th (not on line yet)
-					(Some(2043), vec!["wss://parachain-rpc.origin-trail.network:443"]), // * 17th origin trail 
-					(Some(2030), vec!["wss://hk.p.bifrost-rpc.liebi.com:443/ws"]),                //    * 18th Bifrost polkadot
+					(Some(2043), "OriginTrail".into(), vec!["wss://parachain-rpc.origin-trail.network:443"]), // * 17th origin trail 
+					(Some(2030), "Bifrost".into(), vec!["wss://hk.p.bifrost-rpc.liebi.com:443/ws"]),                //    * 18th Bifrost polkadot
 
 					// polkadot Auction Batch 4
 					// (Some(2027), vec![]), // 19th Coinversation
-					(Some(2007), vec!["k-ui.kapex.network"]), // 20th Totem Kapex
-					(Some(2046), vec!["parachain-rpc.darwinia.network"]), // 21st Darwinia
+					(Some(2007), "Kapex".into(), vec!["k-ui.kapex.network"]), // 20th Totem Kapex
+					(Some(2046), "Darwinia".into(), vec!["parachain-rpc.darwinia.network"]), // 21st Darwinia
 					// 22nd Parathread 2055?
-					(Some(2039), vec!["polkadot.api.integritee.network"]),// 23rd Integritee polkadot
-					(Some(2086), vec!["kilt-rpc.dwellir.com"]),// 24th kilt
-					(Some(2052), vec!["polkadot.kylin-node.co.uk"]),// 25th Kylin network
+					(Some(2039), "Integritee".into(), vec!["polkadot.api.integritee.network"]),// 23rd Integritee polkadot
+					(Some(2086), "Kilt".into(), vec!["kilt-rpc.dwellir.com"]),// 24th kilt
+					(Some(2052), "Kylin".into(), vec!["polkadot.kylin-node.co.uk"]),// 25th Kylin network
 
 					// polkadot Auction Batch 5
 					// (Some(2056), vec![""]), // 26th Aventus network
 					// (Some(), vec![""]), // 27th Watr
 					// (Some(2090), vec![]), // 28th Oak Network
-					(Some(2048), vec!["mainnet.bitgreen.org"]), // 29th BitGreen
+					(Some(2048), "BitGreen".into(), vec!["mainnet.bitgreen.org"]), // 29th BitGreen
 					// (Some(2008), vec![""]), // 30th CrustNetwork
-					(Some(2051), vec!["rpc-parachain.ajuna.network"]), // 31st Ajuna network
+					(Some(2051), "Ajuna".into(), vec!["rpc-parachain.ajuna.network"]), // 31st Ajuna network
 					// 32nd parathread 2092
 
 					// polkadot Auction Batch 6
@@ -377,9 +377,9 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, Vec<&'static str
 			// so both can exist at the same time.
 			vec![
 				vec![
-					(None, vec!["ws://127.0.0.1:9900"]),
-					(Some(1000), vec!["ws://127.0.0.1:9910"]),
-					(Some(2000), vec!["ws://127.0.0.1:9920"]),
+					(None, "RelayChain".into(), vec!["ws://127.0.0.1:9900"]),
+					(Some(1000), "Stateminet".into(), vec!["ws://127.0.0.1:9910"]),
+					(Some(2000), "PenPal".into(), vec!["ws://127.0.0.1:9920"]),
 				],
 				// vec!["ws://127.0.0.1:9944", "ws://127.0.0.1:9966", "ws://127.0.0.1:9920"]
 			]

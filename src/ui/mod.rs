@@ -77,16 +77,16 @@ pub fn ui_bars_system(
 				// }
 				use egui::Link;
 
-
-
-
-
 				if let Some((_cube_index, selected, chain_info)) = &selected_details {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
 					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap_or(0) as i32);
 
+					if ui.add(Link::new(format!("#{}", selected.doturl))).clicked() {
+						open_url(&format!("#{}", &selected.doturl));
+					}
+					
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.
 					// if ui.add(Link::new("open in polkadot.js")).clicked() {
