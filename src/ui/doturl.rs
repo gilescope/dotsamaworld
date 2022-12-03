@@ -87,7 +87,7 @@ impl DotUrl {
 	}
 
 	pub fn souverign_index(&self) -> u32 {
-		if self.is_darkside() { 0 } else {1}
+		u32::from(!self.is_darkside())
 	}
 
 	pub fn rflip(&self) -> f32 {
@@ -113,7 +113,7 @@ impl DotUrl {
 			sov = 0;
 		}
 		if let Some(para_id) = self.para_id {
-			format!("{}-{}", sov, u32::from(para_id))
+			format!("{}-{}", sov, para_id)
 		} else {
 			format!("{}", sov)
 		}

@@ -136,7 +136,7 @@ mod tests {
 	}
 
 	async fn real_polkadot_example() {
-		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
+		let mut source = RawDataSource::new(vec!["wss://rpc.polkadot.io:443".into()]);
 		let metad_current = get_metadata(&mut source, None).await.unwrap();
 
 		fn time_for_blocknum(blocknum: u32) -> Option<Time> {

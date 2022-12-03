@@ -4,12 +4,14 @@ pub mod details;
 pub mod doturl;
 pub mod toggle;
 use cgmath::Point3;
+use std::sync::atomic::Ordering;
 use std::collections::HashMap;
 use crate::{log, Anchor, Env, Inspector, ChainInfo};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+ use crate::FREE_TXS;
 // use std::num::NonZeroU32;
 use egui::ComboBox;
 // use egui_datepicker::DatePicker;
@@ -329,9 +331,11 @@ pub fn ui_bars_system(
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
+
+					let free = FREE_TXS.load(Ordering::Relaxed);
 					ui.heading(format!(
-						"{:03.0} tps. {:03.0} fps. x={:03.0} y={:03.0} z={:03.0} {} ",
-						tps, fps, x, y, z, newdate
+						"TPS: {:03.0} EST FREE TPS: {:03.0} FPS: {:03.0} x={:03.0} y={:03.0} z={:03.0} {} ",
+						tps, free, fps, x, y, z, newdate
 					));
 				});
 			});

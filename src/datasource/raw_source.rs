@@ -264,7 +264,8 @@ impl RawDataSource {
 	#[cfg(target_arch = "wasm32")]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
-			if let Ok(client) = polkapipe::ws_web::Backend::new_ws2(&self.ws_url[0]).await {
+			let urls: Vec<_> = self.ws_url.iter().map(|s|s.as_ref()).collect();
+			if let Ok(client) = polkapipe::ws_web::Backend::new(urls.as_slice()).await {
 				self.client = Some(client);
 			}
 		}
@@ -340,10 +341,11 @@ impl Source for RawDataSource {
 			let result = client.query_block(opt.as_deref()).await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
-				// println!("got 2here");
+				// log!("block = {:?}", map);
 				if let Some(serde_json::value::Value::Object(map)) = map.get("block") {
 					let mut res = AgnosticBlock { block_number: 0, extrinsics: vec![] };
 					if let Some(serde_json::value::Value::Object(m)) = map.get("header") {
+						// log!("header = {:?}", m);
 						if let Some(serde_json::value::Value::String(num_original)) = m.get("number") {
 							 let mut num = num_original.trim_start_matches("0x").to_string();
 							if num.len() % 2 == 1 {

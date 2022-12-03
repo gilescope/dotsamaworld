@@ -17,7 +17,6 @@ use crate::{
 	movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
-use ::egui::FontDefinitions;
 use chrono::prelude::*;
 use datasource::DataUpdate;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -49,8 +48,6 @@ use jpeg_decoder::Decoder;
 use {
 	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
 	winit::platform::web::WindowBuilderExtWebSys,
-	wasm_bindgen_futures::JsFuture,
-	web_sys::Response,
 	webworker::WorkerResponse,
 };
 
@@ -64,6 +61,12 @@ macro_rules! log {
     // Note that this is using the `log` function imported above during
     // `bare_bones`
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
+
+// Until fn is defined in std lib prelude.
+#[inline]
+fn default<T>() -> T where T: Default {
+	Default::default()
 }
 
 mod camera;
@@ -113,35 +116,36 @@ const LAYER_GAP: f32 = 0.;
 const CHAIN_HEIGHT: f32 = 0.001;
 const CUBE_WIDTH: f32 = 0.8;
 
+static FREE_TXS : AtomicU64 = AtomicU64::new(0);
+
 // The time by which all times should be placed relative to each other on the x axis.
 lazy_static! {
-	static ref BASETIME: Arc<Mutex<i64>> = Arc::new(Mutex::new(0_i64));
+	static ref BASETIME: Arc<Mutex<i64>> = default();
 }
 
 lazy_static! {
-	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<RenderUpdate>> =
-		Arc::new(std::sync::Mutex::new(RenderUpdate::default()));
+	static ref CHAIN_STATS: Arc<Mutex<HashMap<isize, ChainStats>>> = default();
 }
 
 lazy_static! {
-	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details, ChainInfo)>>> =
-		Arc::new(std::sync::Mutex::new(None));
+	static ref UPDATE_QUEUE: Arc<std::sync::Mutex<RenderUpdate>> = default();
 }
 
 lazy_static! {
-	static ref DETAILS: Arc<std::sync::Mutex<RenderDetails>> =
-		Arc::new(std::sync::Mutex::new(RenderDetails::default()));
+	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details, ChainInfo)>>> = default();
 }
 
 lazy_static! {
-	static ref SOVEREIGNS: Arc<std::sync::Mutex<Option<Sovereigns>>> =
-		Arc::new(std::sync::Mutex::new(None));
+	static ref DETAILS: Arc<std::sync::Mutex<RenderDetails>> = default();
+}
+
+lazy_static! {
+	static ref SOVEREIGNS: Arc<std::sync::Mutex<Option<Sovereigns>>> = default();
 }
 
 //TODO could these be thread local?
 lazy_static! {
-	static ref REQUESTS: Arc<std::sync::Mutex<Vec<BridgeMessage>>> =
-		Arc::new(std::sync::Mutex::new(Vec::default()));
+	static ref REQUESTS: Arc<std::sync::Mutex<Vec<BridgeMessage>>> = default();
 }
 
 /// Bump this to tell the current datasources to stop.
@@ -158,6 +162,36 @@ pub struct ChainInfo {
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
 	pub chain_name: String,
+}
+
+ use core::sync::atomic::AtomicU64;
+ use chrono::DateTime;
+
+#[derive(Default)]
+pub struct ChainStats {
+	/// weight of blocks containing non-boring extrinsics (with base block already subtracted)
+	total_block_weight: u64,
+	/// number of non-boring extrinsics in blocks
+	total_extrinsics: u32,
+}
+
+impl ChainStats {
+	fn avg_free_transactions(&self) -> Option<u64> {
+		let max_block_size = 500_000_000_000u64; //todo: get from system state call
+		// let min_block_weight = 5_000_000_000u64;
+
+		if self.total_extrinsics == 0 {
+			return None;
+		}
+
+		//MIN_BLOCK_WEIGHT has been subtracted from the block weights.
+		let weight_per_extrinsic = (self.total_block_weight).checked_div(self.total_extrinsics as u64)?;
+		// log!("weight per extrinsic: {}", weight_per_extrinsic);
+		let free_weight = max_block_size.checked_sub(self.total_block_weight).unwrap_or_else(|| panic!("dude heavy {}", self.total_block_weight));
+
+		//round down
+		free_weight.checked_div(weight_per_extrinsic)
+	}
 }
 
 pub struct DataSourceChangedEvent {
@@ -431,15 +465,12 @@ async fn async_main() -> std::result::Result<(), ()> {
 	// app.insert_resource(Msaa { samples: 4 });
 
 	//  .insert_resource(WinitSettings::desktop_app()) - this messes up the 3d space mouse?
-	// app.insert_resource(Anchor::default());
 
 	// app.add_plugin(SpaceMousePlugin);
 
 	// if low_power_mode {
 	// 	app.insert_resource(WinitSettings::desktop_app());
 	// }
-
-	// .insert_resource(movement::Destination::default());
 	// .add_plugin(recorder::RecorderPlugin)
 	// app.add_plugin(PolylinePlugin);
 
@@ -451,8 +482,6 @@ async fn async_main() -> std::result::Result<(), ()> {
 
 	// // .add_system(pad_system)
 	// app.add_system_to_stage(CoreStage::PostUpdate, update_visibility);
-
-	// app.insert_resource(Atmosphere::default()); // Default Earth sky
 
 	// html_body::get().request_pointer_lock();
 
@@ -520,7 +549,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let adapter = instance
 		.request_adapter(&wgpu::RequestAdapterOptions {
-			power_preference: wgpu::PowerPreference::default(),
+			power_preference: default(),
 			compatible_surface: Some(&surface),
 			force_fallback_adapter: false,
 		})
@@ -530,7 +559,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//TODO: can we await instead of block_on here?
 	let (device, queue) = pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
-			features: wgpu::Features::default(), // | gpu::Features::CLEAR_TEXTURE
+			features: default(), // | gpu::Features::CLEAR_TEXTURE
 			limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
 			label: None,
 		},
@@ -570,8 +599,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		physical_width: size.width,
 		physical_height: size.height,
 		scale_factor: window.scale_factor(),
-		font_definitions: FontDefinitions::default(),
-		style: Default::default(),
+		font_definitions: default(),
+		style: default(),
 	});
 
 	// We use the egui_wgpu_backend crate as the render backend.
@@ -807,14 +836,14 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			format: texture::Texture::DEPTH_FORMAT,
 			depth_write_enabled: true,
 			depth_compare: wgpu::CompareFunction::Less,
-			stencil: wgpu::StencilState::default(),
-			bias: wgpu::DepthBiasState::default(),
+			stencil: default(),
+			bias: default(),
 		}),
 		multisample: wgpu::MultisampleState {
 			count: sample_count,
 			// mask: !0,
 			// alpha_to_coverage_enabled: false,
-			..Default::default()
+			..default()
 		},
 		multiview: None,
 	});
@@ -862,7 +891,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let mut last_touch_location: HashMap<
 		u64,
 		(PhysicalPosition<f64>, DateTime<Utc>, Option<(PhysicalPosition<f64>, DateTime<Utc>)>),
-	> = Default::default();
+	> = default();
 
 	let mut last_mouse_position = None;
 	let window_id = window.id();
@@ -975,7 +1004,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 				if let WindowEvent::Touch(Touch{ location, phase, id, .. }) = event {
 					// let normal_loc = PhysicalPosition::<f64>{ x:location.x, y: size.height as f64 - location.y};
-					let ctx = platform.context();
+					// let ctx = platform.context();
 					let touch_in_egui = false;
 					// if let Some(layer) = ctx.layer_id_at(normal_loc) {
 					// 	if layer.order == Order::Background {
@@ -1257,7 +1286,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			}
 
 			let output = surface.get_current_texture().unwrap();
-			let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+			let view = output.texture.create_view(&default());
 
 			let output_frame = output; //
 
@@ -1440,11 +1469,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				frames = 0;
 				frame_time = Utc::now().timestamp();
 			}
-			if Utc::now().timestamp() - tx_time > 12 {
-				tps = (tx / 12_u64) as u32;
-				tx = 0;
-				tx_time = Utc::now().timestamp();
-			}
+			// if Utc::now().timestamp() - tx_time > 12 {
+				// tps = (tx / 12_u64) as u32;
+				// tx = 0;
+				let period = Utc::now().timestamp() - tx_time;
+				if period > 0 {
+					tps = (tx / (period as u64)) as u32;
+				}
+				// tx_time = Utc::now().timestamp();
+			// }
 
 			egui_rpass.remove_textures(tdelta).expect("remove texture ok");
 
@@ -1470,6 +1503,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	let mut map = HashMap::new();
 	let mut index = 0;
 	map.insert((0, 0), index); index += 1;
+	map.insert((0, 999), index); index += 1;
 	map.insert((0,1000), index); index += 1;
 	map.insert((0,1001), index); index += 1;
 	map.insert((0,2000), index); index += 1;
@@ -1535,7 +1569,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	map.insert((1, 2048), index); index += 1;
 	map.insert((1, 2051), index); index += 1;
 	map.insert((1, 2052), index); index += 1;
-	map.insert((1, 2086), index); index += 1;
+	map.insert((1, 2086), index); //index += 1;
 
 	//TODO: MAX height achieved!!! need to go wide...
 	// or have another texture buffer.
@@ -1543,11 +1577,12 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	// images must be inserted in same order as they are in the map.
 
 	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
-	//sips -z 200 600 *.jpeg to format them all to same aspect.
+	//sips -z 100 300 *.jpeg to format them all to same aspect.
 	let mut images = vec![];	
 	#[cfg(feature = "raw_images")]
 	{
 		images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/0-999.jpeg").to_vec());//https://text2image.com/en/
 		images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/0-1001.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/0-2000.jpeg").to_vec());
@@ -1747,7 +1782,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 			aspect: wgpu::TextureAspect::All,
 		},
 		// The actual pixel data
-		&diffuse_rgba,
+		diffuse_rgba,
 		// The layout of the texture
 		wgpu::ImageDataLayout {
 			offset: 0,//TODO for different layouts
@@ -1757,7 +1792,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		texture_size,
 	);
 
-	let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+	let diffuse_texture_view = diffuse_texture.create_view(&default());
 	let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 		address_mode_u: wgpu::AddressMode::Repeat, //Repeat
 		address_mode_v: wgpu::AddressMode::Repeat,//ClampToEdge,
@@ -1765,7 +1800,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		mag_filter: wgpu::FilterMode::Linear, //Linear,
 		min_filter: wgpu::FilterMode::Nearest,
 		mipmap_filter: wgpu::FilterMode::Nearest,
-		..Default::default()
+		..default()
 	});
 
 	(diffuse_texture, diffuse_texture_view, diffuse_sampler, map)
@@ -2045,108 +2080,6 @@ fn source_data(
 
 	// clear_world(&details, &mut commands, &clean_me);
 
-	// commands
-	// 	.spawn()
-	// 	.insert_bundle((
-	// 		handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-	// 		InstanceMaterialData(vec![], vec![]),
-	// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-	// 		// lines
-	// 		Transform::from_xyz(0., 0., 0.),
-	// 		GlobalTransform::default(),
-	// 		Visibility::default(),
-	// 		ComputedVisibility::default(),
-	// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-	// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-	// 		// view frustum, all the instanced cubes will be culled.
-	// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
-	// 		// custom instancing, and that is not taken into account with the built-in frustum
-	// 		// culling. We must disable the built-in frustum culling by adding the
-	// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
-	// 		NoFrustumCulling,
-	// 	))
-	// 	//	.insert_bundle(PickableBundle::default())
-	// 	.insert(Name::new("BlockEvent"))
-	// 	.insert(ClearMe)
-	// 	.insert(HiFi)
-	// 	.insert(EventInstances);
-
-	// commands
-	// 	.spawn()
-	// 	.insert_bundle((
-	// 		handles.extrinsic_mesh.clone(), //todo xcm different? block_mesh
-	// 		InstanceMaterialData(vec![], vec![]),
-	// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-	// 		// lines
-	// 		Transform::from_xyz(0., 0., 0.),
-	// 		GlobalTransform::default(),
-	// 		Visibility::default(),
-	// 		ComputedVisibility::default(),
-	// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-	// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-	// 		// view frustum, all the instanced cubes will be culled.
-	// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
-	// 		// custom instancing, and that is not taken into account with the built-in frustum
-	// 		// culling. We must disable the built-in frustum culling by adding the
-	// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
-	// 		NoFrustumCulling,
-	// 	))
-	// 	//			.insert_bundle(PickableBundle::default())
-	// 	.insert(Name::new("BlockExtrinsic"))
-	// 	.insert(ClearMe)
-	// 	.insert(MedFi)
-	// 	.insert(ExtrinsicInstances);
-
-	// commands
-	// 	.spawn()
-	// 	.insert_bundle((
-	// 		handles.block_mesh.clone(), //todo xcm different? block_mesh
-	// 		InstanceMaterialData(vec![], vec![]),
-	// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-	// 		// lines
-	// 		Transform::from_xyz(0., 0., 0.),
-	// 		GlobalTransform::default(),
-	// 		Visibility::default(),
-	// 		ComputedVisibility::default(),
-	// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-	// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-	// 		// view frustum, all the instanced cubes will be culled.
-	// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
-	// 		// custom instancing, and that is not taken into account with the built-in frustum
-	// 		// culling. We must disable the built-in frustum culling by adding the
-	// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
-	// 		NoFrustumCulling,
-	// 	))
-	// 	.insert(Name::new("Block"))
-	// 	.insert(ClearMe)
-	// 	.insert(BlockInstances);
-
-	// commands
-	// 	.spawn()
-	// 	.insert_bundle((
-	// 		handles.chain_rect_mesh.clone(), //todo xcm different? block_mesh
-	// 		InstanceMaterialData(vec![], vec![]),
-	// 		// SpatialBundle::VISIBLE_IDENTITY, - later bevy can just do this rather than next
-	// 		// lines
-	// 		Transform::from_xyz(0., 0., 0.),
-	// 		GlobalTransform::default(),
-	// 		Visibility::default(),
-	// 		ComputedVisibility::default(),
-	// 		// NOTE: Frustum culling is done based on the Aabb of the Mesh and the
-	// 		// GlobalTransform. As the cube is at the origin, if its Aabb moves outside the
-	// 		// view frustum, all the instanced cubes will be culled.
-	// 		// The InstanceMaterialData contains the 'GlobalTransform' information for this
-	// 		// custom instancing, and that is not taken into account with the built-in frustum
-	// 		// culling. We must disable the built-in frustum culling by adding the
-	// 		// `NoFrustumCulling` marker component to avoid incorrect culling.
-	// 		NoFrustumCulling,
-	// 	))
-	// 	//			.insert_bundle(PickableBundle::default())
-	// 	.insert(Name::new("Chain"))
-	// 	.insert(ClearMe)
-	// 	// .insert(LoFi)
-	// 	.insert(ChainInstances);
-
 	if event.source.is_empty() {
 		log!("Datasources cleared epoc {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
 		return
@@ -2185,7 +2118,7 @@ fn source_data(
 	let (dot_url, as_of): (DotUrl, Option<DotUrl>) = if is_live {
 		let env = event.source.split(':').collect::<Vec<_>>()[0].to_string();
 		let env = Env::try_from(env.as_str()).unwrap_or(Env::Prod);
-		(DotUrl { env, ..Default::default() }, None)
+		(DotUrl { env, ..default() }, None)
 	} else {
 		(dot_url.clone().unwrap(), Some(dot_url.unwrap()))
 	};
@@ -2266,7 +2199,9 @@ fn source_data(
 
 		let bridge: WorkerBridge<IOWorker> = crate::webworker::IOWorker::spawner()
 			.callback(|result| match result {
-				WorkerResponse::RenderUpdate(update) => {
+				WorkerResponse::RenderUpdate(update, free_txs) => {
+					// log!("free tx {}", free_txs);
+					FREE_TXS.store(free_txs, Ordering::Relaxed);
 					let mut pending = UPDATE_QUEUE.lock().unwrap();
 					pending.extend(update);
 				},
@@ -2306,7 +2241,7 @@ fn do_datasources(sovereigns: Sovereigns, as_of: Option<DotUrl>) {
 		let mut send_map: HashMap<
 			u32,
 			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
-		> = Default::default();
+		> = default();
 		for chain in relay.into_iter() {
 			let (tx, rc) = async_std::channel::unbounded();
 			if let Some(para_id) = chain.chain_url.para_id {
@@ -2358,7 +2293,7 @@ async fn do_datasources<F, R>(
 		let mut send_map: HashMap<
 			u32,
 			async_std::channel::Sender<(datasource::RelayBlockNumber, i64, H256)>,
-		> = Default::default();
+		> = default();
 		for chain in relay.iter() {
 			let (tx, rc) = async_std::channel::unbounded();
 			if let Some(para_id) = chain.chain_url.para_id {
@@ -2473,22 +2408,22 @@ fn as_rgba_u32(red: f32, green: f32, blue: f32, alpha: f32) -> u32 {
 	])
 }
 
-fn clear_world(// details: &Query<Entity, With<ClearMeAlwaysVisible>>,
-	// commands: &mut Commands,
-	// clean_me: &Query<Entity, With<ClearMe>>,
-) {
-	// Stop previous data sources...
-	DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
-	log!("incremet epoc to {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
+// fn clear_world(// details: &Query<Entity, With<ClearMeAlwaysVisible>>,
+// 	// commands: &mut Commands,
+// 	// clean_me: &Query<Entity, With<ClearMe>>,
+// ) {
+// 	// Stop previous data sources...
+// 	DATASOURCE_EPOC.fetch_add(1, Ordering::Relaxed);
+// 	log!("incremet epoc to {}", DATASOURCE_EPOC.load(Ordering::Relaxed));
 
-	// for detail in details.iter() {
-	// 	commands.entity(detail).despawn();
-	// }
-	// for detail in clean_me.iter() {
-	// 	commands.entity(detail).despawn();
-	// }
-	*BASETIME.lock().unwrap() = 0;
-}
+// 	// for detail in details.iter() {
+// 	// 	commands.entity(detail).despawn();
+// 	// }
+// 	// for detail in clean_me.iter() {
+// 	// 	commands.entity(detail).despawn();
+// 	// }
+// 	*BASETIME.lock().unwrap() = 0;
+// }
 
 #[derive(Clone, Copy)]
 enum BuildDirection {
@@ -2509,6 +2444,7 @@ pub enum DataEntity {
 		/// pseudo-unique id to link to some other node(s).
 		/// There can be multiple destinations per block! (TODO: need better resolution)
 		/// Is this true of an extrinsic - system ones plus util batch could do multiple msgs.
+		msg_count: u32,
 		start_link: Vec<(String, LinkType)>,
 		/// list of links that we have finished
 		end_link: Vec<(String, LinkType)>,
@@ -2622,7 +2558,7 @@ pub struct Sovereigns {
 impl Sovereigns {
 	fn chain_info(&self, doturl: &DotUrl) -> ChainInfo {
 		//TODO work for 3+ sovs
-		let sov = &self.relays[if doturl.is_darkside() {0} else {1}];
+		let sov = &self.relays[usize::from(!doturl.is_darkside())];
 		if let Some(para_id) = doturl.para_id {
 			for chain_info in sov {
 				if chain_info.chain_url.para_id == Some(para_id) {
@@ -2822,7 +2758,7 @@ fn render_block(
 				// 	&encoded,
 				// 	block.blockurl.block_number.unwrap()
 				// ),
-				..Default::default()
+				..default()
 			};
 			// log!("rendering block from {}", details.doturl);
 
@@ -3004,7 +2940,7 @@ fn render_block(
 				// &mut commands,
 				// &mut materials,
 				BuildDirection::Up,
-				&mut links,
+				links,
 				// &mut polyline_materials,
 				// &mut polylines,
 				// &encoded,
@@ -3021,7 +2957,7 @@ fn render_block(
 				// &mut commands,
 				// &mut materials,
 				BuildDirection::Down,
-				&mut links,
+				links,
 				// &mut polyline_materials,
 				// &mut polylines,
 				// &encoded,
@@ -3032,7 +2968,7 @@ fn render_block(
 			);
 			//event.send(RequestRedraw);
 		},
-		DataUpdate::NewChain(chain_info) => {
+		DataUpdate::NewChain(chain_info, sudo) => {
 			let is_relay = chain_info.chain_url.is_relay();
 			log!("adding new chain");
 			render.textured_instances.push(Instance{
@@ -3058,6 +2994,20 @@ fn render_block(
 					.into(),
 				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 }
 			});
+
+			if sudo {
+				render.textured_instances.push(Instance{
+					position: glam::Vec3::new(
+							0. - 8.5 - 28. + 3.3 ,
+							if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+						(0.1 +RELAY_CHAIN_CHASM_WIDTH +
+								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+								chain_info.chain_url.rflip(),
+						)
+						.into(),
+					color: 999
+				});
+			}
 
 			// for mut chain_instances in chain_instances.iter_mut() {
 			draw_chain_rect(
@@ -3286,9 +3236,7 @@ fn add_blocks(
 		// 	format!("https://polkadot.js.org/apps/?{}#/explorer/query/{}", &encoded, block_num);
 
 		for (_block_event_index, event) in events {
-			let mut entity = event;
-
-			let style = style::style_data_event(entity);
+			let style = style::style_data_event(event);
 			//TODO: map should be a resource.
 			// let material = mat_map.entry(style.clone()).or_insert_with(|| {
 			// 	materials.add(if dark {
@@ -3329,7 +3277,7 @@ fn add_blocks(
 			// details.doturl.block_number.unwrap(),
 			// block_event_index);
 
-			render_details.event_instances.push(entity.details.clone());
+			render_details.event_instances.push(event.details.clone());
 
 			for (link, link_type) in &event.start_link {
 				// println!("inserting source of rainbow (an event)!");
@@ -3680,139 +3628,6 @@ static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 // 	}
 // }
 
-// struct BlockHandles {
-
-// 	// block_material: Handle<StandardMaterial>
-
-// }
-
-// struct ResourceHandles {
-// 	block_mesh: Handle<Mesh>,
-// 	banner_materials: HashMap<isize, Handle<StandardMaterial>>,
-// 	banner_mesh: Handle<Mesh>,
-// 	sphere_mesh: Handle<Mesh>,
-// 	xcm_torus_mesh: Handle<Mesh>,
-// 	extrinsic_mesh: Handle<Mesh>,
-
-// 	chain_rect_mesh: Handle<Mesh>,
-// 	darkside_rect_material: Handle<StandardMaterial>,
-// 	lightside_rect_material: Handle<StandardMaterial>,
-// }
-
-/// set up a simple 3D scene
-// fn setup(
-// 	mut commands: Commands,
-// 	mut meshes: ResMut<Assets<Mesh>>,
-// 	mut materials: ResMut<Assets<StandardMaterial>>,
-// 	mut datasource_events: EventWriter<DataSourceChangedEvent>,
-// ) {
-// 	let block_mesh = meshes.add(Mesh::from(shape::Box::new(10., 0.2, 10.)));
-// 	let aspect = 1. / 3.;
-
-// 	let handles = ResourceHandles {
-// 		block_mesh,
-// 		banner_materials: default(),
-// 		banner_mesh: meshes.add(Mesh::from(shape::Quad::new(Vec2::new(BLOCK, BLOCK * aspect)))),
-// 		sphere_mesh: meshes.add(Mesh::from(shape::Icosphere { radius: 0.40, subdivisions: 32 })),
-// 		xcm_torus_mesh: meshes.add(Mesh::from(shape::Torus {
-// 			radius: 0.6,
-// 			ring_radius: 0.4,
-// 			subdivisions_segments: 20,
-// 			subdivisions_sides: 10,
-// 		})),
-// 		extrinsic_mesh: meshes.add(Mesh::from(shape::Box::new(0.8, 0.8, 0.8))),
-// 		lightside_rect_material: materials.add(StandardMaterial {
-// 			base_color: Color::rgba(0.5, 0.5, 0.5, 0.4),
-// 			alpha_mode: AlphaMode::Blend,
-// 			perceptual_roughness: 0.08,
-// 			reflectance: 0.0,
-// 			unlit: false,
-// 			..default()
-// 		}),
-// 		darkside_rect_material: materials.add(StandardMaterial {
-// 			base_color: Color::rgba(0., 0., 0., 0.4),
-// 			alpha_mode: AlphaMode::Blend,
-// 			perceptual_roughness: 1.0,
-// 			reflectance: 0.5,
-// 			unlit: true,
-// 			..default()
-// 		}),
-// 		chain_rect_mesh: meshes.add(Mesh::from(shape::Box::new(10000., 0.1, 10.1))),
-// 	};
-
-// 	commands.insert_resource(handles);
-
-// 	// add entities to the world
-// 	// plane
-
-// 	commands.spawn_bundle(PbrBundle {
-// 		mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
-// 		material: materials.add(StandardMaterial {
-// 			base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
-// 			alpha_mode: AlphaMode::Blend,
-// 			perceptual_roughness: 0.08,
-// 			..default()
-// 		}),
-// 		transform: Transform { translation: Vec3::new(0., 0., -25000.), ..default() },
-// 		..default()
-// 	});
-// 	commands.spawn_bundle(PbrBundle {
-// 		mesh: meshes.add(Mesh::from(shape::Box::new(50000., 0.1, 50000.))),
-// 		material: materials.add(StandardMaterial {
-// 			base_color: Color::rgba(0.2, 0.2, 0.2, 0.3),
-// 			alpha_mode: AlphaMode::Blend,
-// 			perceptual_roughness: 0.08,
-// 			unlit: true,
-// 			..default()
-// 		}),
-// 		transform: Transform { translation: Vec3::new(0., 0., 25000.), ..default() },
-// 		..default()
-// 	});
-
-// 	//somehow this can change the color
-// 	//    mesh_highlighting(None, None, None);
-// 	// camera
-// 	let camera_transform =
-// 		Transform::from_xyz(200.0, 50., 0.0).looking_at(Vec3::new(-1000., 1., 0.), Vec3::Y);
-// 	commands.insert_resource(ui::OriginalCameraTransform(camera_transform));
-// 	let mut entity_comands = commands.spawn_bundle(Camera3dBundle {
-// 		transform: camera_transform,
-
-// 		// perspective_projection: PerspectiveProjection {
-// 		// 	// far: 1., // 1000 will be 100 blocks that you can s
-// 		// 	//far: 10.,
-// 		// 	far: f32::MAX,
-// 		// 	near: 0.000001,
-// 		// 	..default()
-// 		// },
-// 		// camera: Camera { //far: 10.,
-// 		// 	far:f32::MAX,
-// 		// 	near: 0.000001, ..default() },
-// 		..default()
-// 	});
-// 	#[cfg(feature = "normalmouse")]
-// 	entity_comands.insert(FlyCam);
-// 	entity_comands
-// 		.insert(Viewport)
-// 		.insert_bundle(PickingCameraBundle { ..default() });
-
-// 	// #[cfg(feature = "spacemouse")]
-// 	// entity_comands.insert(SpaceMouseRelativeControllable);
-
-// 	commands.insert_resource(UpdateTimer { timer: Timer::new(Duration::from_millis(15), true) });
-
-// 	// light
-
-// 	commands.insert_resource(AmbientLight { color: Color::WHITE, brightness: 0.9 });
-
-// 	// commands.spawn_bundle(PointLightBundle {
-// 	//     transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
-// 	//     ..Default::default()
-// 	// });
-// 	// commands.spawn_bundle(PointLightBundle {
-// 	// 	transform: Transform::from_translation(Vec3::new(4.0, 8.0, 4.0)),
-// 	// 	..Default::default()
-// 	// });
 
 // 	// Kick off the live mode automatically so people have something to look at
 // 	datasource_events.send(DataSourceChangedEvent {

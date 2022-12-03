@@ -36,7 +36,7 @@ impl IOWorker {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum WorkerResponse {
-	RenderUpdate(RenderUpdate),
+	RenderUpdate(RenderUpdate, u64), //free transactions
 	Details(u32, Details, ChainInfo),
 }
 
@@ -62,10 +62,23 @@ impl Worker for IOWorker {
 			},
 			BridgeMessage::GetNewBlocks => {
 				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
-				let mut results = RenderUpdate::default();
-				core::mem::swap(vec, &mut results);
-				if results.any() {
-					scope.respond(id, WorkerResponse::RenderUpdate(results));
+				// If a chain does not have any transactions then assume the average.
+				let chains = crate::CHAIN_STATS.lock().unwrap();
+				let chain_count = chains.values().count() as u64;
+				if chain_count > 0 {
+					let chains_with_no_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| if s.is_none() { Some(())} else {None}).count() as u64;
+					// log!("chains with no tx: {}", chains_with_no_tx);
+					let mut free_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| s).sum::<u64>() / 12;
+					//TODO 12 seconds per block assumed.
+
+					//For chains with no transactions assume average
+					free_tx += free_tx * chains_with_no_tx / chain_count as u64;
+
+					let mut results = RenderUpdate::default();
+					core::mem::swap(vec, &mut results);
+					if results.any() {
+						scope.respond(id, WorkerResponse::RenderUpdate(results, free_tx));
+					}
 				}
 			},
 			BridgeMessage::GetEventDetails(cube_index) => {

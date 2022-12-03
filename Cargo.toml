@@ -12,6 +12,7 @@ default = []
 # 3d mouse support (it's best not to have both features enabled at once).
 spacemouse = []
 bake = ["jpeg-encoder"]
+raw_images = []
 
 [dependencies]
 glam = "*"
@@ -112,10 +113,10 @@ tikv-jemallocator = "0.5"
 async-tls = { version = "*", default-features = false }
 futures = { version = "0.3.13", default-features = false, features = [] }
 chrono = { version = "*", default-features = false, features = ["clock"]}
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791d468b7ed1387feee81c54473e608a", features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "79b53c781056c4991b5bd95e6684284752d6cc7f", features = [
     "wss",
 ] }
-# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
+# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
 #     "wss",
 # ] }
 async-tungstenite = { version = "0.15.0", default-features = true, features = [
@@ -139,10 +140,10 @@ getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "*"
 ws_stream_wasm = "*"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "a1a85669791d468b7ed1387feee81c54473e608a", features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "79b53c781056c4991b5bd95e6684284752d6cc7f", features = [
     "ws-web",
 ] }
-# polkapipe = { path = "/home/gilescope/git/polkapipe", default-features = false, features = [
+# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
 #     "ws-web",
 # ] }
 
