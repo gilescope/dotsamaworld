@@ -1,21 +1,24 @@
 use self::raw_source::AgnosticBlock;
+use crate::render_block;
 use core::future::Future;
-// use core::slice::SlicePattern;
-// use super::polkadot;
 use crate::{
-	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, BASETIME, DATASOURCE_EPOC,
-	PAUSE_DATA_FETCH,
+	CHAIN_STATS,
+	default, 
+	ChainStats,
+	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, RenderDetails, RenderUpdate,
+	BASETIME, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
-// use async_std::stream::StreamExt;
+use log::warn;
 use serde::{Deserialize, Serialize};
 // #[cfg(not(target_arch = "wasm32"))]
 // use async_tungstenite::tungstenite::util::NonBlockingResult;
-use bevy::{prelude::warn, utils::default};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
-use std::{collections::hash_map::DefaultHasher, hash::Hash};
 use std::{
-	collections::HashMap, convert::TryFrom, num::NonZeroU32, sync::atomic::Ordering, time::Duration,
+	collections::{hash_map::DefaultHasher, HashMap},
+	hash::Hash,
+	sync::atomic::Ordering,
+	time::Duration,
 };
 
 //  use bevy::ecs::event::EventWriter;
@@ -57,18 +60,14 @@ async fn get_metadata<S: Source>(
 	source: &mut S,
 	version: Option<(String, H256)>,
 ) -> Option<frame_metadata::RuntimeMetadataPrefixed> {
-	let as_of = if let Some((_version, hash)) = version {
-		Some(hash)
-	} else {
-		None
-	};
+	let as_of = if let Some((_version, hash)) = version { Some(hash) } else { None };
 
 	let metadata_bytes = {
 		const MAX_RETRIES: usize = 6;
 		let mut retries = 0;
 		loop {
 			if retries >= MAX_RETRIES {
-				return None;
+				return None
 			}
 
 			// log!("trying to get metadata from {}", source.url());
@@ -77,9 +76,7 @@ async fn get_metadata<S: Source>(
 
 			let res = source.fetch_metadata(as_of).await;
 			match res {
-				Ok(Some(res)) => {
-					break res
-				},
+				Ok(Some(res)) => break res,
 				_ => {
 					async_std::task::sleep(std::time::Duration::from_secs(1 << retries)).await;
 					retries += 1;
@@ -114,7 +111,7 @@ async fn get_metadata_version(
 			// if let Some(_pos) = pos {
 			// 	return None // If you get this error you need to point to an archive node.
 			// } else {
-				//panic!("could not recover from error2 {:?}", err);
+			//panic!("could not recover from error2 {:?}", err);
 			return None
 			// }
 		},
@@ -137,7 +134,7 @@ pub type RelayBlockNumber = u32;
 
 pub struct BlockWatcher<F, R>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()>,
 {
 	pub tx: Option<F>,
@@ -145,16 +142,15 @@ where
 	pub as_of: Option<DotUrl>,
 	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
 	pub sender:
-		Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+		Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 }
 
 impl<F, R> BlockWatcher<F, R>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
-	pub async fn watch_blocks(mut self)
-	{
+	pub async fn watch_blocks(mut self) {
 		// log!("watching blocks {}", self.chain_info.chain_index);
 		let tx: F = self.tx.take().unwrap();
 		let chain_info: ChainInfo = self.chain_info.clone();
@@ -162,28 +158,56 @@ where
 		let receive_channel: async_std::channel::Receiver<(RelayBlockNumber, i64, H256)> =
 			self.receive_channel.take().unwrap();
 		let sender: Option<
-			HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>,
+			HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>,
 		> = self.sender.take();
 		// let mut source = &mut self.source;
 		// log!("listening to as of {:?}", as_of);
 
 		let url = &chain_info.chain_ws;
 		#[cfg(not(target_arch = "wasm32"))]
-		let mut source = CachedDataSource::new(RawDataSource::new(url));
+		let mut source = CachedDataSource::new(RawDataSource::new(url.clone()));
 		#[cfg(target_arch = "wasm32")]
-		let mut source = RawDataSource::new(url);
+		let mut source = RawDataSource::new(url.clone());
 
 		let para_id = chain_info.chain_url.para_id;
+		let mut links = vec![];
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
 
+
+		/// Flag chains using sudo!
+		let metad = get_metadata(&mut source, None).await;
+		let mut sudo = false;
+		if metad.is_some() {
+			let metad = metad.unwrap();
+
+			if let frame_metadata::RuntimeMetadata::V14(ref m) = metad.1 {
+				for p in &m.pallets {
+					if p.name == "Sudo" {
+						log!("metad: {}", &p.name);
+						sudo = true;
+						break;
+					}
+				}
+			}
+		}
+
+
+
+
 		// Tell renderer to draw a new chain...
 		{
-			// log!("acquiring lock");
-			//let mut handle = tx.lock().unwrap();
-			tx(vec![DataUpdate::NewChain(chain_info.clone())]).await;
-			// log!("got lock");
+			let mut render_update = RenderUpdate::default();
+			let mut render_details = RenderDetails::default();
+			render_block(
+				DataUpdate::NewChain(chain_info.clone(), sudo),
+				&chain_info,
+				&mut links,
+				&mut render_update,
+				&mut render_details,
+			);
+			tx((render_update, render_details)).await;
 		}
 
 		if let Some(as_of) = as_of {
@@ -198,7 +222,7 @@ where
 				{
 					let _ = process_extrinsics(
 						&tx,
-						chain_info.chain_url.clone(),
+						&chain_info,
 						block_hash,
 						&mut source,
 						&sender,
@@ -231,7 +255,7 @@ where
 					// Timestamp is unlikely to change so we can use generic metadata
 					let metad_current = get_metadata(&mut source, None).await.unwrap();
 					let basetime = *BASETIME.lock().unwrap();
-					
+
 					as_of.block_number = time_predictor::get_block_number_near_timestamp(
 						basetime,
 						10_000_000,
@@ -253,15 +277,18 @@ where
 					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
 					// log!("get block {:?}", block_number);
 					let block_hash: Option<primitive_types::H256> =
-						get_block_hash(&mut source, block_number).await;
+						source.fetch_block_hash( block_number).await.ok().flatten();
 					// log!("hash is {:?}", block_hash);
 					if block_hash.is_none() {
-						eprintln!(
+						log!(
 							"should be able to get from relay chain hash for block num {} of url {}",
-							block_number, url
+							block_number, url[0]
 						);
 						// TODO: timestamp probably incorrect
-						tx(vec![DataUpdate::NewBlock(PolkaBlock {
+
+						let mut rend = RenderUpdate::default();
+						let mut render_details = RenderDetails::default();
+						render_block(DataUpdate::NewBlock(PolkaBlock {
 							data_epoc: our_data_epoc,
 							// Place it in the approximately right location...
 							timestamp: last_timestamp.map(|t| t + 12_000_000),
@@ -270,17 +297,19 @@ where
 								block_number: Some(block_number),
 								..chain_info.chain_url.clone()
 							},
-							blockhash: H256::default(),
-							extrinsics: vec![],
+							extrinsics: vec![],							
 							events: vec![],
-						})]);
+							weight: None,
+						}), &chain_info, &mut links, &mut rend, &mut render_details);
+						
+						tx((rend, render_details));
 
 						continue
 					}
 					let block_hash = block_hash.unwrap();
 					if let Ok(timestamp) = process_extrinsics(
 						&tx,
-						chain_info.chain_url.clone(),
+						&chain_info,
 						block_hash,
 						&mut source,
 						&sender,
@@ -302,18 +331,19 @@ where
 				}
 			}
 		} else {
-			log!("listening to live");
+			// log!("listening to live");
 
 			if let Ok(Some(latest_block)) = source.fetch_block(None).await {
-				let mut block_num : u32 = latest_block.block_number;
-				log!("live mode starting at block num {}", block_num);
+				let mut block_num: u32 = latest_block.block_number;
+				// log!("live mode starting at block num {}", block_num);
 				loop {
 					let next = source.fetch_block_hash(block_num).await;
+					// log!("got hash {:?}", next);
 					if let Ok(Some(block_hash)) = next {
-						log!("found new block on {}", source.url());
+						// log!("found new block on {}", source.url());
 						let _ = process_extrinsics(
 							&tx,
-							chain_info.chain_url.clone(),
+							&chain_info,
 							block_hash,
 							&mut source,
 							&None,
@@ -324,7 +354,7 @@ where
 						// check for stop signal
 						if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
 							log!("epoc has changed, ending for {:?}.", as_of);
-							return 
+							return
 						}
 
 						while PAUSE_DATA_FETCH.load(Ordering::Relaxed) > 0 {
@@ -343,27 +373,70 @@ where
 
 struct OwnedScale {
 	raw: Vec<u8>,
-	derived: DataEntity
+	derived: DataEntity,
+}
+
+
+// pub struct DispatchInfo {
+//     pub weight: Weight,
+//     pub class: DispatchClass,
+//     pub pays_fee: Pays,
+// }
+use parity_scale_codec::Compact;
+
+#[derive(Decode, Debug)]
+pub struct Weight {
+	ref_time: u32,
+	proof_size: u32
+}
+
+#[derive(Decode, Debug)]
+pub struct FrameSupportDispatchPerDispatchClassWeight {
+	normal: Weight,
+	operational: Weight,
+	mandatory: Weight,
 }
 
 // Returns the timestamp of the block decoded.
 async fn process_extrinsics<S: Source, F, R>(
 	tx: &F,
-	mut blockurl: DotUrl,
+	chain_info: &ChainInfo,
 	block_hash: H256,
 	source: &mut S,
-	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
 ) -> Result<Option<i64>, ()>
 where
-	F: Fn(Vec<DataUpdate>) -> R + Send + Sync,
+	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
 	R: Future<Output = ()> + 'static,
 {
+	// log!("processing extrinsics {:?}", block_hash);
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
+		let weights = source.fetch_storage(&hex::decode("26aa394eea5630e07c48ae0c9558cef734abf5cb34d6244378cddbf18e849d96").unwrap()[..],Some(block_hash)).await.unwrap().unwrap();
+		// let d: FrameSupportDispatchPerDispatchClassWeight;
+
+		// for skip in 0..weights.len() {
+			let d =  <FrameSupportDispatchPerDispatchClassWeight as Decode >::decode(&mut &weights[..]);
+			//.unwrap_or_else(|_| panic!("can't decode - hex: {}", hex::encode(&weights)));
+		// 	if Err()
+		// }
+
+
+		// log!("weights: {:?} hex: {}", d, hex::encode(&weights[..]));
+		let block_weight: Option<u64> = if let Ok(d) = d {
+			Some(d.normal.ref_time as u64 + d.operational.ref_time as u64 + d.mandatory.ref_time as u64) //<Compact<u64> as Into<u64>>::into(d.normal.refTime) + 
+		} else { 
+			None
+		};
+		// <Compact<u64> as Into<u64>>::into(d.operational.refTime) + 
+		// <Compact<u64> as Into<u64>>::into(d.mandatory.refTime));
+		// log!("block weight {:?}", &block_weight);
+		// log!("got extrinsics {:?}", block_hash);
 		let got_block_num = block.block_number;
 		let extrinsics = block.extrinsics;
+		let mut blockurl = chain_info.chain_url.clone();
 		blockurl.block_number = Some(got_block_num);
 		// let block_number = blockurl.block_number.unwrap();
 
@@ -381,24 +454,36 @@ where
 		}
 		let metad = metad.unwrap();
 
+		let mut sudo = false;
+		if let frame_metadata::RuntimeMetadata::V14(ref m) = metad.1 {
+			for p in &m.pallets {
+				if p.name == "Sudo" {
+					log!("metad: {}", &p.name);
+					sudo = true;
+					break;
+				}
+			}
+		}
+
 		let mut exts = vec![];
 		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
+				// log!("an extrinsics {:?}", i);
+
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
 			//TODO: did we need to double decode extrinsics????
-			
+
 			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
 
-			let the_extrinsic = OwnedScale{
+			let the_extrinsic = OwnedScale {
 				raw: encoded_extrinsic.clone(),
-				derived:DataEntity::Extrinsic {
+				derived: DataEntity::Extrinsic {
 					args: vec![],
+					msg_count: 0,
 					contains: vec![],
 					start_link: vec![],
 					end_link: vec![],
 					details: Details {
 						doturl: DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-						flattern: "can't yet decode.".to_string(),
-						url: source.url().to_string(),
 						parent: None,
 						success: crate::ui::details::Success::Worried,
 						pallet: "?".to_string(),
@@ -406,24 +491,27 @@ where
 						raw: encoded_extrinsic,
 						value: None,
 					},
-				}
+				},
 			};
 			let ex_slice = &the_extrinsic.raw[..];
 			// let ex_slice = &ext_bytes.0;
-			if let Ok(extrinsic2) = polkadyn::decode_extrinsic(&metad, ex_slice)
-			{
+			let decode_result = polkadyn::decode_extrinsic(&metad, ex_slice);
+			if let Ok(extrinsic2) = decode_result {
+				// log!("an extrinsics  decoded {:?}", i);
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic2, true);
 				let entity = process_extrinsic(
 					&metad,
-					
 					ex_slice,
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
-					source.url(),
+					// source.url(),
 				)
 				.await;
 				if let Some(mut entity) = entity {
-					entity.details_mut().value = Some(extrinsic2.clone().remove_context());
+					// log!("an extrinsic processed {:?}", i);
+					entity.details_mut().value = Some(scale_value::stringify::to_string(
+						&extrinsic2.clone().remove_context(),
+					));
 					if let Some(scale_borrow::Value::U64(time)) =
 						extrinsic.expect4("Timestamp", "0", "set", "now")
 					{
@@ -432,7 +520,7 @@ where
 					exts.push(entity);
 				}
 			} else {
-				// log!("can't decode block ext {} {}", i, &blockurl);
+				log!("can't decode block extrinsic  {} http://127.0.0.1:8080#q={}", i, &blockurl);
 				exts.push(the_extrinsic.derived);
 			}
 		}
@@ -453,13 +541,37 @@ where
 			timestamp,
 			timestamp_parent,
 			blockurl,
-			blockhash: block_hash,
 			extrinsics: exts,
 			events,
+			weight: block_weight
 		};
 
 		//FYI: blocks sometimes have no events in them.
-		tx(vec![DataUpdate::NewBlock(current)]).await;
+		let mut rend = RenderUpdate::default();
+		let mut render_details = RenderDetails::default();
+		let mut links = vec![]; //TODO should be global?
+		let weight = current.weight;
+		render_block(DataUpdate::NewBlock(current), chain_info, &mut links, &mut rend, &mut render_details);
+
+		
+		let mut map = CHAIN_STATS.lock().unwrap();
+		let mut entry = map.entry(chain_info.chain_index).or_insert_with(
+			//ChainStats {// start: Utc::now().timestamp(), 
+				default// }
+		);
+		if let Some(weight) = weight {
+			// entry.block_count += rend.block_instances.len() as u32;
+			let non_boring_tx = rend.extrinsic_instances.iter().filter(|i|i.0.position[1] >= 0.).count() as u32;
+			if non_boring_tx > 0 {
+				 
+				// log!("non boring {}  {}   {}", non_boring_tx, weight, weight.saturating_sub(MIN_BLOCK_WEIGHT));
+				entry.total_extrinsics += non_boring_tx;
+				const MIN_BLOCK_WEIGHT: u64 = 0;//5_000_000_000u64;
+				entry.total_block_weight += weight.saturating_sub(MIN_BLOCK_WEIGHT);
+			} // else we assume average
+		}
+
+		tx((rend, render_details)).await;
 	}
 	Ok(timestamp)
 }
@@ -510,7 +622,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ex_slice: &'scale [u8],
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
-	url: &str,
+	// url: &str,
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
 	// let para_id = extrinsic_url.para_id.clone();
@@ -531,6 +643,7 @@ async fn process_extrinsic<'a, 'scale>(
 	let mut children = vec![];
 	let mut start_link: Vec<(String, LinkType)> = vec![];
 	let end_link: Vec<(String, LinkType)> = vec![];
+	let mut msg_count = 0;
 
 	let (pallet, variant) = if let Some((pallet, "0", variant, payload)) = ext.only3() {
 		match (pallet, variant) {
@@ -570,9 +683,10 @@ async fn process_extrinsic<'a, 'scale>(
 			// Seek out and expand Dmp / DownwardMessageReceived;
 			("ParachainSystem", "set_validation_data") => {
 				// let _s = format!("{:?}", &payload);
-
+	
 				if payload.find2("data", "upward_messages").is_some() {
-					println!("found upward msgs (first time)");
+					//TODO: Not sure this is ever a thing. More look for sent message event
+					log!("found upward msgs (first time)");
 				}
 				if let Some(channels) = payload.find2("data", "horizontal_messages") {
 					// println!("found horizontal_messages msgs (first time)");
@@ -582,11 +696,12 @@ async fn process_extrinsic<'a, 'scale>(
 							for (_val_name, inner_val) in val {
 								if let scale_borrow::Value::Object(rows) = inner_val {
 									if rows.len() > 1 {
-										println!("found horiz {}", inner_val);
+										msg_count += 1;
+										log!("found horiz {}", inner_val);
 										if let Some(scale_borrow::Value::U64(para_id)) =
 											inner_val.get("0")
 										{
-											println!(
+											log!(
 												"TODO: do something with horiz to para {}",
 												para_id
 											);
@@ -604,95 +719,97 @@ async fn process_extrinsic<'a, 'scale>(
 					// }
 
 					for (msg_index, msg) in channels {
-						println!("found {} downward_message is, {}", msg_index, &msg);
-						if let (Some(msg), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
-							if let scale_borrow::Value::ScaleOwned(bytes) = msg {
-								let v = polkadyn::decode_xcm(meta, &bytes[..]).expect(&format!("expect to be able to decode {}", &hex::encode(&bytes[..])));
-								println!("xcm msgv= {}", v);
-								let msg_decoded = scale_value_to_borrowed::convert(&v, true);
-								// msg.set("msg_decoded", msg_decoded);
-								let msg = msg_decoded;
-								println!("xcm msg = {}", msg);
+						msg_count += 1;
+						log!("found {} downward_message is, {}", msg_index, &msg);
+						if let (Some(scale_borrow::Value::ScaleOwned(bytes)), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
+							let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
+								"expect to be able to decode {}",
+								&hex::encode(&bytes[..])
+							)));
+							log!("xcm msgv= {}", v);
+							let msg_decoded = scale_value_to_borrowed::convert(&v, true);
+							// msg.set("msg_decoded", msg_decoded);
+							let msg = msg_decoded;
+							log!("xcm msg = {}", msg);
 
-								if let Some(instructions) = msg.get("V0") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
-											
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-												raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
+							if let Some(instructions) = msg.get("V0") {
+								for (instruction, payload) in instructions {
+									log!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
+										msg_count: 0,
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
 
-										if *instruction == "TransferAsset" {
-											if let Some(_dest) = payload.get("dest") {}
-											// panic!();
-										}
-									}
-								}
-								if let Some(instructions) = msg.get("V1") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
-										
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-													raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
-
-										if *instruction == "TransferAsset" {
-											if let Some(ben) = payload.get("beneficiary") {
-
-											}
-											// panic!();
-										}
-									}
-								}
-								if let Some(instructions) = msg.get("V2") {
-									for (instruction, payload) in instructions {
-										println!("instruction {}", &payload);
-										children.push(DataEntity::Extrinsic {
-											// id: (block_number, extrinsic_index),
-											args: vec![instruction.to_string()],
-											contains: vec![],
-											
-											start_link: vec![],
-											end_link: vec![],
-											details: Details {
-												pallet: "Instruction".to_string(),
-												variant: instruction.to_string(),
-												doturl: extrinsic_url.clone(),
-												raw: bytes.to_vec(),
-												..Details::default()
-											},
-										});
-
-										if *instruction == "TransferAsset" {
-											if let Some(_dest) = payload.get("dest") {}
-											// panic!();
-										}
+									if *instruction == "TransferAsset" {
+										if let Some(_dest) = payload.get("dest") {}
+										// panic!();
 									}
 								}
 							}
+							if let Some(instructions) = msg.get("V1") {
+								for (instruction, payload) in instructions {
+									log!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
+										msg_count: 0,
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
 
+									// if *instruction == "TransferAsset" {
+									// 	if let Some(ben) = payload.get("beneficiary") {
+
+									// 	}
+									// 	// panic!();
+									// }
+								}
+							}
+							if let Some(instructions) = msg.get("V2") {
+								for (instruction, payload) in instructions {
+									log!("instruction {}", &payload);
+									children.push(DataEntity::Extrinsic {
+										// id: (block_number, extrinsic_index),
+										args: vec![instruction.to_string()],
+										contains: vec![],
+										msg_count: 0,
+										start_link: vec![],
+										end_link: vec![],
+										details: Details {
+											pallet: "Instruction".to_string(),
+											variant: instruction.to_string(),
+											doturl: extrinsic_url.clone(),
+											// raw: bytes.to_vec(),
+											..Details::default()
+										},
+									});
+
+									if *instruction == "TransferAsset" {
+										if let Some(_dest) = payload.get("dest") {}
+										// panic!();
+									}
+								}
+							}
+							
 							// VersionedXcm::V1(msg) => {
 							// 										// Only one xcm instruction in a v1 message.
 							// 										let instruction = format!("{:?}", &msg);
@@ -875,8 +992,8 @@ async fn process_extrinsic<'a, 'scale>(
 							// 														end_link
 
 							// .push((msg_id.clone(), LinkType::ReserveTransfer));
-							// start_link.push((msg_id, LinkType::ReserveTransferMintDerivative)); 																	//
-							// for reserve assets 														// received.
+							// start_link.push((msg_id, LinkType::ReserveTransferMintDerivative));
+							// // for reserve assets 														// received.
 							// 													};
 							// 												} else {
 							// 													panic!("unknonwn")
@@ -894,7 +1011,7 @@ async fn process_extrinsic<'a, 'scale>(
 				}
 			},
 			("XcmPallet", "limited_teleport_assets") => {
-		
+				log!("todo: limited_teleport_assets");
 				// 	let mut flat0 = HashMap::new();
 				// 	flattern(&ext.call_data.arguments[0].value, "", &mut flat0);
 				// 	// println!("FLATTERN {:#?}", flat0);
@@ -942,54 +1059,61 @@ async fn process_extrinsic<'a, 'scale>(
 				// 	//         print_val(&ext.call_data.arguments[1].value);
 			},
 			("XcmPallet", "reserve_transfer_assets") => {
-				check_reserve_asset(&payload, &extrinsic_url, &mut start_link).await;
+				check_reserve_asset(payload, &extrinsic_url, &mut start_link).await;
 			},
 			(_, variant) => {
 				if variant.contains("batch") {
-					log!("found batch {:?}", payload);
+					// log!("found batch {:?}", payload);
 					if let Some(args) = payload.get("calls") {
 						for (_, instruction) in args {
-							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) = instruction.only3() 
+							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) =
+								instruction.only3()
 							{
-								log!("found batch instructionC {} {} {:?}", inner_pallet, inner_variant, instruction);
-									children.push(DataEntity::Extrinsic {
-										args: vec![format!("{}", instruction)],
-										contains: vec![],
-										start_link: vec![],
-										end_link: vec![],
-										details: Details {
-											raw: ex_slice.to_vec(),//TODO reference not own.
-											pallet: inner_pallet.to_string(),
-											variant: inner_variant.to_string(),
-											doturl: extrinsic_url.clone(),
-											..Details::default()
-										},
-									});
+								// log!(
+								// 	"found batch instructionC {} {} {:?}",
+								// 	inner_pallet,
+								// 	inner_variant,
+								// 	instruction
+								// );
+								children.push(DataEntity::Extrinsic {
+									args: vec![format!("{}", instruction)],
+									contains: vec![],
+									start_link: vec![],
+									end_link: vec![],
+									msg_count: 0,
+									details: Details {
+										// raw: ex_slice.to_vec(), //TODO reference not own.
+										pallet: inner_pallet.to_string(),
+										variant: inner_variant.to_string(),
+										doturl: extrinsic_url.clone(),
+										..Details::default()
+									},
+								});
 
-									// TODO: generalise to recurse.
-									if inner_pallet == "XcmPallet" && inner_variant == "reserve_transfer_assets"
-									{
-										check_reserve_asset(
-											&extrinsic_payload,
-											&extrinsic_url,
-											&mut start_link,
-										)
-										.await;
-									}
+								// TODO: generalise to recurse.
+								if inner_pallet == "XcmPallet" &&
+									inner_variant == "reserve_transfer_assets"
+								{
+									check_reserve_asset(
+										extrinsic_payload,
+										&extrinsic_url,
+										&mut start_link,
+									)
+									.await;
+								}
 							}
 						}
 					}
 				}
-			}
+			},
 		}
-		
+
 		(pallet, variant)
 	} else {
 		panic!("could not find call_data.pallet_name in {:#?}", &ext);
 	};
 
 	// log!("found {pallet} / {variant}");
-
 
 	// let mut args: Vec<_> = ext
 	// 	.call_data
@@ -1013,7 +1137,7 @@ async fn process_extrinsic<'a, 'scale>(
 	context: TypeId(113) },), context: TypeId(112) } }, context: TypeId(111) },), context: TypeId(144) }
 
 	*/
-	
+
 	// let mut results = HashMap::new();
 	// for (arg_index, arg) in ext.call_data.arguments.iter().enumerate() {
 	// 	flattern(&arg.value, &arg_index.to_string(), &mut results);
@@ -1027,17 +1151,18 @@ async fn process_extrinsic<'a, 'scale>(
 		contains: children,
 		start_link,
 		end_link,
+		msg_count,
 		details: Details {
 			// hover: "".to_string(),
 			doturl: extrinsic_url,
-			flattern: "".to_string(), // format!("{results:#?}"),
-			url: url.to_string(),
+			// flattern: "".to_string(), // format!("{results:#?}"),
+			// url: url.to_string(),
 			parent: None,
 			success: crate::ui::details::Success::Happy,
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
 			raw: ex_slice.to_vec(),
-			value: None
+			value: None,
 		},
 	})
 
@@ -1048,28 +1173,34 @@ async fn process_extrinsic<'a, 'scale>(
 async fn check_reserve_asset<'scale, 'b>(
 	args: &scale_borrow::Value<'scale>,
 	extrinsic_url: &DotUrl,
-	start_link: &'b mut Vec<(String, LinkType)>) 
-{
+	start_link: &'b mut Vec<(String, LinkType)>,
+) {
 	if let Some(beneficiary) = args.find2("beneficiary", "V2") {
 		// println!("check reserve assetben {}", beneficiary);
 		if let Some(rest) = beneficiary.find2("0", "interior") {
-			if let Some(("X1","0", rest)) = rest.only2() {
+			if let Some(("X1", "0", rest)) = rest.only2() {
 				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
 					// println!("GOT benefactor address is {:?}", *to);
 					if let Some(dest) = args.find2("dest", "V2") {
 						if let Some(rest) = dest.find2("0", "interior") {
-							if let Some(("X1","0", rest)) = rest.only2() {
-								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
-									println!("GOT PARA ID dest is {}", para_id);
+							if let Some(("X1", "0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
+									rest.only2()
+								{
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
-									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-									println!("FIRST TIME 2 SEND MSG v2 hash {}", msg_id);
+									let msg_id = format!(
+										"{}-{}",
+										extrinsic_url.block_number.unwrap(),
+										please_hash(to)
+									);
+									log!("FIRST TIME 2 SEND MSG v2 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}
 							// TODO: parent 1 - upwards
 						}
-					}					
+					}
 				}
 			}
 		}
@@ -1078,23 +1209,29 @@ async fn check_reserve_asset<'scale, 'b>(
 	if let Some(beneficiary) = args.find2("beneficiary", "V1") {
 		// println!("check reserve assetben {}", beneficiary);
 		if let Some(rest) = beneficiary.find2("0", "interior") {
-			if let Some(("X1","0", rest)) = rest.only2() {
+			if let Some(("X1", "0", rest)) = rest.only2() {
 				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
 					// println!("GOT benefactor address is {:?}", *to);
 					if let Some(dest) = args.find2("dest", "V1") {
 						if let Some(rest) = dest.find2("0", "interior") {
-							if let Some(("X1","0", rest)) = rest.only2() {
-								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
-									println!("GOT PARA ID dest is {}", para_id);
+							if let Some(("X1", "0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
+									rest.only2()
+								{
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
-									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-									println!("SEND MSG v1 hash {}", msg_id);
+									let msg_id = format!(
+										"{}-{}",
+										extrinsic_url.block_number.unwrap(),
+										please_hash(to)
+									);
+									log!("SEND MSG v1 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}
 							// TODO: parent 1 - upwards
 						}
-					}					
+					}
 				}
 			}
 		}
@@ -1103,23 +1240,29 @@ async fn check_reserve_asset<'scale, 'b>(
 	if let Some(beneficiary) = args.find2("beneficiary", "V0") {
 		// println!("check reserve assetben {}", beneficiary);
 		if let Some(rest) = beneficiary.find("0") {
-			if let Some(("X1","0", rest)) = rest.only2() {
+			if let Some(("X1", "0", rest)) = rest.only2() {
 				if let Some(scale_borrow::Value::ScaleOwned(to)) = rest.find2("AccountId32", "id") {
 					// println!("GOT benefactor address is {:?}", *to);
 					if let Some(dest) = args.find2("dest", "V0") {
 						if let Some(rest) = dest.find("0") {
-							if let Some(("X1","0", rest)) = rest.only2() {
-								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) = rest.only2() {
-									println!("GOT PARA ID dest is {}", para_id);
+							if let Some(("X1", "0", rest)) = rest.only2() {
+								if let Some(("Parachain", "0", scale_borrow::Value::U64(para_id))) =
+									rest.only2()
+								{
+									log!("GOT PARA ID dest is {}", para_id);
 									// let dest = NonZeroU32::try_from(*para_id as u32).unwrap();
-									let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-									println!("SEND MSG v0 hash {}", msg_id);
+									let msg_id = format!(
+										"{}-{}",
+										extrinsic_url.block_number.unwrap(),
+										please_hash(to)
+									);
+									log!("SEND MSG v0 hash {}", msg_id);
 									start_link.push((msg_id, LinkType::ReserveTransfer));
 								}
 							}
 							// TODO: parent 1 - upwards
 						}
-					}					
+					}
 				}
 			}
 		}
@@ -1129,48 +1272,47 @@ async fn check_reserve_asset<'scale, 'b>(
 	// 	println!("check reserve asset assets {}", assets);
 	// }
 
+	// let mut flat0 = HashMap::new();
+	// flattern(&args[0].value, "", &mut flat0);
+	// // println!("FLATTERN {:#?}", flat0);
+	// let mut flat1 = HashMap::new();
+	// flattern(&args[1].value, "", &mut flat1);
 
-// let mut flat0 = HashMap::new();
-// flattern(&args[0].value, "", &mut flat0);
-// // println!("FLATTERN {:#?}", flat0);
-// let mut flat1 = HashMap::new();
-// flattern(&args[1].value, "", &mut flat1);
+	// if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
+	// 	let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
 
-// if let Some(_dest) = flat0.get(".V2.0.interior.X1.0.Parachain.0") {
-// 	let to = flat1.get(".V2.0.interior.X1.0.AccountId32.id");
+	// 	println!("first time!");
+	// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+	// 	// let dest: NonZeroU32 = dest.parse().unwrap();
 
-// 	println!("first time!");
-// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-// 	// let dest: NonZeroU32 = dest.parse().unwrap();
+	// 	if let Some(to) = to {
+	// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+	// 		// println!("SEND MSG v2 hash {}", msg_id);
+	// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+	// 	}
+	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+	// }
 
-// 	if let Some(to) = to {
-// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-// 		// println!("SEND MSG v2 hash {}", msg_id);
-// 		start_link.push((msg_id, LinkType::ReserveTransfer));
-// 	}
-// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
-// }
+	// if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
+	// 	let to = flat1.get(".V0.0.X1.0.AccountId32.id");
 
-// if let Some(_dest) = flat0.get(".V0.0.X1.0.Parachain.0") {
-// 	let to = flat1.get(".V0.0.X1.0.AccountId32.id");
+	// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
+	// 	// let dest: NonZeroU32 = dest.parse().unwrap();
 
-// 	//TODO; something with parent for cross relay chain maybe.(flat1.get(".V1.0.parents"),
-// 	// let dest: NonZeroU32 = dest.parse().unwrap();
-
-// 	if let Some(to) = to {
-// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
-// 		// println!("SEND MSG v0 hash {}", msg_id);
-// 		start_link.push((msg_id, LinkType::ReserveTransfer));
-// 	}
-// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
-// }
+	// 	if let Some(to) = to {
+	// 		let msg_id = format!("{}-{}", extrinsic_url.block_number.unwrap(), please_hash(to));
+	// 		// println!("SEND MSG v0 hash {}", msg_id);
+	// 		start_link.push((msg_id, LinkType::ReserveTransfer));
+	// 	}
+	// 	// println!("Reserve_transfer_assets from {:?} to {}", extrinsic_url.para_id, dest);
+	// }
 }
 
 #[derive(Deserialize, Serialize)]
 pub enum DataUpdate {
 	NewBlock(PolkaBlock),
-	// Chain info and chain name.
-	NewChain(ChainInfo),
+	// Chain info and chain name and whether sudo.
+	NewChain(ChainInfo, bool),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -1179,16 +1321,16 @@ pub struct PolkaBlock {
 	pub timestamp: Option<i64>,
 	pub timestamp_parent: Option<i64>,
 	pub blockurl: DotUrl,
-	pub blockhash: H256,
 	pub extrinsics: Vec<DataEntity>,
 	pub events: Vec<DataEvent>,
+	pub weight: Option<u64>,
 }
 
 // Timestamp only needs to be provided when relay chain.
 async fn get_events_for_block(
 	source: &mut impl Source,
 	blockhash: H256,
-	sender: &Option<HashMap<NonZeroU32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	sender: &Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	block_url: &DotUrl,
 	metad: &frame_metadata::RuntimeMetadataPrefixed,
 	timestamp: Option<i64>,
@@ -1215,23 +1357,26 @@ async fn get_events_for_block(
 			// if let ValueDef::Composite(Composite::Unnamed(events)) = val.value {
 			let mut inclusions = vec![];
 			let mut ext_count_map = HashMap::new();
-			let events: Vec<_> = events
+			let _events: Vec<_> = events
 				.iter()
-				.map(|(phase, event_val)| {
+				.map(|(phase, event_val, raw_event)| {
 					let event = scale_value_to_borrowed::convert(event_val, true);
 
 					// let event = scale_value_to_borrowed::convert(&event2);
 					let start_link = vec![];
 					// let end_link = vec![];
 					let mut details = Details {
-						url: source.url().to_string(),
+						// url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
-						value: Some(event_val.clone()),
-						..default()
+						value: Some(scale_value::stringify::to_string(
+							&event_val.clone().remove_context(),
+						)),
+						raw: raw_event.to_vec(),
+						..Default::default()
 					};
 
 					if let polkadyn::Phase::ApplyExtrinsic(extrinsic_num) = phase {
-						details.parent = Some(*extrinsic_num as u32);
+						details.parent = Some(*extrinsic_num);
 						let count = ext_count_map.entry(extrinsic_num).or_insert(0);
 						*count += 1;
 						details.doturl.extrinsic = Some(*extrinsic_num);
@@ -1261,7 +1406,7 @@ async fn get_events_for_block(
 								Some(scale_borrow::Value::ScaleOwned(para_head)),
 							) = (inner.find2("para_id", "0"), inner.find2("para_head", "0"))
 							{
-								let para_id = NonZeroU32::try_from(*parachain_id as u32).unwrap();
+								let para_id = *parachain_id as u32;
 								inclusions.push((para_id, para_head.as_slice().to_vec()));
 							}
 						}
@@ -1326,11 +1471,8 @@ async fn get_events_for_block(
 						// end_link,
 						details,
 					})
-				
-
 				})
 				.collect();
-			
 
 			if !inclusions.is_empty() {
 				// For live mode we listen to all parachains for blocks so sender will be none.
@@ -1367,9 +1509,10 @@ async fn get_events_for_block(
 
 pub fn associate_events(
 	ext: Vec<DataEntity>,
-	mut events: Vec<DataEvent>,
-) -> Vec<(Option<DataEntity>, Vec<DataEvent>)> {
-	let mut ext: Vec<(Option<DataEntity>, Vec<DataEvent>)> = ext
+	events: Vec<DataEvent>,
+) -> Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> {
+	let mut events : Vec<_> = events.into_iter().enumerate().collect();
+	let mut ext: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> = ext
 		.into_iter()
 		.map(|extrinsic| {
 			let eid = if let DataEntity::Extrinsic {
@@ -1385,7 +1528,7 @@ pub fn associate_events(
 			(
 				Some(extrinsic),
 				events
-					.drain_filter(|ev| match ev.details.parent {
+					.drain_filter(|ev| match ev.1.details.parent {
 						Some(extrinsic_id) => extrinsic_id == eid,
 						_ => false,
 					})
@@ -1405,6 +1548,7 @@ pub fn associate_events(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use pollster::block_on;
 	// use crate::polkadot::runtime_types::xcm::VersionedXcm;
 	// use crate::polkadot::runtime_types::polkadot_core_primitives::DownwardMessage;
 	// use subxt::BlockNumber;
@@ -1571,9 +1715,9 @@ mod tests {
 
 	#[test]
 	fn polkadot_millionth_block_hash() {
-		let url = "wss://rpc.polkadot.io:443";
+		let url = vec!["wss://rpc.polkadot.io:443".to_string()];
 		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
+		let blockhash = pollster::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
@@ -1581,9 +1725,9 @@ mod tests {
 
 	#[test]
 	fn polkadot_millionth_block_3_extrinsics() {
-		let url = "wss://rpc.polkadot.io:443";
-		let mut source = RawDataSource::new(url);
-		let blockhash = async_std::task::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
+		let url = "wss://rpc.polkadot.io:443".to_string();
+		let mut source = RawDataSource::new(vec![url]);
+		let blockhash = pollster::block_on(get_block_hash(&mut source, 1_000_000)).unwrap();
 		let actual = hex::encode(blockhash.as_bytes());
 
 		assert_eq!(actual, "490cd542b4a40ad743183c7d1088a4fe7b1edf21e50c850b86f29e389f31c5c1");
@@ -1608,4 +1752,46 @@ mod tests {
 
 		assert_eq!(3, block.extrinsics.len());
 	} */
+
+	//
+
+	#[test]
+	fn test_decode_blockweight1() {
+		let weight = hex::decode("90cd240500000000000000000000000099c7a90802000000").unwrap();
+		// 8 8 8 8 8 8
+		//  
+/*		weights: FrameSupportDispatchPerDispatchClassWeight {
+	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
+	 hex: 
+*/
+		for i in 0..6 {
+			let size= 4;
+			let j = i * size;
+			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
+			println!("{:?}", d);
+			if d.is_err() {
+				panic!("stopped at {}", i);
+			}
+		}
+	}
+
+// 	#[test]
+// 	fn test_decode_blockweight2() {
+// 		let weight = hex::decode("b2ff891700000007d12da07f8600").unwrap();
+// 		// 8 8 8 8 8 8
+// 		//  
+// /*		weights: FrameSupportDispatchPerDispatchClassWeight {
+// 	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
+// 	 hex: 
+// */
+// 		for i in 0..6 {
+// 			let size= 4;
+// 			let j = i * size;
+// 			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
+// 			println!("{:?}", d);
+// 			if d.is_err() {
+// 				panic!("stopped at {}", i);
+// 			}
+// 		}
+// 	}
 }

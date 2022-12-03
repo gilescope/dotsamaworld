@@ -1,19 +1,21 @@
-use crate::DataEvent;
+use super::{as_rgba_u32, DataEntity};
+use crate::{ui::details::Success, DataEvent};
+// use bevy::render::color::Color;
 
-use super::DataEntity;
-use crate::ui::details::Success;
-use bevy::render::color::Color;
+use palette::FromColor;
+use std::{
+	collections::hash_map::DefaultHasher,
+	hash::{Hash, Hasher},
+};
 
 #[derive(Clone)]
 pub struct ExStyle {
-	pub color: Color,
+	pub color: u32,
 }
 
 impl Hash for ExStyle {
 	fn hash<H: Hasher>(&self, state: &mut H) {
-		(self.color.r() as u32).hash(state);
-		(self.color.g() as u32).hash(state);
-		(self.color.b() as u32).hash(state);
+		(self.color).hash(state);
 	}
 }
 
@@ -24,27 +26,21 @@ impl PartialEq for ExStyle {
 	}
 }
 
-use std::{
-	collections::hash_map::DefaultHasher,
-	hash::{Hash, Hasher},
-};
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
 	let mut s = DefaultHasher::new();
 	t.hash(&mut s);
 	s.finish()
 }
 
-use palette::FromColor;
-
 // coloring block timestamp actually
-pub fn color_block_number(block_number: i64, darkside: bool) -> Color {
+pub fn color_block_number(block_number: i64, darkside: bool) -> u32 {
 	let color = palette::Lchuv::new(
 		if darkside { 40. } else { 80. },
 		80. + (block_number % 100) as f32,
 		(block_number % 360) as f32,
 	);
 	let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
-	Color::rgba(rgb.red, rgb.green, rgb.blue, 0.7)
+	as_rgba_u32(rgb.red, rgb.green, rgb.blue, 0.7)
 }
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {
@@ -74,7 +70,7 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 			);
 			let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
 
-			ExStyle { color: Color::rgba(rgb.red, rgb.green, rgb.blue, if msg { 0.5 } else { 1. }) }
+			ExStyle { color: as_rgba_u32(rgb.red, rgb.green, rgb.blue, if msg { 0.5 } else { 1. }) }
 		},
 	}
 }
@@ -90,12 +86,12 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 		                               * !completed variant. */
 	) || entry.details.success == Success::Sad
 	{
-		return ExStyle { color: Color::rgb(1., 0., 0.) }
+		return ExStyle { color: as_rgba_u32(1., 0., 0., 1.) }
 	}
 	if entry.details.success == Success::Worried {
 		return ExStyle {
 			// Trump Orange
-			color: Color::rgb(1., 0.647_058_84, 0.),
+			color: as_rgba_u32(1., 0.647_058_84, 0., 1.),
 		}
 	}
 
@@ -108,5 +104,5 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 
 	// println!("rgb {} {} {}", rgb.red, rgb.green, rgb.blue);
 
-	ExStyle { color: Color::rgb(rgb.red, rgb.green, rgb.blue) }
+	ExStyle { color: as_rgba_u32(rgb.red, rgb.green, rgb.blue, 1.) }
 }

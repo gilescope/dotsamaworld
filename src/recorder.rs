@@ -1,5 +1,6 @@
-use crate::{Anchor, Destination, Viewport};
-use bevy::prelude::{GlobalTransform, Query, *};
+// use crate::{Anchor, Destination, Viewport};
+use glam::{Quat, Vec3};
+// use bevy::prelude::{GlobalTransform, Query, *};
 
 #[derive(Default)]
 pub struct Script {
@@ -36,64 +37,64 @@ impl Script {
 
 /// Same as [`PlayerPlugin`] but does not spawn a camera
 pub struct RecorderPlugin;
-impl Plugin for RecorderPlugin {
-	fn build(&self, app: &mut App) {
-		app.insert_resource(Script::default())
-			.add_startup_system(start_recording)
-			.add_startup_system(start_playing)
-			.add_system(camera_recorder)
-			.add_system(player);
-	}
-}
+// impl Plugin for RecorderPlugin {
+// 	fn build(&self, app: &mut App) {
+// 		app.insert_resource(Script::default())
+// 			.add_startup_system(start_recording)
+// 			.add_startup_system(start_playing)
+// 			.add_system(camera_recorder)
+// 			.add_system(player);
+// 	}
+// }
 
 pub fn start_recording() {
 	// Clean recording each time.
 	let _ = std::fs::remove_file("record.csv");
 }
 
-pub fn camera_recorder(time: Res<Time>, query_t: Query<&GlobalTransform, With<Viewport>>) {
-	let query = query_t.single();
-	use std::io::Write;
-	//TODO stick in resource and buffer.
-	let mut file = std::fs::OpenOptions::new()
-		.write(true)
-		.create(true)
-		.append(true)
-		.open("record.csv")
-		.unwrap();
+// pub fn camera_recorder(time: Res<Time>, query_t: Query<&GlobalTransform, With<Viewport>>) {
+// 	let query = query_t.single();
+// 	use std::io::Write;
+// 	//TODO stick in resource and buffer.
+// 	let mut file = std::fs::OpenOptions::new()
+// 		.write(true)
+// 		.create(true)
+// 		.append(true)
+// 		.open("record.csv")
+// 		.unwrap();
 
-	let (_scale, rot, translation) = query.to_scale_rotation_translation();
-	let _ = write!(
-		file,
-		"{},{},{},{},{},{},{},{}\r\n",
-		time.seconds_since_startup(),
-		translation.x,
-		translation.y,
-		translation.z,
-		rot.x,
-		rot.y,
-		rot.z,
-		rot.w
-	);
-}
+// 	let (_scale, rot, translation) = query.to_scale_rotation_translation();
+// 	let _ = write!(
+// 		file,
+// 		"{},{},{},{},{},{},{},{}\r\n",
+// 		time.seconds_since_startup(),
+// 		translation.x,
+// 		translation.y,
+// 		translation.z,
+// 		rot.x,
+// 		rot.y,
+// 		rot.z,
+// 		rot.w
+// 	);
+// }
 
-pub fn start_playing(mut script: ResMut<Script>, mut anchor: ResMut<Anchor>) {
-	if let Ok(contents) = std::fs::read_to_string("play.csv") {
-		if let Ok(new_script) = Script::parse(&contents) {
-			script.moments = new_script.moments;
-			println!("Parsed script ok, playing {} moments", script.moments.len());
-			anchor.follow_chain = false;
-		}
-	}
-}
+// pub fn start_playing(mut script: ResMut<Script>, mut anchor: ResMut<Anchor>) {
+// 	if let Ok(contents) = std::fs::read_to_string("play.csv") {
+// 		if let Ok(new_script) = Script::parse(&contents) {
+// 			script.moments = new_script.moments;
+// 			println!("Parsed script ok, playing {} moments", script.moments.len());
+// 			anchor.follow_chain = false;
+// 		}
+// 	}
+// }
 
-pub fn player(time: Res<Time>, mut script: ResMut<Script>, mut dest: ResMut<Destination>) {
-	if let Some(top) = script.moments.last() {
-		if time.seconds_since_startup() > top.0 {
-			dest.location = Some(top.1);
-			dest.look_at = Some(top.2);
-			script.moments.pop();
-			// println!("playing event");
-		}
-	}
-}
+// pub fn player(time: Res<Time>, mut script: ResMut<Script>, mut dest: ResMut<Destination>) {
+// 	if let Some(top) = script.moments.last() {
+// 		if time.seconds_since_startup() > top.0 {
+// 			dest.location = Some(top.1);
+// 			dest.look_at = Some(top.2);
+// 			script.moments.pop();
+// 			// println!("playing event");
+// 		}
+// 	}
+// }

@@ -1,11 +1,9 @@
-use crate::DATASOURCE_EPOC;
-use crate::do_datasources;
-use crate::UPDATE_QUEUE;
-use crate::BASETIME;
-use crate::BridgeMessage;
+use crate::{
+	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate,
+	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE, SOVEREIGNS,
+	ChainInfo
+};
 use core::sync::atomic::Ordering;
-use crate::datasource;
-use crate::log;
 
 macro_rules! log {
     // Note that this is using the `log` function imported above during
@@ -15,7 +13,6 @@ macro_rules! log {
 
 use core::time::Duration;
 use gloo_worker::WorkerScope;
-
 
 use gloo_worker::{HandlerId, Worker};
 
@@ -29,29 +26,24 @@ impl IOWorker {
 		log!("Finished waiting");
 	}
 
-	async fn send_it_too(blocks: Vec<datasource::DataUpdate>) {
-		// web_sys::console::log_1(&format!("got block. add to worker queue{}",
-		// blocks.len()).into());
-
-		// Could move this earlier to when a block is produced by relay chain?
-		let mut base_time = *BASETIME.lock().unwrap();
-		if base_time == 0 {
-			if let datasource::DataUpdate::NewBlock(block) = &blocks[0] {
-				base_time = block.timestamp.unwrap_or(0);
-				web_sys::console::log_1(&format!("BASETIME set to {}", base_time).into());
-				*BASETIME.lock().unwrap() = base_time;
-			}
-		}
-
-		UPDATE_QUEUE.lock().unwrap().extend(blocks);
-		// web_sys::console::log_1(&format!("added to worker queue").into());
+	async fn send_it_too(rendered: (RenderUpdate, RenderDetails)) {
+		let mut pending = UPDATE_QUEUE.lock().unwrap();
+		let mut details = DETAILS.lock().unwrap();
+		pending.extend(rendered.0);
+		details.extend(rendered.1);
 	}
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum WorkerResponse {
+	RenderUpdate(RenderUpdate, u64), //free transactions
+	Details(u32, Details, ChainInfo),
 }
 
 impl Worker for IOWorker {
 	type Input = BridgeMessage;
 	type Message = Vec<()>;
-	type Output = Vec<datasource::DataUpdate>;
+	type Output = WorkerResponse;
 
 	fn create(_scope: &WorkerScope<Self>) -> Self {
 		Self {}
@@ -63,26 +55,43 @@ impl Worker for IOWorker {
 
 	fn received(&mut self, scope: &WorkerScope<Self>, msg: Self::Input, id: HandlerId) {
 		match msg {
-			BridgeMessage::SetDatasource(s, as_of, data_epoc) => {
+			BridgeMessage::SetDatasource(sovs, as_of, data_epoc) => {
 				DATASOURCE_EPOC.store(data_epoc, Ordering::Relaxed);
-				// web_sys::console::log_1(&format!("got input from bridge basetime {}",
-				// basetime).into()); let link_clone : Arc<async_std::sync::Mutex<WorkerLink<Self>>>
-				// = scope.clone();
-				async_std::task::block_on(do_datasources(s, as_of, &Self::send_it_too));
-				// 			async |_|{
-				// 			web_sys::console::log_1(&format!("got block. send to bridge").into());
-				// 			self.t();
-				// //			scope.send_message(vec![]);
-				// 		}
+				*SOVEREIGNS.lock().unwrap() = Some(sovs.clone());
+				async_std::task::block_on(do_datasources(sovs, as_of, &Self::send_it_too));
 			},
 			BridgeMessage::GetNewBlocks => {
-				// let t = async move || {
 				let vec = &mut *UPDATE_QUEUE.lock().unwrap();
-				let mut results = vec![];
-				core::mem::swap(vec, &mut results);
-				scope.respond(id, results);
-				// };
-				// async_std::task::block_on(t());
+				// If a chain does not have any transactions then assume the average.
+				let chains = crate::CHAIN_STATS.lock().unwrap();
+				let chain_count = chains.values().count() as u64;
+				if chain_count > 0 {
+					let chains_with_no_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| if s.is_none() { Some(())} else {None}).count() as u64;
+					// log!("chains with no tx: {}", chains_with_no_tx);
+					let mut free_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| s).sum::<u64>() / 12;
+					//TODO 12 seconds per block assumed.
+
+					//For chains with no transactions assume average
+					free_tx += free_tx * chains_with_no_tx / chain_count as u64;
+
+					let mut results = RenderUpdate::default();
+					core::mem::swap(vec, &mut results);
+					if results.any() {
+						scope.respond(id, WorkerResponse::RenderUpdate(results, free_tx));
+					}
+				}
+			},
+			BridgeMessage::GetEventDetails(cube_index) => {
+				let details =
+					DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
+				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
+			},
+			BridgeMessage::GetExtrinsicDetails(cube_index) => {
+				let details =
+					DETAILS.lock().unwrap().extrinsic_instances[cube_index as usize].clone();
+				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},
 		}
 

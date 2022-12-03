@@ -4,8 +4,13 @@ use crate::{DataEntity, DataEvent};
 /// For the relay chain including parachain blocks is useful work.
 pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
 	match *event {
-		DataEntity::Extrinsic { ref details, .. } =>
-			return is_boring(details.pallet.as_str(), details.variant.as_str()),
+		DataEntity::Extrinsic { ref details, msg_count, .. } =>
+		{
+			if msg_count > 0 {
+				return false;
+			}
+			is_boring(details.pallet.as_str(), details.variant.as_str())
+		}
 		DataEntity::Event(DataEvent { ref details, .. }) =>
 			details.parent.is_none() || is_boring(&details.pallet, &details.variant),
 	}
@@ -25,7 +30,7 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
         | ("ParaInclusion", "CandidateBacked")
         // | ("ParaInherent", "enter") - this is what the relay chains most important job is.
         | ("Timestamp", "set")
-        // | ("ParachainSystem", "set_validation_data") - not boring as executes other user's messages
+        | ("ParachainSystem", "set_validation_data") //- not boring as executes other user's messages
         | ("AuthorInherent","kick_off_authorship_validation")//zeitgeist moonbeam
         | ("Lighthouse", "set")
         | ("ParachainStaking", _) => true,

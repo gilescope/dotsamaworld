@@ -1,58 +1,53 @@
-use bevy::diagnostic::Diagnostics;
+// use bevy::diagnostic::Diagnostics;
 
 pub mod details;
 pub mod doturl;
 pub mod toggle;
-//  use egui::ImageData;
-use crate::{Anchor, Env, Inspector, Viewport, log};
-use bevy::prelude::*;
-use bevy_egui::EguiContext;
-// use bevy_inspector_egui::{options::StringAttributes, Inspectable};
+use cgmath::Point3;
+use std::sync::atomic::Ordering;
+use std::collections::HashMap;
+use crate::{log, Anchor, Env, Inspector, ChainInfo};
 use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
+ use crate::FREE_TXS;
+// use std::num::NonZeroU32;
 use egui::ComboBox;
-// use egui::ComboBox;
-use egui_datepicker::DatePicker;
+// use egui_datepicker::DatePicker;
 use std::ops::DerefMut;
 #[derive(Default)]
 pub struct OccupiedScreenSpace {
-	left: f32,
-	top: f32,
-	// right: f32,
-	bottom: f32,
-}
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+	pub left: f32,
+	pub top: f32,
+	//pub right: f32,
+	pub bottom: f32,
 }
 
-pub struct OriginalCameraTransform(pub Transform);
+// pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
-	mut egui_context: ResMut<EguiContext>,
-	mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-	viewpoint_query: Query<&GlobalTransform, With<Viewport>>,
-	mut spec: ResMut<UrlBar>,
-	mut anchor: ResMut<Anchor>,
-	mut inspector: ResMut<Inspector>,
-	entities: Query<(&GlobalTransform, &Details)>,
-	mut destination: ResMut<Destination>,
-	diagnostics: Res<Diagnostics>,
+	egui_context: &mut egui::Context,
+	mut occupied_screen_space: &mut OccupiedScreenSpace,
+	viewpoint: &Point3<f32>,
+	spec: &mut UrlBar,
+	mut anchor: &mut Anchor,
+	inspector: &mut Inspector,
+	destination: &mut Destination,
+	fps: u32,
+	tps: u32,
+	selected_details: Option<(u32, Details, ChainInfo)>,
 ) {
-	if inspector.selected.is_some() {
+	if selected_details.is_some() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
 			.resizable(true)
-			.show(egui_context.ctx_mut(), |ui| {
+			.show(egui_context, |ui| {
 				// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 
 				// ui.horizontal(|ui| {
 				// 	// ui.heading("Selected:");
 				// });
 				// ui.separator();
-				
 
 				// if inspector.selected.is_some() {
 				// let name = inspector.selected.as_ref().map(|d| d.doturl.chain_str()).unwrap();
@@ -82,43 +77,158 @@ pub fn ui_bars_system(
 				// 		});
 				// }
 				// }
-use egui::Link;
-				if let Some(selected) = &inspector.selected {					
+				use egui::Link;
+
+				if let Some((_cube_index, selected, chain_info)) = &selected_details {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so use open.				
-					if ui.add(Link::new("open in polkadot.js")).clicked() {
-						open::that(&selected.url).unwrap();
+					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap_or(0) as i32);
+
+					if ui.add(Link::new(format!("#{}", selected.doturl))).clicked() {
+						open_url(&format!("#{}", &selected.doturl));
 					}
+					
+					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
+					// use open.
+					// if ui.add(Link::new("open in polkadot.js")).clicked() {
+					// 	log!("click detected");
+					// 	if let Err(e) = open::that(&selected.url) {
+					// 		log!("Error opening link {:?}", e);
+					// 	}
+					// }
 					if let Some(val) = &selected.value {
-						// ui.add(|ui| Tree(val.clone()));
-						// ui.collapsing(
-						// 	"value", 	|
-							funk(ui, 
-								&scale_value_to_borrowed::convert(val,true));
-//             .default_open(depth < 1)
-						ui.label(&val.to_string());
-						ui.label(&scale_value_to_borrowed::convert(val,true).to_string());
+						let (val, _s) = scale_value::stringify::from_str(val);
+						if let Ok(val) = val {
+							let val_decoded = scale_value_to_borrowed::convert(&val, true);
+
+							if let Some(v) = val_decoded.expect3("Ethereum", "0", "Executed")
+							{
+								log!("yeah baby {:?}", &v);
+								if let Some(tx_hash) = v.find2("transaction_hash", "0") {
+									if let scale_borrow::Value::ScaleOwned(tx) = tx_hash {
+										let mut eth_tx_map = HashMap::new();
+											eth_tx_map.insert((1,2006), "https://blockscout.com/astar//tx/0x{}");
+											eth_tx_map.insert((1,2004), "https://moonscan.io/tx/0x{}");
+											eth_tx_map.insert((0,2023), "https://moonriver.moonscan.io/tx/0x{}");
+											
+										if let Some(url) = eth_tx_map.get(&chain_tuple) {
+											let tx_hash =  hex::encode(&tx[..]);
+											if ui.add(Link::new(format!("Transaction Hash #: 0x{}", tx_hash))).clicked() {
+												let url = url.replace("{}", &tx_hash);
+												
+												open_url(&url);
+											}
+										}
+									}
+								}
+							}
+
+							funk(ui, &val_decoded);
+						}
+						//             .default_open(depth < 1)
+						// ui.label(&val.to_string());
+						// ui.label(&scale_value_to_borrowed::convert(&val,true).to_string());
 					}
 					// ui.add(egui::TextEdit::multiline(&mut  selected.url.as_ref()));
-					ui.label("RAW Scale:");
-					
-					if ui.button("📋").clicked() {
-						let s = hex::encode(&selected.raw);
-						log!("{}", &s);
-						ui.output().copied_text = s;//TODO not working...
-					};
-					ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+					// ui.label("RAW Scale:");
 
-					ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-						if let Some(hand) = inspector.texture.as_ref() {
-							let texture: &egui::TextureHandle = hand;
+					if let Some(event) = selected.doturl.event {
+						ui.label(format!("Event #: {}", event));
+					}
+					if let Some(extrinsic) = selected.doturl.extrinsic {
+						if selected.raw.is_empty() {
+							ui.label(format!("Extrinsic #: {}", extrinsic));
+						} else {
+							if ui.add(Link::new(format!("Decode Extrinsic #: {}", extrinsic))).clicked() {
+								let encoded: String = form_urlencoded::Serializer::new(String::new())
+									.append_pair("rpc", &chain_info.chain_ws[0])
+									.finish();
 
-							let l = 200.; // occupied_screen_space.left - 10.;
-							ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+								// let is_relay = chain_info.chain_url.is_relay();
+								let url = format!(
+									"https://polkadot.js.org/apps/?{}#/extrinsics/decode/0x{}",
+									&encoded,
+									&hex::encode(&selected.raw)
+								);
+
+								open_url(&url);
+							}
 						}
-					});
+					}
+					if let Some(block_number) = selected.doturl.block_number {
+						if ui.add(Link::new(format!("See Block #: {}", block_number))).clicked() {
+							log!("click block detected");
+							let encoded: String = form_urlencoded::Serializer::new(String::new())
+								.append_pair("rpc", &chain_info.chain_ws[0])
+								.finish();
+
+							// let is_relay = chain_info.chain_url.is_relay();
+							let url = format!(
+								"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
+								&encoded,
+								block_number
+							);
+
+							open_url(&url);
+						}
+
+						let mut block_explore_map = HashMap::new();
+						block_explore_map.insert((1,2004),"https://moonscan.io/block/{}");
+						block_explore_map.insert((0,2023), "https://moonriver.moonscan.io/block/{}");
+						block_explore_map.insert((0, 1000), "https://statemine.statescan.io/block/{}");
+						block_explore_map.insert((1, 1000), "https://statemint.statescan.io/block/{}");
+
+
+					
+
+						if let Some(para_id) = selected.doturl.para_id {
+							if let Some(url) = block_explore_map.get(&(selected.doturl.souverign_index(), para_id)) {
+								if ui.add(Link::new(format!("Local block explore #: {}", block_number))).clicked() {
+									log!("click block detected");
+
+									let url = url.replace("{}", &block_number.to_string());
+
+									open_url(&url);
+								}
+							}
+						}
+					}
+					if let Some(para_id) = selected.doturl.para_id {
+						ui.label(format!("Para Id: {}", para_id));
+					}
+					if let Some(sovereign) = selected.doturl.sovereign {
+						if sovereign == -1 {
+							if ui.add(Link::new("Kusama Relay Chain")).clicked() {
+								open_url("https://kusama.network/");
+							}							
+						} else if sovereign == 1 {
+							if ui.add(Link::new("Polkadot Relay Chain")).clicked() {
+								open_url("https://polkadot.network/");
+							}
+						} else {
+							ui.label(format!("Relay Id: {}", sovereign));
+						}
+					}
+
+					// if ui.button("📋").clicked() {
+					// 	let s = hex::encode(&selected.raw);
+					// 	log!("{}", &s);
+					// 	ui.output().copied_text = s; //TODO not working...
+					// };
+					//TODO: request raw from webworker!!!
+					// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+
+					// ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+					// 	if let Some(hand) = inspector.texture.as_ref() {
+					// 		let texture: &egui::TextureHandle = hand;
+
+					// 		let l = 200.; // occupied_screen_space.left - 10.;
+					// 		ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+					// 	}
+					// });
+				} else {
+					occupied_screen_space.left = 0.;
 				}
 			})
 			.response
@@ -134,17 +244,9 @@ use egui::Link;
 	//     .rect
 	//     .width();
 
-	let mut fps = 0.;
-	for diag in diagnostics.iter() {
-		if diag.name == "fps" {
-			fps = diag.value().unwrap_or_default();
-			break
-		}
-	}
-
 	occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
 		.resizable(false)
-		.show(egui_context.ctx_mut(), |ui| {
+		.show(egui_context, |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
 				let _combo = ComboBox::from_label("Env")
@@ -156,47 +258,51 @@ use egui::Link;
 						ui.selectable_value(&mut spec.env, Env::Local, "local");
 					});
 
-				ui.add(
-					DatePicker::<std::ops::Range<NaiveDateTime>>::new(
-						"noweekendhighlight",
-						&mut spec.timestamp,
-					)
-					.highlight_weekend(false),
-				);
+				// ui.add(
+				// 	DatePicker::<std::ops::Range<NaiveDateTime>>::new(
+				// 		"noweekendhighlight",
+				// 		&mut spec.timestamp,
+				// 	)
+				// 	.highlight_weekend(false),
+				// );
 
 				//TODO: location = alpha blend to 10% everything but XXXX
 				let response = ui.text_edit_singleline(&mut spec.find);
 				let mut found = 0;
 				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
 					if spec.find.len() <= 4 {
-						if let Ok(para_id) = spec.find.parse() {
-							for (loc, details) in entities.iter() {
-								if details.doturl.para_id == Some(para_id) &&
-									details.doturl.block_number.is_some()
-								{
-									destination.location = Some(loc.translation());
-									inspector.selected = Some(details.clone());
-									found += 1;
-								}
-							}
-						}
+						// if let Ok(para_id) = spec.find.parse() {
+						// for (loc, details) in entities.iter() {
+						// 	if details.doturl.para_id == Some(para_id) &&
+						// 		details.doturl.block_number.is_some()
+						// 	{
+						// 		destination.location = Some(loc.translation());
+						// 		inspector.selected = Some(details.clone());
+						// 		found += 1;
+						// 	}
+						// }
+						// }
 					}
-					for (loc, details) in entities.iter() {
-						if spec.find.len() <= details.pallet.len() && spec.find.as_bytes().eq_ignore_ascii_case(&details.pallet.as_bytes()[..spec.find.len()])
-						// if details.pallet.contains(&spec.find) || details.variant.contains(&spec.find)
-						{
-							destination.location = Some(loc.translation());
-							inspector.selected = Some(details.clone());
-							found += 1;
-						}
-					}
+					// for (loc, details) in entities.iter() {
+					// 	if spec.find.len() <= details.pallet.len() &&
+					// 		spec.find.as_bytes().eq_ignore_ascii_case(
+					// 			&details.pallet.as_bytes()[..spec.find.len()],
+					// 		)
+					// 	// if details.pallet.contains(&spec.find) ||
+					// 	// details.variant.contains(&spec.find)
+					// 	{
+					// 		destination.location = Some(loc.translation());
+					// 		inspector.selected = Some(details.clone());
+					// 		found += 1;
+					// 	}
+					// }
 
 					println!("find {}", spec.find);
 				}
 				if !spec.find.is_empty() {
 					ui.heading(format!("found: {}", found));
 				}
-				ui.with_layout(egui::Layout::right_to_left(), |ui| {
+				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
 					ui.heading("Follow:");
 					// spec.location.deref_mut().ui(ui, StringAttributes { multiline: false },
@@ -209,21 +315,28 @@ use egui::Link;
 		.height();
 	occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
 		.resizable(false)
-		.show(egui_context.ctx_mut(), |ui| {
+		.show(egui_context, |ui| {
 			ui.horizontal(|ui| {
 				if let Some(selected) = &inspector.hovered {
 					ui.heading(selected);
 				}
-				ui.with_layout(egui::Layout::right_to_left(), |ui| {
-					let timestamp = super::x_to_timestamp(
-						viewpoint_query.get_single().unwrap().translation().x,
-					);
-					let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+					let x = viewpoint.x;
+					let y = viewpoint.y;
+					let z = viewpoint.z;
+
+					let timestamp = super::x_to_timestamp(viewpoint.x);
+					let naive = NaiveDateTime::from_timestamp(timestamp, 0);
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-					ui.heading(format!("{:03.0} fps. {}", fps, newdate));
+
+					let free = FREE_TXS.load(Ordering::Relaxed);
+					ui.heading(format!(
+						"TPS: {:03.0} EST FREE TPS: {:03.0} FPS: {:03.0} x={:03.0} y={:03.0} z={:03.0} {} ",
+						tps, free, fps, x, y, z, newdate
+					));
 				});
 			});
 		})
@@ -233,61 +346,80 @@ use egui::Link;
 }
 use egui::Ui;
 
-fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) -> () {
+fn open_url(url: &str) {
+	#[cfg(target_family = "wasm")]
+	{
+		let window = web_sys::window().unwrap();
+		let agent = window.navigator().user_agent().unwrap();
+		log!("agent {}", agent);
+		if agent.contains("Safari") {
+			if let Err(e) = window.location().assign(url)
+			{
+				log!("Error opening link {:?}", e);
+			}
+		} else {
+			if let Err(e) = web_sys::window().unwrap().open_with_url(url)
+			{
+				log!("Error opening link {:?}", e);
+			}
+		}
+	}
+}
+
+fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 	match &val {
 		scale_borrow::Value::Object(ref pairs) => {
 			if pairs.len() == 1 {
 				let mut header = String::new();
 				let (mut k, v) = &pairs[0];
-				let mut v : &scale_borrow::Value = &v;
-					
+				let mut v: &scale_borrow::Value = v;
+
 				while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 					header.push_str(k);
 					header.push('.');
 					let (nk, nv) = &nested_pairs[0];
 					k = nk;
-					v = &nv;
+					v = nv;
 				}
 				header.push_str(k);
 				// use egui::CollapsingHeader;
-				ui.collapsing(header, |ui|{
-					funk(ui, &v);
+				ui.collapsing(header, |ui| {
+					funk(ui, v);
 				});
 			} else {
 				for (mut k, v) in pairs.iter() {
 					if let scale_borrow::Value::Object(nested_pairs) = &v {
 						let mut header = String::new();
-						let mut v : &scale_borrow::Value = &v;
-							
+						let mut v: &scale_borrow::Value = v;
+
 						while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
 							header.push_str(k);
 							header.push('.');
 							let (nk, nv) = &nested_pairs[0];
 							k = nk;
-							v = &nv;
+							v = nv;
 						}
 						header.push_str(k);
 						// use egui::CollapsingHeader;
-						ui.collapsing(header, |ui|{
-							funk(ui, &v);
+						ui.collapsing(header, |ui| {
+							funk(ui, v);
 						});
 					} else {
-						ui.collapsing(k, |ui|{
+						ui.collapsing(k, |ui| {
 							funk(ui, v);
 						});
 					}
 				}
 			}
-		}
+		},
 		scale_borrow::Value::ScaleOwned(bytes) => {
 			ui.label(format!("0x{}", hex::encode(bytes.as_slice())));
-		}
+		},
 		_ => {
 			ui.label(val.to_string());
-		}
+		},
 	}
 }
-
 
 // TODO: Something like this would probably stop us rendering
 // behind the footer and header.

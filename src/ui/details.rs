@@ -1,8 +1,8 @@
 //! This mod contains all the egui code for 2d that powers the details screen.
 use super::DotUrl;
-use bevy::{ecs as bevy_ecs, prelude::*};
-use bevy_ecs::prelude::Component;
-use bevy_egui::EguiSettings;
+// use bevy::{ecs as bevy_ecs, prelude::*};
+// use bevy_ecs::prelude::Component;
+// use bevy_egui::EguiSettings;
 use serde::{Deserialize, Serialize};
 // use bevy_inspector_egui::{
 // 	options::{NumberAttributes, StringAttributes},
@@ -17,21 +17,23 @@ pub enum Success {
 	Sad,
 }
 
-#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
-pub struct Details//<'scale> - would require details being stored somewhere with ids.
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+pub struct Details
+//<'scale> - would require details being stored somewhere with ids.
 {
 	pub pallet: String,
+	pub variant: String,
+
 	pub doturl: DotUrl,
 	pub parent: Option<u32>,
-	pub variant: String,
 	pub success: Success,
 	// pub hover: String,
-	pub flattern: String,
+	// pub flattern: String,
 	// #[inspectable(label = "Url:")]
-	pub url: String,
+	// pub url: String,
 	// pub chain_name: String,
 	pub raw: Vec<u8>,
-	pub value: Option<scale_value::Value>
+	pub value: Option<String>, //scale Value as string
 }
 
 // use egui::Grid;
@@ -81,9 +83,8 @@ pub struct Details//<'scale> - would require details being stored somewhere with
 // 	}
 // }
 
-pub fn configure_visuals(
-	// egui_ctx: ResMut<EguiContext>,
-	mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
+pub fn configure_visuals(// egui_ctx: ResMut<EguiContext>,
+	// mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
 ) {
 	// egui_ctx.ctx_mut().set_visuals(egui::Visuals {
 	//     window_rounding: 0.0.into(),
@@ -106,6 +107,6 @@ pub fn configure_visuals(
 	//  .desired_width(f32::INFINITY)
 	// if let Some(window) = windows.get_primary().is_some()
 	{
-		egui_settings.scale_factor = 1.5;
+		// egui_settings.scale_factor = 1.5;
 	}
 }

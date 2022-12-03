@@ -1,16 +1,16 @@
 use crate::Env;
 use serde::{Deserialize, Serialize};
-use std::num::NonZeroU32;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] //TODO use scale
 pub struct DotUrl {
 	pub env: Env,
 	// 0 is the no mans land in the middle
 	pub sovereign: Option<i32>,
-	pub para_id: Option<NonZeroU32>,
+	pub para_id: Option<u32>,
 	pub block_number: Option<u32>,
 	pub extrinsic: Option<u32>,
 	pub event: Option<u32>,
+	pub event_in_block: Option<u32>,
 }
 
 impl DotUrl {
@@ -86,6 +86,10 @@ impl DotUrl {
 		self.sovereign.unwrap_or(1) == -1
 	}
 
+	pub fn souverign_index(&self) -> u32 {
+		u32::from(!self.is_darkside())
+	}
+
 	pub fn rflip(&self) -> f32 {
 		if self.is_darkside() {
 			1.0
@@ -100,11 +104,7 @@ impl DotUrl {
 
 	/// Are we layer zero (relay chain), layer one or...
 	pub fn layer(&self) -> usize {
-		if self.is_relay() {
-			0
-		} else {
-			1
-		}
+		usize::from(!self.is_relay())
 	}
 
 	pub fn chain_str(&self) -> String {
@@ -113,7 +113,7 @@ impl DotUrl {
 			sov = 0;
 		}
 		if let Some(para_id) = self.para_id {
-			format!("{}-{}", sov, u32::from(para_id))
+			format!("{}-{}", sov, para_id)
 		} else {
 			format!("{}", sov)
 		}
@@ -126,7 +126,7 @@ impl std::fmt::Display for DotUrl {
 			// Env::SelfSovereign => "indies",
 			Env::Prod => "dotsama",
 			// Env::SelfSovereignTest => "testindies",
-			// Env::Test => "test",
+			Env::Test => "test",
 			// Env::NFTs => "nfts",
 			Env::Local => "local",
 			// Env::CGP => "cgp",

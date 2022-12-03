@@ -2,20 +2,20 @@ use crate::datasource::{find_timestamp, get_block_hash, Source};
 use async_recursion::async_recursion;
 use std::convert::TryInto;
 
-type TIME = i64;
+type Time = i64;
 
 /// Note: Genisis blocks (0) do not generally have timestamps.
 pub async fn get_block_number_near_timestamp(
-	search_timestamp: TIME,
+	search_timestamp: Time,
 	start_block: u32,
 	source: &mut impl Source,
-	//&mut impl FnMut(u32) -> Option<TIME>,
+	//&mut impl FnMut(u32) -> Option<Time>,
 	average_blocktime_in_ms: Option<u64>,
 	metad_current: &frame_metadata::RuntimeMetadataPrefixed,
 ) -> Option<u32> {
 	debug_assert!(search_timestamp > 9_654_602_493, "you were meant to multiply that by 1000");
 	get_block_number_near_timestamp_helper(
-		search_timestamp as i64,
+		search_timestamp,
 		start_block as i64,
 		source,
 		average_blocktime_in_ms.map(|a| a as i64),
@@ -54,7 +54,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 		)
 		.await
 	}
-	.unwrap() as i64;
+	.unwrap();
 
 	let time_distance = start_time - search_timestamp;
 	let block_distance = time_distance / average_blocktime_in_ms;
@@ -80,7 +80,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 		)
 		.await
 	}
-	.unwrap() as i64;
+	.unwrap();
 
 	let actual_blocktime = (start_time - guess_time) / (start_block - guess);
 	if actual_blocktime == 0 {
@@ -109,7 +109,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 		)
 		.await
 	}
-	.unwrap() as i64;
+	.unwrap();
 
 	if (calibrated_guess_time.abs_diff(search_timestamp) as i64) < actual_blocktime * 2 {
 		return Some(calibrated_guess as i64)
@@ -128,8 +128,7 @@ async fn get_block_number_near_timestamp_helper<S: Source>(
 mod tests {
 	use crate::datasource::RawDataSource;
 
-use super::{get_block_number_near_timestamp, TIME};
-	use super::super::get_metadata;
+	use super::{super::get_metadata, get_block_number_near_timestamp, Time};
 
 	#[test]
 	fn real_polkadot_example_test() {
@@ -137,11 +136,10 @@ use super::{get_block_number_near_timestamp, TIME};
 	}
 
 	async fn real_polkadot_example() {
-		let mut source = RawDataSource::new("wss://rpc.polkadot.io:443");
-		let _ = color_eyre::install();
-			let metad_current = get_metadata(&mut source, None).await.unwrap();
-		
-		fn time_for_blocknum(blocknum: u32) -> Option<TIME> {
+		let mut source = RawDataSource::new(vec!["wss://rpc.polkadot.io:443".into()]);
+		let metad_current = get_metadata(&mut source, None).await.unwrap();
+
+		fn time_for_blocknum(blocknum: u32) -> Option<Time> {
 			Some(match blocknum {
 				10000000 => 1_650_715_386_009,
 				10000023 => 1_650_715_524_004,
@@ -170,8 +168,10 @@ use super::{get_block_number_near_timestamp, TIME};
 				1_650_715_386_009,
 				10500000,
 				&mut source,
-				None, &metad_current
-			).await
+				None,
+				&metad_current
+			)
+			.await
 		);
 
 		// // Track forwards in time:
@@ -181,8 +181,10 @@ use super::{get_block_number_near_timestamp, TIME};
 				1_653_739_872_004,
 				10000000,
 				&mut source,
-				None, &metad_current
-			).await
+				None,
+				&metad_current
+			)
+			.await
 		);
 
 		// Track backwards to genesis:
@@ -192,8 +194,10 @@ use super::{get_block_number_near_timestamp, TIME};
 				1_590_507_378_000,
 				10500000,
 				&mut source,
-				None, &metad_current
-			).await
+				None,
+				&metad_current
+			)
+			.await
 		);
 
 		// Track forwards to the restaurant at the end of the universe:
@@ -203,8 +207,10 @@ use super::{get_block_number_near_timestamp, TIME};
 				1_653_739_872_004_000_000,
 				10000000,
 				&mut source,
-				None,&metad_current
-			).await
+				None,
+				&metad_current
+			)
+			.await
 		);
 	}
 }

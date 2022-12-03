@@ -1,0 +1,3 @@
+# [[hooks]]
+# stage = "post_build"
+# command = "./fixup.sh"

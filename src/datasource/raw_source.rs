@@ -1,14 +1,14 @@
 // use async_std::stream::StreamExt;
+use crate::log;
 use async_trait::async_trait;
-#[cfg(not(target_arch = "wasm32"))]
-use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
-
 #[cfg(not(target_arch = "wasm32"))]
-use async_tungstenite::{tungstenite::Message, WebSocketStream};
-#[cfg(not(target_arch = "wasm32"))]
-use futures::{sink::SinkErrInto, stream::SplitSink};
+use {
+	async_tungstenite::{tungstenite::Message, WebSocketStream},
+	futures::{sink::SinkErrInto, stream::SplitSink},
+	parity_scale_codec::Encode,
+};
 
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
@@ -25,12 +25,6 @@ impl AgnosticBlock {
 	pub fn from_bytes(mut bytes: &[u8]) -> Result<Self, parity_scale_codec::Error> {
 		parity_scale_codec::Decode::decode(&mut bytes)
 	}
-}
-
-macro_rules! log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (super::super::log(&format_args!($($t)*).to_string()))
 }
 
 /// A way to source untransformed raw data.
@@ -254,7 +248,7 @@ type WSBackend = polkapipe::ws::Backend<
 
 //#[derive(Clone)]
 pub struct RawDataSource {
-	ws_url: String,
+	ws_url: Vec<String>,
 	client: Option<WSBackend>,
 }
 
@@ -263,14 +257,15 @@ type BError = polkapipe::Error;
 
 /// This is the only type that should know about subxt
 impl RawDataSource {
-	pub fn new(url: &str) -> Self {
-		RawDataSource { ws_url: url.to_string(), client: None }
+	pub fn new(url: Vec<String>) -> Self {
+		RawDataSource { ws_url: url, client: None }
 	}
 
 	#[cfg(target_arch = "wasm32")]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
-			if let Ok(client) = polkapipe::ws_web::Backend::new_ws2(&self.ws_url).await {
+			let urls: Vec<_> = self.ws_url.iter().map(|s|s.as_ref()).collect();
+			if let Ok(client) = polkapipe::ws_web::Backend::new(urls.as_slice()).await {
 				self.client = Some(client);
 			}
 		}
@@ -280,7 +275,7 @@ impl RawDataSource {
 	#[cfg(not(target_arch = "wasm32"))]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
-			if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url).await {
+			if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url[0]).await {
 				self.client = Some(client);
 			}
 		}
@@ -324,7 +319,7 @@ impl Source for RawDataSource {
 				.map(|res| Some(H256::from_slice(&res[..])))
 		} else {
 			log!("could not get client");
-			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url[0])))
 		}
 	}
 
@@ -342,14 +337,15 @@ impl Source for RawDataSource {
 		block_hash: Option<H256>,
 	) -> Result<Option<AgnosticBlock>, BError> {
 		if let Some(client) = self.client().await {
-			let opt = block_hash.map(|b|hex::encode(b.as_bytes()));
+			let opt = block_hash.map(|b| hex::encode(b.as_bytes()));
 			let result = client.query_block(opt.as_deref()).await;
 
 			if let Ok(serde_json::value::Value::Object(map)) = &result {
-				// println!("got 2here");
+				// log!("block = {:?}", map);
 				if let Some(serde_json::value::Value::Object(map)) = map.get("block") {
 					let mut res = AgnosticBlock { block_number: 0, extrinsics: vec![] };
 					if let Some(serde_json::value::Value::Object(m)) = map.get("header") {
+						// log!("header = {:?}", m);
 						if let Some(serde_json::value::Value::String(num_original)) = m.get("number") {
 							 let mut num = num_original.trim_start_matches("0x").to_string();
 							if num.len() % 2 == 1 {
@@ -399,7 +395,7 @@ impl Source for RawDataSource {
 			}
 			result.map(|_| None)
 		} else {
-			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url[0])))
 		}
 		// //TODO: we're decoding and encoding here. cut it out.
 		// Ok(Some(AgnosticBlock {
@@ -432,7 +428,7 @@ impl Source for RawDataSource {
 				client.query_storage(key, None).await.map(Some)
 			}
 		} else {
-			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url)))
+			Err(polkapipe::Error::Node(format!("can't get client for {}", self.ws_url[0])))
 		}
 	}
 
@@ -449,7 +445,7 @@ impl Source for RawDataSource {
 	}
 
 	fn url(&self) -> &str {
-		&self.ws_url
+		&self.ws_url[0]
 	}
 }
 
