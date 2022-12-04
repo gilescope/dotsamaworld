@@ -3,15 +3,12 @@
 pub mod details;
 pub mod doturl;
 pub mod toggle;
+use crate::{log, Anchor, ChainInfo, Destination, Env, Inspector, FREE_TXS};
 use cgmath::Point3;
-use std::sync::atomic::Ordering;
-use std::collections::HashMap;
-use crate::{log, Anchor, Env, Inspector, ChainInfo};
-use crate::Destination;
 use chrono::{DateTime, NaiveDateTime, Utc};
 pub use details::Details;
 pub use doturl::DotUrl;
- use crate::FREE_TXS;
+use std::{collections::HashMap, sync::atomic::Ordering};
 // use std::num::NonZeroU32;
 use egui::ComboBox;
 // use egui_datepicker::DatePicker;
@@ -33,7 +30,7 @@ pub fn ui_bars_system(
 	spec: &mut UrlBar,
 	mut anchor: &mut Anchor,
 	inspector: &mut Inspector,
-	destination: &mut Destination,
+	_destination: &mut Destination,
 	fps: u32,
 	tps: u32,
 	selected_details: Option<(u32, Details, ChainInfo)>,
@@ -83,12 +80,15 @@ pub fn ui_bars_system(
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();
-					let chain_tuple = (selected.doturl.souverign_index(), selected.doturl.para_id.unwrap_or(0) as i32);
+					let chain_tuple = (
+						selected.doturl.souverign_index(),
+						selected.doturl.para_id.unwrap_or(0) as i32,
+					);
 
 					if ui.add(Link::new(format!("#{}", selected.doturl))).clicked() {
 						open_url(&format!("#{}", &selected.doturl));
 					}
-					
+
 					// ui.hyperlink_to("s", &selected.url); not working on linux at the moment so
 					// use open.
 					// if ui.add(Link::new("open in polkadot.js")).clicked() {
@@ -102,21 +102,32 @@ pub fn ui_bars_system(
 						if let Ok(val) = val {
 							let val_decoded = scale_value_to_borrowed::convert(&val, true);
 
-							if let Some(v) = val_decoded.expect3("Ethereum", "0", "Executed")
-							{
+							if let Some(v) = val_decoded.expect3("Ethereum", "0", "Executed") {
 								log!("yeah baby {:?}", &v);
 								if let Some(tx_hash) = v.find2("transaction_hash", "0") {
 									if let scale_borrow::Value::ScaleOwned(tx) = tx_hash {
 										let mut eth_tx_map = HashMap::new();
-											eth_tx_map.insert((1,2006), "https://blockscout.com/astar//tx/0x{}");
-											eth_tx_map.insert((1,2004), "https://moonscan.io/tx/0x{}");
-											eth_tx_map.insert((0,2023), "https://moonriver.moonscan.io/tx/0x{}");
-											
+										eth_tx_map.insert(
+											(1, 2006),
+											"https://blockscout.com/astar//tx/0x{}",
+										);
+										eth_tx_map.insert((1, 2004), "https://moonscan.io/tx/0x{}");
+										eth_tx_map.insert(
+											(0, 2023),
+											"https://moonriver.moonscan.io/tx/0x{}",
+										);
+
 										if let Some(url) = eth_tx_map.get(&chain_tuple) {
-											let tx_hash =  hex::encode(&tx[..]);
-											if ui.add(Link::new(format!("Transaction Hash #: 0x{}", tx_hash))).clicked() {
+											let tx_hash = hex::encode(&tx[..]);
+											if ui
+												.add(Link::new(format!(
+													"Transaction Hash #: 0x{}",
+													tx_hash
+												)))
+												.clicked()
+											{
 												let url = url.replace("{}", &tx_hash);
-												
+
 												open_url(&url);
 											}
 										}
@@ -140,10 +151,14 @@ pub fn ui_bars_system(
 						if selected.raw.is_empty() {
 							ui.label(format!("Extrinsic #: {}", extrinsic));
 						} else {
-							if ui.add(Link::new(format!("Decode Extrinsic #: {}", extrinsic))).clicked() {
-								let encoded: String = form_urlencoded::Serializer::new(String::new())
-									.append_pair("rpc", &chain_info.chain_ws[0])
-									.finish();
+							if ui
+								.add(Link::new(format!("Decode Extrinsic #: {}", extrinsic)))
+								.clicked()
+							{
+								let encoded: String =
+									form_urlencoded::Serializer::new(String::new())
+										.append_pair("rpc", &chain_info.chain_ws[0])
+										.finish();
 
 								// let is_relay = chain_info.chain_url.is_relay();
 								let url = format!(
@@ -166,25 +181,32 @@ pub fn ui_bars_system(
 							// let is_relay = chain_info.chain_url.is_relay();
 							let url = format!(
 								"https://polkadot.js.org/apps/?{}#/explorer/query/{}",
-								&encoded,
-								block_number
+								&encoded, block_number
 							);
 
 							open_url(&url);
 						}
 
 						let mut block_explore_map = HashMap::new();
-						block_explore_map.insert((1,2004),"https://moonscan.io/block/{}");
-						block_explore_map.insert((0,2023), "https://moonriver.moonscan.io/block/{}");
-						block_explore_map.insert((0, 1000), "https://statemine.statescan.io/block/{}");
-						block_explore_map.insert((1, 1000), "https://statemint.statescan.io/block/{}");
-
-
-					
+						block_explore_map.insert((1, 2004), "https://moonscan.io/block/{}");
+						block_explore_map
+							.insert((0, 2023), "https://moonriver.moonscan.io/block/{}");
+						block_explore_map
+							.insert((0, 1000), "https://statemine.statescan.io/block/{}");
+						block_explore_map
+							.insert((1, 1000), "https://statemint.statescan.io/block/{}");
 
 						if let Some(para_id) = selected.doturl.para_id {
-							if let Some(url) = block_explore_map.get(&(selected.doturl.souverign_index(), para_id)) {
-								if ui.add(Link::new(format!("Local block explore #: {}", block_number))).clicked() {
+							if let Some(url) =
+								block_explore_map.get(&(selected.doturl.souverign_index(), para_id))
+							{
+								if ui
+									.add(Link::new(format!(
+										"Local block explore #: {}",
+										block_number
+									)))
+									.clicked()
+								{
 									log!("click block detected");
 
 									let url = url.replace("{}", &block_number.to_string());
@@ -201,7 +223,7 @@ pub fn ui_bars_system(
 						if sovereign == -1 {
 							if ui.add(Link::new("Kusama Relay Chain")).clicked() {
 								open_url("https://kusama.network/");
-							}							
+							}
 						} else if sovereign == 1 {
 							if ui.add(Link::new("Polkadot Relay Chain")).clicked() {
 								open_url("https://polkadot.network/");
@@ -211,22 +233,22 @@ pub fn ui_bars_system(
 						}
 					}
 
-					// if ui.button("📋").clicked() {
-					// 	let s = hex::encode(&selected.raw);
-					// 	log!("{}", &s);
-					// 	ui.output().copied_text = s; //TODO not working...
-					// };
-					//TODO: request raw from webworker!!!
-					// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
+				// if ui.button("📋").clicked() {
+				// 	let s = hex::encode(&selected.raw);
+				// 	log!("{}", &s);
+				// 	ui.output().copied_text = s; //TODO not working...
+				// };
+				//TODO: request raw from webworker!!!
+				// ui.add(egui::TextEdit::multiline(&mut hex::encode(&selected.raw)));
 
-					// ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-					// 	if let Some(hand) = inspector.texture.as_ref() {
-					// 		let texture: &egui::TextureHandle = hand;
+				// ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+				// 	if let Some(hand) = inspector.texture.as_ref() {
+				// 		let texture: &egui::TextureHandle = hand;
 
-					// 		let l = 200.; // occupied_screen_space.left - 10.;
-					// 		ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
-					// 	}
-					// });
+				// 		let l = 200.; // occupied_screen_space.left - 10.;
+				// 		ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
+				// 	}
+				// });
 				} else {
 					occupied_screen_space.left = 0.;
 				}
@@ -268,7 +290,7 @@ pub fn ui_bars_system(
 
 				//TODO: location = alpha blend to 10% everything but XXXX
 				let response = ui.text_edit_singleline(&mut spec.find);
-				let mut found = 0;
+				let found = 0;
 				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
 					if spec.find.len() <= 4 {
 						// if let Ok(para_id) = spec.find.parse() {
@@ -326,7 +348,7 @@ pub fn ui_bars_system(
 					let z = viewpoint.z;
 
 					let timestamp = super::x_to_timestamp(viewpoint.x);
-					let naive = NaiveDateTime::from_timestamp(timestamp, 0);
+					let naive = NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap();
 					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
 					let datetime: DateTime<chrono::Local> = datetime.into();
 
@@ -353,13 +375,11 @@ fn open_url(url: &str) {
 		let agent = window.navigator().user_agent().unwrap();
 		log!("agent {}", agent);
 		if agent.contains("Safari") {
-			if let Err(e) = window.location().assign(url)
-			{
+			if let Err(e) = window.location().assign(url) {
 				log!("Error opening link {:?}", e);
 			}
 		} else {
-			if let Err(e) = web_sys::window().unwrap().open_with_url(url)
-			{
+			if let Err(e) = web_sys::window().unwrap().open_with_url(url) {
 				log!("Error opening link {:?}", e);
 			}
 		}
@@ -388,7 +408,7 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 				});
 			} else {
 				for (mut k, v) in pairs.iter() {
-					if let scale_borrow::Value::Object(nested_pairs) = &v {
+					if let scale_borrow::Value::Object(_nested_pairs) = &v {
 						let mut header = String::new();
 						let mut v: &scale_borrow::Value = v;
 
@@ -490,18 +510,18 @@ impl UrlBar {
 		}
 	}
 
-	pub fn timestamp(&self) -> Option<i64> {
-		//self.timestamp.map(|timestamp| {
-		let datetime: DateTime<chrono::Utc> = DateTime::from_utc(self.timestamp, Utc);
-		Some(datetime.timestamp() * 1000)
-		//})
-	}
+	// pub fn timestamp(&self) -> Option<i64> {
+	// 	//self.timestamp.map(|timestamp| {
+	// 	let datetime: DateTime<chrono::Utc> = DateTime::from_utc(self.timestamp, Utc);
+	// 	Some(datetime.timestamp() * 1000)
+	// 	//})
+	// }
 
-	pub fn changed(&self) -> bool {
-		self.was_location != self.location ||
-			self.was_timestamp != self.timestamp ||
-			self.was_env != self.env
-	}
+	// pub fn changed(&self) -> bool {
+	// 	self.was_location != self.location ||
+	// 		self.was_timestamp != self.timestamp ||
+	// 		self.was_env != self.env
+	// }
 
 	pub fn reset_changed(&mut self) {
 		self.was_location = self.location.clone();

@@ -11,16 +11,17 @@
 #![allow(clippy::wildcard_in_or_patterns)]
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::type_complexity)]
-use core::num::NonZeroI64;
 use crate::{
 	camera::CameraUniform,
 	movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
 use chrono::prelude::*;
+use core::num::NonZeroI64;
 use datasource::DataUpdate;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
+use jpeg_decoder::Decoder;
 use lazy_static::lazy_static;
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
@@ -30,7 +31,7 @@ use std::{
 	f32::consts::PI,
 	iter,
 	sync::{
-		atomic::{AtomicI32, AtomicU32, Ordering},
+		atomic::{AtomicU32, Ordering},
 		Arc, Mutex,
 	},
 	time::Duration,
@@ -42,17 +43,15 @@ use winit::{
 	event_loop::EventLoop,
 	window::{Window, WindowId},
 };
-use jpeg_decoder::Decoder;
 
 #[cfg(target_arch = "wasm32")]
 use {
 	core::future::Future, gloo_worker::Spawnable, gloo_worker::WorkerBridge, wasm_bindgen::JsCast,
-	winit::platform::web::WindowBuilderExtWebSys,
-	webworker::WorkerResponse,
+	webworker::WorkerResponse, winit::platform::web::WindowBuilderExtWebSys,
 };
 
 //Block space calculations:
-//TODO: free_weight = total weight of block - used weight 
+//TODO: free_weight = total weight of block - used weight
 // average_extrinsic_weight = (total used weight / extrinsic count)
 // capacity extrinsics = free weight / average_extrinsic_weight
 
@@ -65,7 +64,10 @@ macro_rules! log {
 
 // Until fn is defined in std lib prelude.
 #[inline]
-fn default<T>() -> T where T: Default {
+fn default<T>() -> T
+where
+	T: Default,
+{
 	Default::default()
 }
 
@@ -116,7 +118,7 @@ const LAYER_GAP: f32 = 0.;
 const CHAIN_HEIGHT: f32 = 0.001;
 const CUBE_WIDTH: f32 = 0.8;
 
-static FREE_TXS : AtomicU64 = AtomicU64::new(0);
+static FREE_TXS: AtomicU64 = AtomicU64::new(0);
 
 // The time by which all times should be placed relative to each other on the x axis.
 lazy_static! {
@@ -164,8 +166,8 @@ pub struct ChainInfo {
 	pub chain_name: String,
 }
 
- use core::sync::atomic::AtomicU64;
- use chrono::DateTime;
+use chrono::DateTime;
+use core::sync::atomic::AtomicU64;
 
 #[derive(Default)]
 pub struct ChainStats {
@@ -178,16 +180,19 @@ pub struct ChainStats {
 impl ChainStats {
 	fn avg_free_transactions(&self) -> Option<u64> {
 		let max_block_size = 500_000_000_000u64; //todo: get from system state call
-		// let min_block_weight = 5_000_000_000u64;
+										 // let min_block_weight = 5_000_000_000u64;
 
 		if self.total_extrinsics == 0 {
-			return None;
+			return None
 		}
 
 		//MIN_BLOCK_WEIGHT has been subtracted from the block weights.
-		let weight_per_extrinsic = (self.total_block_weight).checked_div(self.total_extrinsics as u64)?;
+		let weight_per_extrinsic =
+			(self.total_block_weight).checked_div(self.total_extrinsics as u64)?;
 		// log!("weight per extrinsic: {}", weight_per_extrinsic);
-		let free_weight = max_block_size.checked_sub(self.total_block_weight).unwrap_or_else(|| panic!("dude heavy {}", self.total_block_weight));
+		let free_weight = max_block_size
+			.checked_sub(self.total_block_weight)
+			.unwrap_or_else(|| panic!("dude heavy {}", self.total_block_weight));
 
 		//round down
 		free_weight.checked_div(weight_per_extrinsic)
@@ -268,27 +273,26 @@ impl Vertex {
 // counter clockwise to be visible
 // B-D
 // | |
-// A-C   
+// A-C
 
 fn rect_instances(count: usize) -> Vec<Vertex> {
 	let count = count as f32;
 	let mut results = vec![];
 	let scale = 3.25;
 
-	results.push(Vertex { position: [0., 0., 0.0],		  color: [0.,  1. / count, -2.], }); // A
-	results.push(Vertex { position: [scale, 0., 0.0], 	  color: [0.,  0., -2.], }); // B
-	results.push(Vertex { position: [0., 0., 3.*scale],    color: [1. ,  1. / count, -2.], }); // C
-	results.push(Vertex { position: [scale, 0., 3.*scale], color: [1. ,  0., -2.], }); // D
+	results.push(Vertex { position: [0., 0., 0.0], color: [0., 1. / count, -2.] }); // A
+	results.push(Vertex { position: [scale, 0., 0.0], color: [0., 0., -2.] }); // B
+	results.push(Vertex { position: [0., 0., 3. * scale], color: [1., 1. / count, -2.] }); // C
+	results.push(Vertex { position: [scale, 0., 3. * scale], color: [1., 0., -2.] }); // D
 
-	results.push(Vertex { position: [0., 0.3, 0.0],		  color: [0.,  1. / count, -2.], }); // A
-	results.push(Vertex { position: [scale, 0.3, 0.0], 	  color: [0.,  0., -2.], }); // B
-	results.push(Vertex { position: [0., 0.3, 3.*scale],    color: [1. ,  1. / count, -2.], }); // C
-	results.push(Vertex { position: [scale, 0.3, 3.*scale], color: [1. ,  0., -2.], }); // D
-
+	results.push(Vertex { position: [0., 0.3, 0.0], color: [0., 1. / count, -2.] }); // A
+	results.push(Vertex { position: [scale, 0.3, 0.0], color: [0., 0., -2.] }); // B
+	results.push(Vertex { position: [0., 0.3, 3. * scale], color: [1., 1. / count, -2.] }); // C
+	results.push(Vertex { position: [scale, 0.3, 3. * scale], color: [1., 0., -2.] }); // D
 
 	// 0,0                    0,1
-		//   texture co-ordinates 
-		// 1,0                    1,1
+	//   texture co-ordinates
+	// 1,0                    1,1
 	results
 }
 
@@ -301,11 +305,19 @@ const fn rect_indicies(offset: u16) -> [u16; 12] {
 	let c = offset + 2;
 	let d = offset + 3;
 	[
-		a,b,d,
-		d,c,a,
+		a,
+		b,
+		d,
+		d,
+		c,
+		a,
 		// Second side (backwards)
-		d+4,b+4,a+4,
-		a+4,c+4,d+4,
+		d + 4,
+		b + 4,
+		a + 4,
+		a + 4,
+		c + 4,
+		d + 4,
 	]
 }
 
@@ -339,7 +351,6 @@ fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) 
 0,0,0  0,0,1//MIN            0  1
 
 */
-
 
 const fn cube_indicies(offset: u16) -> [u16; 36] {
 	[
@@ -436,16 +447,14 @@ impl Instance {
 
 async fn async_main() -> std::result::Result<(), ()> {
 	#[cfg(target_family = "wasm")]
-	let url = web_sys::window().unwrap()
-        .location()
-       .search().expect("no search exists");
+	let url = web_sys::window().unwrap().location().search().expect("no search exists");
 	#[cfg(not(target_family = "wasm"))]
 	let url = "";
 
 	let url = url::Url::parse(&format!("http://dotsama.world/{}", url)).unwrap();
 
 	let params: HashMap<String, String> = url.query_pairs().into_owned().collect();
-	
+
 	log!("url : {:?}", params.get("env"));
 
 	#[cfg(target_arch = "wasm32")]
@@ -529,8 +538,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	}
 
 	//"dotsama:/1//10504599".to_string()
-	let mut urlbar =
-		ui::UrlBar::new(q.clone() , Utc::now().naive_utc(), Env::Local);
+	let mut urlbar = ui::UrlBar::new(q.clone(), Utc::now().naive_utc(), Env::Local);
 	// app.insert_resource();
 	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
@@ -609,7 +617,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// Display the application
 
 	let mut frame_time = Utc::now().timestamp();
-	let mut tx_time = Utc::now().timestamp();
+	let tx_time = Utc::now().timestamp();
 	// let instance_buffer: wgpu::Buffer;
 
 	// let instance_buffer = device.create_buffer_init(
@@ -638,7 +646,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//     znear: 0.1,
 	//     zfar: 100.0,
 	// };
-	let mut camera = camera::Camera::new((-200.0, 100.0, 0.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
+	let mut camera =
+		camera::Camera::new((-200.0, 100.0, 0.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
 	let mut projection =
 		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 400000.0);
 	let mut camera_controller = input::CameraController::new(4.0, 0.4);
@@ -654,60 +663,59 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let camera_bind_group_layout =
 		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
+			entries: &[
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::VERTEX,
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Uniform,
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
 				},
-				count: None,
-			},
-			wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: sample_count > 1,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						multisampled: sample_count > 1,
+						view_dimension: wgpu::TextureViewDimension::D2,
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					},
+					count: None,
+				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 2,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					// This should match the filterable field of the
+					// corresponding Texture entry above.
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
 			],
 			label: Some("camera_bind_group_layout"),
 		});
 
-				//if !loaded_textures {
-		//	loaded_textures = true;
+	//if !loaded_textures {
+	//	loaded_textures = true;
 
-			let (diffuse_texture, diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue).await;
-			// diffuse_texture_view =diffuse_texture_view1;
-			// diffuse_sampler = diffuse_sampler1;
-		//}
+	let (diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue).await;
+	// diffuse_texture_view =diffuse_texture_view1;
+	// diffuse_sampler = diffuse_sampler1;
+	//}
 
 	let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		layout: &camera_bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: camera_buffer.as_entire_binding(),
-		},
+		entries: &[
+			wgpu::BindGroupEntry { binding: 0, resource: camera_buffer.as_entire_binding() },
 			wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-            }
+				binding: 1,
+				resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+			},
+			wgpu::BindGroupEntry {
+				binding: 2,
+				resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+			},
 		],
 		label: Some("camera_bind_group"),
 	});
@@ -731,7 +739,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let start_selected = vertices.len(); //selected
 	vertices.extend(rectangle(CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, 0., 0., 0.));
 	let start_textured = vertices.len(); // textured rectangle
-	vertices.extend(&rect_instances(texture_map.len()));	
+	vertices.extend(&rect_instances(texture_map.len()));
 
 	// vertices.extend(rectangle(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
@@ -767,18 +775,17 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		usage: wgpu::BufferUsages::INDEX,
 	});
 
-
-    // let r = 230./255.;
+	// let r = 230./255.;
 	// let b = 122./255.;
 
 	// let c = as_rgba_u32(-10., -10., -10., 1.0);
 	let c = as_rgba_u32(0.0, 0.0, 0.0, 1.0);
 	let ground_instance_data: Vec<Instance> = vec![
-		// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color: as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
-		Instance{ position: [-ground_width/2.0,-500.,-ground_width/2.0], color: c },
-		Instance{ position: [-ground_width/2.0,500.,-ground_width/2.0], color: c  },
+		// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color:
+		// as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
+		Instance { position: [-ground_width / 2.0, -500., -ground_width / 2.0], color: c },
+		Instance { position: [-ground_width / 2.0, 500., -ground_width / 2.0], color: c },
 		// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
-
 	];
 
 	let mut chain_instance_data = vec![];
@@ -787,7 +794,6 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let mut event_instance_data = vec![];
 	let mut selected_instance_data = vec![];
 	let mut textured_instance_data: Vec<Instance> = vec![];
-
 
 	let mut extrinsic_target_heights: Vec<f32> = vec![];
 	let mut event_target_heights: Vec<f32> = vec![];
@@ -896,13 +902,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let mut last_mouse_position = None;
 	let window_id = window.id();
 
-				
-	let mut ground_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("ground Instance Buffer"),
-			contents: bytemuck::cast_slice(&ground_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+	let mut ground_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("ground Instance Buffer"),
+		contents: bytemuck::cast_slice(&ground_instance_data),
+		usage: wgpu::BufferUsages::VERTEX,
+	});
 	let mut ground_instance_data_count = ground_instance_data.len();
 	let mut textured_instance_buffer =
 		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -910,49 +914,51 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			contents: bytemuck::cast_slice(&textured_instance_data),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-	let mut textured_instance_data_count = textured_instance_data.len();	
-	let mut chain_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("chain Instance Buffer"),
-			contents: bytemuck::cast_slice(&chain_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+	let mut textured_instance_data_count = textured_instance_data.len();
+	let mut chain_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("chain Instance Buffer"),
+		contents: bytemuck::cast_slice(&chain_instance_data),
+		usage: wgpu::BufferUsages::VERTEX,
+	});
 	let mut chain_instance_data_count = chain_instance_data.len();
-	let mut block_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("block Instance Buffer"),
-			contents: bytemuck::cast_slice(&block_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+	let mut block_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("block Instance Buffer"),
+		contents: bytemuck::cast_slice(&block_instance_data),
+		usage: wgpu::BufferUsages::VERTEX,
+	});
 	let mut block_instance_data_count = block_instance_data.len();
-	let mut extrinsic_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("cube Instance Buffer"),
-			contents: bytemuck::cast_slice(&extrinsic_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
-	let mut event_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("cube Instance Buffer"),
-			contents: bytemuck::cast_slice(&event_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+	// let mut extrinsic_instance_buffer =
+	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+	// 		label: Some("cube Instance Buffer"),
+	// 		contents: bytemuck::cast_slice(&extrinsic_instance_data),
+	// 		usage: wgpu::BufferUsages::VERTEX,
+	// 	});
+	// let mut event_instance_buffer =
+	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+	// 		label: Some("cube Instance Buffer"),
+	// 		contents: bytemuck::cast_slice(&event_instance_data),
+	// 		usage: wgpu::BufferUsages::VERTEX,
+	// 	});
 	// let mut cube_instance_data_count = cube_instance_data.len();
-	let mut selected_instance_buffer =
-		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("selected Instance Buffer"),
-			contents: bytemuck::cast_slice(&selected_instance_data),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+	//  =
+	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+	// 		label: Some("selected Instance Buffer"),
+	// 		contents: bytemuck::cast_slice(&selected_instance_data),
+	// 		usage: wgpu::BufferUsages::VERTEX,
+	// 	});
 	// let mut selected_instance_data_count = selected_instance_data.len();
 
 	// let mut loaded_textures = false;
-	// let diffuse_texture_view: wgpu::TextureView; 
+	// let diffuse_texture_view: wgpu::TextureView;
 	// let diffuse_sampler : wgpu::Sampler;
 
 	// Don't try and select something if your in the middle of moving
-	let mut last_movement_time = Utc::now();
+	// let mut last_movement_time = Utc::now();
 	event_loop.run(move |event, _, _control_flow| {
+		let selected_instance_buffer;
+		let event_instance_buffer;
+		let extrinsic_instance_buffer;
+
 		let now = Utc::now();
 
 		let scale_x = size.width as f32 / hidpi_factor as f32;
@@ -1033,7 +1039,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						}
 
 						// We have previous and current locations of two fingers.
-						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {						
+						if let (Some((cur1, prev1)), Some((cur2, prev2))) = (our_finger, other_finger) {
 							let dist = | loc1: &PhysicalPosition<f64>, loc2: &PhysicalPosition<f64> | {
 								let x_diff = loc1.x - loc2.x;
 								let y_diff = loc1.y - loc2.y;
@@ -1070,8 +1076,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 									// LOL Gotcha: touch y 0 starts from the bottom!
 
 									let x_diff = last_touch_location.x - location.x;
-									let y_diff = last_touch_location.y - location.y;	
-									
+									let y_diff = last_touch_location.y - location.y;
+
 									// If the distance is small then this is the continuation of a move
 									// rather than a new touch.
 									if x_diff.abs() + y_diff.abs() < 200. {
@@ -1104,8 +1110,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 								}
 							}
 
-							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4, 
-								&extrinsic_instance_data, &event_instance_data, 
+							try_select(&camera, &projection, opengl_to_wgpu_matrix_mat4,
+								&extrinsic_instance_data, &event_instance_data,
 								&mut selected_instance_data, scale_x, scale_y, &size, location);
 						}
 
@@ -1180,7 +1186,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						extrinsic_instance_data.push(*instance);
 						extrinsic_target_heights.push(*height);
 					}
-					
+
 					tx += render_update.extrinsic_instances.len() as u64;
 
 					for (instance, height) in &render_update.event_instances {
@@ -1199,7 +1205,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						};
 						let texture = texture_map.get(&key);
 						if let Some(texture_index) = texture {
-							textured_instance_data.push(Instance{color: *texture_index as u32, ..*instance});
+							let (y,x) = texture_index;
+							let texture_loc = (x + (y << 8)) as u32; 
+							textured_instance_data.push(Instance{color: texture_loc, ..*instance});
 						}
 					}
 
@@ -1304,7 +1312,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				&mut inspector,
 				&mut destination,
 				fps,
-				tps, 
+				tps,
 				selected_details,
 			);
 
@@ -1493,96 +1501,165 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	});
 }
 
-async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler,
-	HashMap<(u32,u32), usize>
-) {
+async fn load_textures(
+	device: &wgpu::Device,
+	queue: &wgpu::Queue,
+) -> (wgpu::TextureView, wgpu::Sampler, HashMap<(u32, u32), (usize,usize)>) {
 	// let chain_str = "0-2000";//details.doturl.chain_str();
 	// let window = web_sys::window().unwrap();
 	let mut width = 0;
 	let mut height = 0;
 	let mut map = HashMap::new();
 	let mut index = 0;
-	map.insert((0, 0), index); index += 1;
-	map.insert((0, 999), index); index += 1;
-	map.insert((0,1000), index); index += 1;
-	map.insert((0,1001), index); index += 1;
-	map.insert((0,2000), index); index += 1;
-	map.insert((0,2001), index); index += 1;
-	map.insert((0,2004), index); index += 1;
-	map.insert((0,2007), index); index += 1;
-	map.insert((0,2011), index); index += 1;
-	map.insert((0,2012), index); index += 1;
-	map.insert((0,2015), index); index += 1;
-	map.insert((0,2023), index); index += 1;
-	map.insert((0,2048), index); index += 1;
-	map.insert((0,2084), index); index += 1;
-	map.insert((0,2085), index); index += 1;
-	map.insert((0,2086), index); index += 1;
-	map.insert((0,2087), index); index += 1;
-	map.insert((0,2088), index); index += 1;
-	map.insert((0,2090), index); index += 1;
-	map.insert((0,2092), index); index += 1;
-	map.insert((0,2095), index); index += 1;
-	map.insert((0,2096), index); index += 1;
-	map.insert((0,2097), index); index += 1;
-	map.insert((0,2100), index); index += 1;
-	map.insert((0,2102), index); index += 1;
-	map.insert((0,2101), index); index += 1;
-	map.insert((0,2105), index); index += 1;
-	map.insert((0,2106), index); index += 1;
-	map.insert((0,2107), index); index += 1;
-	map.insert((0,2110), index); index += 1;
-	map.insert((0,2113), index); index += 1;
-	map.insert((0,2114), index); index += 1;
-	map.insert((0,2115), index); index += 1;
-	map.insert((0,2118), index); index += 1;
-	map.insert((0,2119), index); index += 1;
-	map.insert((0,2121), index); index += 1;
-	map.insert((0,2123), index); index += 1;
-	map.insert((0,2124), index); index += 1;
-	map.insert((0,2125), index); index += 1;
-	map.insert((0,2129), index); index += 1;
+	const H: usize = 40; // 40 images per col
+	map.insert((0, 0), (index / H, index % H));
+	index += 1;
+	map.insert((0, 999), (index / H, index % H));
+	index += 1;
+	map.insert((0, 1000), (index / H, index % H));
+	index += 1;
+	map.insert((0, 1001), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2000), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2001), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2004), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2007), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2011), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2012), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2015), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2023), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2048), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2084), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2085), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2086), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2087), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2088), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2090), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2092), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2095), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2096), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2097), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2100), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2102), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2101), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2105), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2106), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2107), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2110), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2113), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2114), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2115), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2118), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2119), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2121), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2123), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2124), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2125), (index / H, index % H));
+	index += 1;
+	map.insert((0, 2129), (index / H, index % H));
+	index += 1;
 
-	map.insert((1, 0), index); index += 1;
-	map.insert((1, 1000), index); index += 1;
-	map.insert((1, 1001), index); index += 1;
-	map.insert((1, 2000), index); index += 1;
-	map.insert((1, 2002), index); index += 1;
-	map.insert((1, 2004), index); index += 1;
-	map.insert((1, 2006), index); index += 1;
-	map.insert((1, 2007), index); index += 1;
-	map.insert((1, 2011), index); index += 1;
-	map.insert((1, 2012), index); index += 1;
-	map.insert((1, 2013), index); index += 1;
-	map.insert((1, 2019), index); index += 1;
-	map.insert((1, 2021), index); index += 1;
-	map.insert((1, 2026), index); index += 1;
-	map.insert((1, 2030), index); index += 1;
-	map.insert((1, 2031), index); index += 1;
-	map.insert((1, 2032), index); index += 1;
-	map.insert((1, 2034), index); index += 1;
-	map.insert((1, 2035), index); index += 1;
-	map.insert((1, 2037), index); index += 1;
-	map.insert((1, 2039), index); index += 1;
-	map.insert((1, 2043), index); index += 1;
-	map.insert((1, 2046), index); index += 1;
-	map.insert((1, 2048), index); index += 1;
-	map.insert((1, 2051), index); index += 1;
-	map.insert((1, 2052), index); index += 1;
-	map.insert((1, 2086), index); //index += 1;
+	map.insert((1, 0), (index / H, index % H));
+	index += 1;
+	map.insert((1, 1000), (index / H, index % H));
+	index += 1;
+	map.insert((1, 1001), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2000), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2002), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2004), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2006), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2007), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2011), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2012), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2013), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2019), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2021), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2026), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2030), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2031), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2032), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2034), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2035), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2037), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2039), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2043), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2046), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2048), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2051), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2052), (index / H, index % H));
+	index += 1;
+	map.insert((1, 2086), (index / H, index % H)); //index += 1;
 
 	//TODO: MAX height achieved!!! need to go wide...
 	// or have another texture buffer.
+	// MAX: 16384 for chrome, 8192 for firefox and iOS, but android limits to 4096!
 
 	// images must be inserted in same order as they are in the map.
 
 	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
 	//sips -z 100 300 *.jpeg to format them all to same aspect.
-	let mut images = vec![];	
+	let mut images = vec![];
 	#[cfg(feature = "raw_images")]
 	{
 		images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
-		images.push(include_bytes!("../assets/branding/0-999.jpeg").to_vec());//https://text2image.com/en/
+		images.push(include_bytes!("../assets/branding/0-999.jpeg").to_vec()); //https://text2image.com/en/
 		images.push(include_bytes!("../assets/branding/0-1000.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/0-1001.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/0-2000.jpeg").to_vec());
@@ -1658,7 +1735,6 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 
 	//MAX: 16k for chrome, safari. 8k height for firefox.
 
-
 	let mut diffuse_rgba2 = Vec::new();
 
 	let mut found = 0;
@@ -1690,8 +1766,6 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		let mut decoder = Decoder::new(std::io::Cursor::new(bytes));
 		let diffuse_rgb: Vec<u8> = decoder.decode().expect("failed to decode image");
 
-		
-
 		let metadata = decoder.info().unwrap();
 
 		// let diffuse_rgba2 = vec![
@@ -1707,18 +1781,18 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 				diffuse_rgba2.push(*byte);
 				// Add alpha channel
 				if i % 3 == 2 {
-					diffuse_rgba2.push(255);			
+					diffuse_rgba2.push(255);
 				}
 			}
 		} else {
 			if width == metadata.width as u32 {
 				found += 1;
-				
+
 				for (i, byte) in diffuse_rgb.iter().enumerate() {
 					diffuse_rgba2.push(*byte);
 					// Add alpha channel
 					if i % 3 == 2 {
-						diffuse_rgba2.push(255);			
+						diffuse_rgba2.push(255);
 					}
 				}
 			}
@@ -1735,43 +1809,83 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		// let diffuse = [150_u8;4 * 10 * 10];
 		// let diffuse_rgba = &diffuse[..];
 	}
+
+	#[cfg(not(feature = "bake"))]
+	assert!(height < 4096, "Android phones don't allow textures longer than that");
+
 	log!("found images {found}");
 	let diffuse_rgba = diffuse_rgba2.as_slice();
-	
+
 	#[cfg(feature = "bake")]
 	{
-		let diffuse_rgba : Vec<u8> = diffuse_rgba.iter().enumerate().filter_map(|(i,pixel)|
-			if i % 4 == 3 { None } else { Some(*pixel) }
-		).collect();
-		use jpeg_encoder::{Encoder, ColorType};
+		const img_height: u16 = 100;
+		const img_width: u16 = 300;
+		const bake_height: u16 = 4000;
+		let image_columns = 1 + dbg!((found * img_height) / bake_height);
+		let bake_width = dbg!(img_width * image_columns);
+		let images_on_last_column = dbg!(((found * img_height) % bake_height) / img_height);
+		let extra_blank_images_needed = (bake_height / img_height) - images_on_last_column;
+
+		// Remove alpha channel as jpegs don't do alpha.
+		let mut diffuse_rgba: Vec<u8> = diffuse_rgba2
+			.as_slice()
+			.iter()
+			.enumerate()
+			.filter_map(|(i, pixel)| if i % 4 == 3 { None } else { Some(*pixel) })
+			.collect();
+
+		// Add blank images to make long enough
+		// to be refactored into perfect rectangle:
+		for _img in 0..extra_blank_images_needed {
+			for _width in 0..img_width {
+				for _height in 0..img_height {
+					for _color in 0..3 {
+						diffuse_rgba.push(0_u8);
+					}
+				}
+			}
+		}
+
+		let mut bake_img = vec![];//0u8; (bake_height as u32 * bake_width as u32) as usize];
+
+		let colors_per_pixel = 3_u32;
+		let img_width_px = img_width as u32 * colors_per_pixel; // 3 colors per pixel.
+		for y in 0..(bake_height as u32) {
+			for x in 0..(bake_width as u32 * colors_per_pixel) {
+				let col = x / img_width_px as u32;
+				let x_source = x % img_width_px as u32;
+				let y_source = y + (col * bake_height as u32);
+				let z = ((y_source * img_width_px as u32) + x_source) as usize;
+				if z >= diffuse_rgba.len()
+				{
+					println!("{col} , {x_source}, {y_source}, {z}");
+				}
+				bake_img.push(diffuse_rgba[z]);
+			}
+		}
+
+		use jpeg_encoder::{ColorType, Encoder};
 		let mut encoder = Encoder::new_file("some.jpeg", 90).unwrap();
-		encoder.encode(&diffuse_rgba[..], width as u16, height as u16, ColorType::Rgb).unwrap();
+		encoder.encode(&bake_img[..], bake_width, bake_height, ColorType::Rgb).unwrap();
 		println!("hi");
 		panic!("done");
 	}
 
-	let texture_size = wgpu::Extent3d {
-		width,
-		height,
-		depth_or_array_layers: 1,
-	};
-	let diffuse_texture = device.create_texture(
-		&wgpu::TextureDescriptor {
-			// All textures are stored as 3D, we represent our 2D texture
-			// by setting depth to 1.
-			size: texture_size,
-			mip_level_count: 1, // We'll talk about this a little later
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			// Most images are stored using sRGB so we need to reflect that here.
-			format: wgpu::TextureFormat::Rgba8UnormSrgb,
-			// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
-			// COPY_DST means that we want to copy data to this texture
-			usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-			label: Some("diffuse_texture"),
-		}
-	);
-
+	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
+	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+		// All textures are stored as 3D, we represent our 2D texture
+		// by setting depth to 1.
+		size: texture_size,
+		mip_level_count: 1, // We'll talk about this a little later
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		// Most images are stored using sRGB so we need to reflect that here.
+		format: wgpu::TextureFormat::Rgba8UnormSrgb,
+		// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
+		// COPY_DST means that we want to copy data to this texture
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		label: Some("diffuse_texture"),
+	});
 
 	queue.write_texture(
 		// Tells wgpu where to copy the pixel data
@@ -1785,7 +1899,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		diffuse_rgba,
 		// The layout of the texture
 		wgpu::ImageDataLayout {
-			offset: 0,//TODO for different layouts
+			offset: 0, //TODO for different layouts
 			bytes_per_row: std::num::NonZeroU32::new(4 * width),
 			rows_per_image: None,
 		},
@@ -1795,7 +1909,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 	let diffuse_texture_view = diffuse_texture.create_view(&default());
 	let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 		address_mode_u: wgpu::AddressMode::Repeat, //Repeat
-		address_mode_v: wgpu::AddressMode::Repeat,//ClampToEdge,
+		address_mode_v: wgpu::AddressMode::Repeat, //ClampToEdge,
 		address_mode_w: wgpu::AddressMode::Repeat,
 		mag_filter: wgpu::FilterMode::Linear, //Linear,
 		min_filter: wgpu::FilterMode::Nearest,
@@ -1803,7 +1917,7 @@ async fn load_textures(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Tex
 		..default()
 	});
 
-	(diffuse_texture, diffuse_texture_view, diffuse_sampler, map)
+	(diffuse_texture_view, diffuse_sampler, map)
 }
 
 fn try_select(
@@ -2145,7 +2259,7 @@ fn source_data(
 				.as_slice()
 				.iter()
 				.enumerate()
-				.map(|(chain_index,  (para_id,chain_name, chain_names))| {
+				.map(|(chain_index, (para_id, chain_name, chain_names))| {
 					let url = chain_name_to_url(chain_names);
 
 					// #[cfg(not(target_arch="wasm32"))]
@@ -2562,7 +2676,7 @@ impl Sovereigns {
 		if let Some(para_id) = doturl.para_id {
 			for chain_info in sov {
 				if chain_info.chain_url.para_id == Some(para_id) {
-					return chain_info.clone();
+					return chain_info.clone()
 				}
 			}
 			panic!("chain info not found for para id: {}", para_id);
@@ -2632,10 +2746,10 @@ impl RenderUpdate {
 
 	fn count(&self) -> usize {
 		self.chain_instances.len() +
-		self.block_instances.len() +
-		self.extrinsic_instances.len() +
-		self.event_instances.len() +
-		self.textured_instances.len()
+			self.block_instances.len() +
+			self.extrinsic_instances.len() +
+			self.event_instances.len() +
+			self.textured_instances.len()
 	}
 }
 
@@ -2654,7 +2768,7 @@ fn render_block(
 	// mut materials: ResMut<Assets<StandardMaterial>>,
 	chain_info: &ChainInfo,
 	// asset_server: Res<AssetServer>,
-	mut links: &mut Vec<MessageSource>,
+	links: &mut Vec<MessageSource>,
 	// mut polyline_materials: ResMut<Assets<PolylineMaterial>>,
 	// mut polylines: ResMut<Assets<Polyline>>,
 	// mut event: EventWriter<RequestRedraw>,
@@ -2711,7 +2825,7 @@ fn render_block(
 			let mut base_time = *BASETIME.lock().unwrap();
 			if base_time == 0 {
 				base_time = block.timestamp.unwrap_or(0);
-				if  base_time != 0 {
+				if base_time != 0 {
 					// log!("BASETIME set to {}", base_time);
 					*BASETIME.lock().unwrap() = base_time;
 					render.basetime = Some(NonZeroI64::new(base_time).unwrap());
@@ -2768,9 +2882,8 @@ fn render_block(
 
 			if block_num < 0. {
 				// negative blocks look messy - let's not show those.
-				return;
+				return
 			}
-
 
 			// Add the new block as a large square on the ground:
 			{
@@ -2838,18 +2951,19 @@ fn render_block(
 				// let chain_str = details.doturl.chain_str();
 				// &format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str)
 
-				render.textured_instances.push(Instance{
+				render.textured_instances.push(Instance {
 					position: glam::Vec3::new(
 						0. + block_num - 8.5,
 						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
-					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
+						(0.1 + RELAY_CHAIN_CHASM_WIDTH +
 							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 							chain_info.chain_url.rflip(),
 					)
 					.into(),
 					// Encode the chain / parachain instead of the instance.color data.
-					// This will get translated to 
-					color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } + chain_info.chain_url.para_id.unwrap_or(0)
+					// This will get translated to
+					color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } +
+						chain_info.chain_url.para_id.unwrap_or(0),
 				});
 				// bun.insert(details)
 				// .insert(Name::new("Block"))
@@ -2971,41 +3085,42 @@ fn render_block(
 		DataUpdate::NewChain(chain_info, sudo) => {
 			let is_relay = chain_info.chain_url.is_relay();
 			log!("adding new chain");
-			render.textured_instances.push(Instance{
+			render.textured_instances.push(Instance {
 				position: glam::Vec3::new(
-						0. - 8.5 - 28.,
-						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
-					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
-							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-							chain_info.chain_url.rflip(),
-					)
-					.into(),
-				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } + chain_info.chain_url.para_id.unwrap_or(0)
+					0. - 8.5 - 28.,
+					if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+					(0.1 + RELAY_CHAIN_CHASM_WIDTH +
+						BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+						chain_info.chain_url.rflip(),
+				)
+				.into(),
+				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } +
+					chain_info.chain_url.para_id.unwrap_or(0),
 			});
 
-			render.textured_instances.push(Instance{
+			render.textured_instances.push(Instance {
 				position: glam::Vec3::new(
-						0. - 8.5 - 28. - 3.3,
-						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
-					 (0.1 +RELAY_CHAIN_CHASM_WIDTH +
-							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-							chain_info.chain_url.rflip(),
-					)
-					.into(),
-				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 }
+					0. - 8.5 - 28. - 3.3,
+					if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+					(0.1 + RELAY_CHAIN_CHASM_WIDTH +
+						BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+						chain_info.chain_url.rflip(),
+				)
+				.into(),
+				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 },
 			});
 
 			if sudo {
-				render.textured_instances.push(Instance{
+				render.textured_instances.push(Instance {
 					position: glam::Vec3::new(
-							0. - 8.5 - 28. + 3.3 ,
-							if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
-						(0.1 +RELAY_CHAIN_CHASM_WIDTH +
-								BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-								chain_info.chain_url.rflip(),
-						)
-						.into(),
-					color: 999
+						0. - 8.5 - 28. + 3.3,
+						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+						(0.1 + RELAY_CHAIN_CHASM_WIDTH +
+							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+							chain_info.chain_url.rflip(),
+					)
+					.into(),
+					color: 999,
 				});
 			}
 
@@ -3096,7 +3211,7 @@ fn add_blocks(
 				// let call_data = format!("0x{}", hex::encode(block.as_bytes()));
 
 				// let mut create_source = vec![];
-				
+
 				for (link, _link_type) in block.end_link() {
 					log!("end link typw {:?}!", _link_type);
 					//if this id already exists then this is the destination, not the source...
@@ -3145,8 +3260,7 @@ fn add_blocks(
 
 				for (link, link_type) in block.start_link() {
 					log!("inserting source of rainbow!");
-					links
-						.push(MessageSource { id: link.to_string(), link_type: *link_type });
+					links.push(MessageSource { id: link.to_string(), link_type: *link_type });
 				}
 
 				// let mut bun = commands.spawn_bundle(PbrBundle {
@@ -3196,7 +3310,6 @@ fn add_blocks(
 				// extrinsic_details.doturl.block_number.unwrap(),
 				// extrinsic_details.doturl.extrinsic.unwrap());
 				render_details.extrinsic_instances.push(block.details().clone());
-
 
 				// for source in create_source {
 				// 	bun.insert(source);
@@ -3273,7 +3386,7 @@ fn add_blocks(
 			));
 
 			// let details = entity.details.clone();
-			// details.url = format!("https://polkadot.subscan.io/extrinsic/{}-{}", 
+			// details.url = format!("https://polkadot.subscan.io/extrinsic/{}-{}",
 			// details.doturl.block_number.unwrap(),
 			// block_event_index);
 
@@ -3288,7 +3401,7 @@ fn add_blocks(
 }
 
 /// Yes this is now a verb. Who knew?
-fn rainbow(vertices: &mut Vec<glam::Vec3>, points: usize) {
+fn _rainbow(vertices: &mut Vec<glam::Vec3>, points: usize) {
 	let start = vertices[0];
 	let end = vertices[1];
 	let diff = end - start;
@@ -3496,8 +3609,8 @@ fn rain(
 
 // struct Width(f32);
 
-static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
-static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
+// static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
+// static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
 // fn update_visibility(
 // 	// mut entity_low_midfi: Query<(
@@ -3628,7 +3741,6 @@ static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 // 	}
 // }
 
-
 // 	// Kick off the live mode automatically so people have something to look at
 // 	datasource_events.send(DataSourceChangedEvent {
 // 		//source: "dotsama:/1//10504599".to_string(),
@@ -3647,7 +3759,6 @@ pub struct Inspector {
 	// #[inspectable(deletable = false)]
 	// selected: Option<Details>,
 	hovered: Option<String>,
-
 	// texture: Option<egui::TextureHandle>,
 }
 

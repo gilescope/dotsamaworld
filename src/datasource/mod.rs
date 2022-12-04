@@ -1,13 +1,9 @@
 use self::raw_source::AgnosticBlock;
-use crate::render_block;
-use core::future::Future;
 use crate::{
-	CHAIN_STATS,
-	default, 
-	ChainStats,
-	ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType, RenderDetails, RenderUpdate,
-	BASETIME, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
+	default, render_block, ui::DotUrl, ChainInfo, DataEntity, DataEvent, Details, LinkType,
+	RenderDetails, RenderUpdate, BASETIME, CHAIN_STATS, DATASOURCE_EPOC, PAUSE_DATA_FETCH,
 };
+use core::future::Future;
 use log::warn;
 use serde::{Deserialize, Serialize};
 // #[cfg(not(target_arch = "wasm32"))]
@@ -141,8 +137,7 @@ where
 	pub chain_info: ChainInfo,
 	pub as_of: Option<DotUrl>,
 	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
-	pub sender:
-		Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	pub sender: Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 }
 
 impl<F, R> BlockWatcher<F, R>
@@ -175,8 +170,7 @@ where
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
 
-
-		/// Flag chains using sudo!
+		// Flag chains using sudo!
 		let metad = get_metadata(&mut source, None).await;
 		let mut sudo = false;
 		if metad.is_some() {
@@ -187,14 +181,11 @@ where
 					if p.name == "Sudo" {
 						log!("metad: {}", &p.name);
 						sudo = true;
-						break;
+						break
 					}
 				}
 			}
 		}
-
-
-
 
 		// Tell renderer to draw a new chain...
 		{
@@ -277,7 +268,7 @@ where
 					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
 					// log!("get block {:?}", block_number);
 					let block_hash: Option<primitive_types::H256> =
-						source.fetch_block_hash( block_number).await.ok().flatten();
+						source.fetch_block_hash(block_number).await.ok().flatten();
 					// log!("hash is {:?}", block_hash);
 					if block_hash.is_none() {
 						log!(
@@ -288,20 +279,26 @@ where
 
 						let mut rend = RenderUpdate::default();
 						let mut render_details = RenderDetails::default();
-						render_block(DataUpdate::NewBlock(PolkaBlock {
-							data_epoc: our_data_epoc,
-							// Place it in the approximately right location...
-							timestamp: last_timestamp.map(|t| t + 12_000_000),
-							timestamp_parent: None,
-							blockurl: DotUrl {
-								block_number: Some(block_number),
-								..chain_info.chain_url.clone()
-							},
-							extrinsics: vec![],							
-							events: vec![],
-							weight: None,
-						}), &chain_info, &mut links, &mut rend, &mut render_details);
-						
+						render_block(
+							DataUpdate::NewBlock(PolkaBlock {
+								data_epoc: our_data_epoc,
+								// Place it in the approximately right location...
+								timestamp: last_timestamp.map(|t| t + 12_000_000),
+								timestamp_parent: None,
+								blockurl: DotUrl {
+									block_number: Some(block_number),
+									..chain_info.chain_url.clone()
+								},
+								extrinsics: vec![],
+								events: vec![],
+								weight: None,
+							}),
+							&chain_info,
+							&mut links,
+							&mut rend,
+							&mut render_details,
+						);
+
 						tx((rend, render_details));
 
 						continue
@@ -376,18 +373,17 @@ struct OwnedScale {
 	derived: DataEntity,
 }
 
-
 // pub struct DispatchInfo {
 //     pub weight: Weight,
 //     pub class: DispatchClass,
 //     pub pays_fee: Pays,
 // }
-use parity_scale_codec::Compact;
+// use parity_scale_codec::Compact;
 
 #[derive(Decode, Debug)]
 pub struct Weight {
 	ref_time: u32,
-	proof_size: u32
+	_proof_size: u32,
 }
 
 #[derive(Decode, Debug)]
@@ -414,23 +410,34 @@ where
 	// log!("processing extrinsics {:?}", block_hash);
 	let mut timestamp = None;
 	if let Ok(Some(block)) = get_extrinsics(source, block_hash).await {
-		let weights = source.fetch_storage(&hex::decode("26aa394eea5630e07c48ae0c9558cef734abf5cb34d6244378cddbf18e849d96").unwrap()[..],Some(block_hash)).await.unwrap().unwrap();
+		let weights = source
+			.fetch_storage(
+				&hex::decode("26aa394eea5630e07c48ae0c9558cef734abf5cb34d6244378cddbf18e849d96")
+					.unwrap()[..],
+				Some(block_hash),
+			)
+			.await
+			.unwrap()
+			.unwrap();
 		// let d: FrameSupportDispatchPerDispatchClassWeight;
 
 		// for skip in 0..weights.len() {
-			let d =  <FrameSupportDispatchPerDispatchClassWeight as Decode >::decode(&mut &weights[..]);
-			//.unwrap_or_else(|_| panic!("can't decode - hex: {}", hex::encode(&weights)));
+		let d = <FrameSupportDispatchPerDispatchClassWeight as Decode>::decode(&mut &weights[..]);
+		//.unwrap_or_else(|_| panic!("can't decode - hex: {}", hex::encode(&weights)));
 		// 	if Err()
 		// }
 
-
 		// log!("weights: {:?} hex: {}", d, hex::encode(&weights[..]));
 		let block_weight: Option<u64> = if let Ok(d) = d {
-			Some(d.normal.ref_time as u64 + d.operational.ref_time as u64 + d.mandatory.ref_time as u64) //<Compact<u64> as Into<u64>>::into(d.normal.refTime) + 
-		} else { 
+			Some(
+				d.normal.ref_time as u64 +
+					d.operational.ref_time as u64 +
+					d.mandatory.ref_time as u64,
+			) //<Compact<u64> as Into<u64>>::into(d.normal.refTime) +
+		} else {
 			None
 		};
-		// <Compact<u64> as Into<u64>>::into(d.operational.refTime) + 
+		// <Compact<u64> as Into<u64>>::into(d.operational.refTime) +
 		// <Compact<u64> as Into<u64>>::into(d.mandatory.refTime));
 		// log!("block weight {:?}", &block_weight);
 		// log!("got extrinsics {:?}", block_hash);
@@ -454,20 +461,9 @@ where
 		}
 		let metad = metad.unwrap();
 
-		let mut sudo = false;
-		if let frame_metadata::RuntimeMetadata::V14(ref m) = metad.1 {
-			for p in &m.pallets {
-				if p.name == "Sudo" {
-					log!("metad: {}", &p.name);
-					sudo = true;
-					break;
-				}
-			}
-		}
-
 		let mut exts = vec![];
 		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
-				// log!("an extrinsics {:?}", i);
+			// log!("an extrinsics {:?}", i);
 
 			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
 			//TODO: did we need to double decode extrinsics????
@@ -543,7 +539,7 @@ where
 			blockurl,
 			extrinsics: exts,
 			events,
-			weight: block_weight
+			weight: block_weight,
 		};
 
 		//FYI: blocks sometimes have no events in them.
@@ -551,22 +547,28 @@ where
 		let mut render_details = RenderDetails::default();
 		let mut links = vec![]; //TODO should be global?
 		let weight = current.weight;
-		render_block(DataUpdate::NewBlock(current), chain_info, &mut links, &mut rend, &mut render_details);
+		render_block(
+			DataUpdate::NewBlock(current),
+			chain_info,
+			&mut links,
+			&mut rend,
+			&mut render_details,
+		);
 
-		
 		let mut map = CHAIN_STATS.lock().unwrap();
 		let mut entry = map.entry(chain_info.chain_index).or_insert_with(
-			//ChainStats {// start: Utc::now().timestamp(), 
-				default// }
+			//ChainStats {// start: Utc::now().timestamp(),
+			default, // }
 		);
 		if let Some(weight) = weight {
 			// entry.block_count += rend.block_instances.len() as u32;
-			let non_boring_tx = rend.extrinsic_instances.iter().filter(|i|i.0.position[1] >= 0.).count() as u32;
+			let non_boring_tx =
+				rend.extrinsic_instances.iter().filter(|i| i.0.position[1] >= 0.).count() as u32;
 			if non_boring_tx > 0 {
-				 
-				// log!("non boring {}  {}   {}", non_boring_tx, weight, weight.saturating_sub(MIN_BLOCK_WEIGHT));
+				// log!("non boring {}  {}   {}", non_boring_tx, weight,
+				// weight.saturating_sub(MIN_BLOCK_WEIGHT));
 				entry.total_extrinsics += non_boring_tx;
-				const MIN_BLOCK_WEIGHT: u64 = 0;//5_000_000_000u64;
+				const MIN_BLOCK_WEIGHT: u64 = 0; //5_000_000_000u64;
 				entry.total_block_weight += weight.saturating_sub(MIN_BLOCK_WEIGHT);
 			} // else we assume average
 		}
@@ -683,7 +685,7 @@ async fn process_extrinsic<'a, 'scale>(
 			// Seek out and expand Dmp / DownwardMessageReceived;
 			("ParachainSystem", "set_validation_data") => {
 				// let _s = format!("{:?}", &payload);
-	
+
 				if payload.find2("data", "upward_messages").is_some() {
 					//TODO: Not sure this is ever a thing. More look for sent message event
 					log!("found upward msgs (first time)");
@@ -721,11 +723,18 @@ async fn process_extrinsic<'a, 'scale>(
 					for (msg_index, msg) in channels {
 						msg_count += 1;
 						log!("found {} downward_message is, {}", msg_index, &msg);
-						if let (Some(scale_borrow::Value::ScaleOwned(bytes)), Some(_sent_at)) = (msg.get("msg"), msg.get("sent_at")) {
-							let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| panic!("{}", &format!(
-								"expect to be able to decode {}",
-								&hex::encode(&bytes[..])
-							)));
+						if let (Some(scale_borrow::Value::ScaleOwned(bytes)), Some(_sent_at)) =
+							(msg.get("msg"), msg.get("sent_at"))
+						{
+							let v = polkadyn::decode_xcm(meta, &bytes[..]).unwrap_or_else(|_| {
+								panic!(
+									"{}",
+									&format!(
+										"expect to be able to decode {}",
+										&hex::encode(&bytes[..])
+									)
+								)
+							});
 							log!("xcm msgv= {}", v);
 							let msg_decoded = scale_value_to_borrowed::convert(&v, true);
 							// msg.set("msg_decoded", msg_decoded);
@@ -809,7 +818,7 @@ async fn process_extrinsic<'a, 'scale>(
 									}
 								}
 							}
-							
+
 							// VersionedXcm::V1(msg) => {
 							// 										// Only one xcm instruction in a v1 message.
 							// 										let instruction = format!("{:?}", &msg);
@@ -1511,7 +1520,7 @@ pub fn associate_events(
 	ext: Vec<DataEntity>,
 	events: Vec<DataEvent>,
 ) -> Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> {
-	let mut events : Vec<_> = events.into_iter().enumerate().collect();
+	let mut events: Vec<_> = events.into_iter().enumerate().collect();
 	let mut ext: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> = ext
 		.into_iter()
 		.map(|extrinsic| {
@@ -1759,15 +1768,15 @@ mod tests {
 	fn test_decode_blockweight1() {
 		let weight = hex::decode("90cd240500000000000000000000000099c7a90802000000").unwrap();
 		// 8 8 8 8 8 8
-		//  
-/*		weights: FrameSupportDispatchPerDispatchClassWeight {
-	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
-	 hex: 
-*/
+		//
+		/*		weights: FrameSupportDispatchPerDispatchClassWeight {
+			 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
+			 hex:
+		*/
 		for i in 0..6 {
-			let size= 4;
+			let size = 4;
 			let j = i * size;
-			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
+			let d = <u32 as Decode>::decode(&mut &weight[j..j + size]);
 			println!("{:?}", d);
 			if d.is_err() {
 				panic!("stopped at {}", i);
@@ -1775,23 +1784,23 @@ mod tests {
 		}
 	}
 
-// 	#[test]
-// 	fn test_decode_blockweight2() {
-// 		let weight = hex::decode("b2ff891700000007d12da07f8600").unwrap();
-// 		// 8 8 8 8 8 8
-// 		//  
-// /*		weights: FrameSupportDispatchPerDispatchClassWeight {
-// 	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0 }, mandatory: Weight { refTime: 0, proofSize: 0 } }
-// 	 hex: 
-// */
-// 		for i in 0..6 {
-// 			let size= 4;
-// 			let j = i * size;
-// 			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
-// 			println!("{:?}", d);
-// 			if d.is_err() {
-// 				panic!("stopped at {}", i);
-// 			}
-// 		}
-// 	}
+	// 	#[test]
+	// 	fn test_decode_blockweight2() {
+	// 		let weight = hex::decode("b2ff891700000007d12da07f8600").unwrap();
+	// 		// 8 8 8 8 8 8
+	// 		//
+	// /*		weights: FrameSupportDispatchPerDispatchClassWeight {
+	// 	 normal: Weight { refTime: 0, proofSize: 0 }, operational: Weight { refTime: 0, proofSize: 0
+	// }, mandatory: Weight { refTime: 0, proofSize: 0 } } 	 hex:
+	// */
+	// 		for i in 0..6 {
+	// 			let size= 4;
+	// 			let j = i * size;
+	// 			let d =  <u32 as Decode >::decode(&mut &weight[j..j + size]);
+	// 			println!("{:?}", d);
+	// 			if d.is_err() {
+	// 				panic!("stopped at {}", i);
+	// 			}
+	// 		}
+	// 	}
 }

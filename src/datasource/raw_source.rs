@@ -264,7 +264,7 @@ impl RawDataSource {
 	#[cfg(target_arch = "wasm32")]
 	async fn client(&mut self) -> Option<&mut WSBackend> {
 		if self.client.is_none() {
-			let urls: Vec<_> = self.ws_url.iter().map(|s|s.as_ref()).collect();
+			let urls: Vec<_> = self.ws_url.iter().map(|s| s.as_ref()).collect();
 			if let Ok(client) = polkapipe::ws_web::Backend::new(urls.as_slice()).await {
 				self.client = Some(client);
 			}

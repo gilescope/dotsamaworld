@@ -8,7 +8,7 @@ pub struct Script {
 }
 
 impl Script {
-	fn parse(contents: &str) -> Result<Script, ()> {
+	fn _parse(contents: &str) -> Result<Script, ()> {
 		let mut result = Script::default();
 		for line in contents.lines() {
 			let mut parts: Vec<_> = line.split(',').collect();

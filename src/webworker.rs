@@ -1,7 +1,6 @@
 use crate::{
-	do_datasources, log, BridgeMessage, Details, RenderDetails, RenderUpdate,
-	DATASOURCE_EPOC, DETAILS, UPDATE_QUEUE, SOVEREIGNS,
-	ChainInfo
+	do_datasources, log, BridgeMessage, ChainInfo, Details, RenderDetails, RenderUpdate,
+	DATASOURCE_EPOC, DETAILS, SOVEREIGNS, UPDATE_QUEUE,
 };
 use core::sync::atomic::Ordering;
 
@@ -66,9 +65,17 @@ impl Worker for IOWorker {
 				let chains = crate::CHAIN_STATS.lock().unwrap();
 				let chain_count = chains.values().count() as u64;
 				if chain_count > 0 {
-					let chains_with_no_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| if s.is_none() { Some(())} else {None}).count() as u64;
+					let chains_with_no_tx = chains
+						.values()
+						.map(|v| v.avg_free_transactions())
+						.filter_map(|s| if s.is_none() { Some(()) } else { None })
+						.count() as u64;
 					// log!("chains with no tx: {}", chains_with_no_tx);
-					let mut free_tx = chains.values().map(|v| v.avg_free_transactions()).filter_map(|s| s).sum::<u64>() / 12;
+					let mut free_tx = chains
+						.values()
+						.map(|v| v.avg_free_transactions())
+						.filter_map(|s| s)
+						.sum::<u64>() / 12;
 					//TODO 12 seconds per block assumed.
 
 					//For chains with no transactions assume average
@@ -82,15 +89,16 @@ impl Worker for IOWorker {
 				}
 			},
 			BridgeMessage::GetEventDetails(cube_index) => {
-				let details =
-					DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
-				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				let details = DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
+				let chain_info =
+					(*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);
 				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},
 			BridgeMessage::GetExtrinsicDetails(cube_index) => {
 				let details =
 					DETAILS.lock().unwrap().extrinsic_instances[cube_index as usize].clone();
-				let chain_info = (*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);			
+				let chain_info =
+					(*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);
 				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},
 		}

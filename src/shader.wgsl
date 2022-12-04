@@ -39,9 +39,16 @@ fn vs_main(
     out.clip_position = camera.view_proj * vec4<f32>(instance.instance_position + model.position, 1.0);
     // Is texture?
     if model.color[2] == -2.0 {
-        // TODO: inject this number
-        let offset = (1.0 / 67.0) * f32(instance.instance_color);
-        out.color = vec4<f32>(model.color[0], offset + model.color[1], 0.0, 0.0);
+        // TODO: inject height / width.
+        let coords = (
+            vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
+            vec4<u32>(255u)) );
+
+        let offset = (1.0 / 40.0) * f32(coords[0]);
+        let offset_x = (1.0 / 2.0) * f32(coords[1]);
+
+        let unexplained_magic = 1.666; // TODO: why do we need to do this for it to look right?
+        out.color = vec4<f32>(offset_x + (model.color[0] / 2.0), offset + (unexplained_magic * model.color[1]), 0.0, 0.0);
     } else {
         out.color = vec4<f32>(model.color, 1.0) + (
             vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
@@ -68,9 +75,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //TODO: we are sampling every pixel, even ones we don't need to.
     let z = textureSample(t_diffuse, s_diffuse, vec2<f32>(in.color[0], in.color[1]));//1. - 
     let y = in.color;
+
+    //is texture
     if in.color[2] == 0.0 && in.color[3] == 0.0 {
         return mix(fog_color, z, fog_factor);
     } else {
-        return mix(fog_color,y, fog_factor);
+        return mix(fog_color, y, fog_factor);
     }
 }

@@ -204,10 +204,6 @@ strip = "none"
 panic = "unwind"
 incremental = true
 
-
-[profile.dev.package.backtrace]
-opt-level = 3
-
 # Till v16 published
 [patch.crates-io]
 "frame-metadata"={ git="https://github.com/paritytech/frame-metadata.git" }
