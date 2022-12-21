@@ -11,7 +11,7 @@ default-run = "app"
 default = []
 # 3d mouse support (it's best not to have both features enabled at once).
 spacemouse = []
-bake = ["jpeg-encoder"]
+bake = ["jpeg-encoder", "png"]
 raw_images = []
 
 [dependencies]
@@ -123,6 +123,7 @@ async-tungstenite = { version = "0.15.0", default-features = true, features = [
     "async-tls",
     "async-std-runtime",
 ] }
+png = { version = "*", optional=true }
 
 #
 # Dependencies for WASM only.

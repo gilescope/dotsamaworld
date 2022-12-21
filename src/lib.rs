@@ -26,7 +26,7 @@ use lazy_static::lazy_static;
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 use std::{
-	collections::HashMap,
+	collections::{HashMap, HashSet},
 	convert::AsRef,
 	f32::consts::PI,
 	iter,
@@ -150,6 +150,10 @@ lazy_static! {
 	static ref REQUESTS: Arc<std::sync::Mutex<Vec<BridgeMessage>>> = default();
 }
 
+lazy_static! {
+	static ref PALLETS: Arc<std::sync::Mutex<HashSet<String>>> = default();
+}
+
 /// Bump this to tell the current datasources to stop.
 static DATASOURCE_EPOC: AtomicU32 = AtomicU32::new(0);
 
@@ -245,6 +249,7 @@ pub fn main() {
 struct Vertex {
 	position: [f32; 3],
 	color: [f32; 3],
+	tex: [f32; 2],
 }
 
 impl Vertex {
@@ -263,6 +268,11 @@ impl Vertex {
 					shader_location: 1,
 					format: wgpu::VertexFormat::Float32x3,
 				},
+				wgpu::VertexAttribute {
+					offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
+					shader_location: 2,
+					format: wgpu::VertexFormat::Float32x2,
+				},
 			],
 		}
 	}
@@ -280,15 +290,36 @@ fn rect_instances(count: usize) -> Vec<Vertex> {
 	let mut results = vec![];
 	let scale = 3.25;
 
-	results.push(Vertex { position: [0., 0., 0.0], color: [0., 1. / count, -2.] }); // A
-	results.push(Vertex { position: [scale, 0., 0.0], color: [0., 0., -2.] }); // B
-	results.push(Vertex { position: [0., 0., 3. * scale], color: [1., 1. / count, -2.] }); // C
-	results.push(Vertex { position: [scale, 0., 3. * scale], color: [1., 0., -2.] }); // D
+	results.push(Vertex {
+		position: [0., 0., 0.0],
+		tex: [0., 1. / count],
+		color: [0., 1. / count, -2.],
+	}); // A
+	results.push(Vertex { position: [scale, 0., 0.0], tex: [0., 0.], color: [0., 0., -2.] }); // B
+	results.push(Vertex {
+		position: [0., 0., 3. * scale],
+		tex: [1., 1. / count],
+		color: [1., 1. / count, -2.],
+	}); // C
+	results.push(Vertex { position: [scale, 0., 3. * scale], tex: [1., 0.], color: [1., 0., -2.] }); // D
 
-	results.push(Vertex { position: [0., 0.3, 0.0], color: [0., 1. / count, -2.] }); // A
-	results.push(Vertex { position: [scale, 0.3, 0.0], color: [0., 0., -2.] }); // B
-	results.push(Vertex { position: [0., 0.3, 3. * scale], color: [1., 1. / count, -2.] }); // C
-	results.push(Vertex { position: [scale, 0.3, 3. * scale], color: [1., 0., -2.] }); // D
+	//TODO: should one set of these texture positions be reversed?
+	results.push(Vertex {
+		position: [0., 0.3, 0.0],
+		tex: [0., 1. / count],
+		color: [0., 1. / count, -2.],
+	}); // A
+	results.push(Vertex { position: [scale, 0.3, 0.0], tex: [0., 0.], color: [0., 0., -2.] }); // B
+	results.push(Vertex {
+		position: [0., 0.3, 3. * scale],
+		tex: [1., 1. / count],
+		color: [1., 1. / count, -2.],
+	}); // C
+	results.push(Vertex {
+		position: [scale, 0.3, 3. * scale],
+		tex: [1., 0.],
+		color: [1., 0., -2.],
+	}); // D
 
 	// 0,0                    0,1
 	//   texture co-ordinates
@@ -324,21 +355,41 @@ const fn rect_indicies(offset: u16) -> [u16; 12] {
 /// https://www.researchgate.net/profile/John-Sheridan-7/publication/253573419/figure/fig1/AS:298229276135426@1448114808488/A-volume-is-subdivided-into-cubes-The-vertices-are-numbered-0-7.png
 
 //TODO: rename to cube!!
-fn rectangle(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) -> [Vertex; 8] {
+fn cube(z_width: f32, y_height: f32, x_depth: f32, r: f32, g: f32, b: f32) -> [Vertex; 20] {
 	let col = |bump: f32| -> [f32; 3] {
 		[(r + bump).clamp(0., 2.), (g + bump).clamp(0., 2.), (b + bump).clamp(0., 2.)]
 	};
 	let bump = 0.10;
 	[
-		Vertex { position: [0.0, y_height, 0.0], color: col(bump) }, // C
-		Vertex { position: [0.0, y_height, z_width], color: col(bump) }, // D
-		Vertex { position: [0., 0., z_width], color: col(-bump) },   // B
-		Vertex { position: [0., 0.0, 0.0], color: col(-bump) },      // A
-		Vertex { position: [x_depth, y_height, 0.0], color: col(bump) }, // C
-		Vertex { position: [x_depth, y_height, z_width], color: col(bump) }, // D
-		Vertex { position: [x_depth, 0., z_width], color: col(bump * 2.0) }, // B
-		Vertex { position: [x_depth, 0.0, 0.0], color: col(bump * 2.0) }, // A
+		Vertex { tex: [1., 0.], position: [0.0, y_height, 0.0], color: col(bump) }, // C
+		Vertex { tex: [1., 0.], position: [0.0, y_height, z_width], color: col(bump) }, // D
+		Vertex { tex: [1., 1.], position: [0., 0., z_width], color: col(-bump) },   // B
+		Vertex { tex: [1., 1.], position: [0., 0.0, 0.0], color: col(-bump) },      // A
+		Vertex { tex: [0., 0.], position: [x_depth, y_height, 0.0], color: col(bump) }, // C
+		Vertex { tex: [0., 0.], position: [x_depth, y_height, z_width], color: col(bump) }, // D
+		Vertex { tex: [0., 1.], position: [x_depth, 0., z_width], color: col(bump * 2.0) }, // B
+		Vertex { tex: [0., 1.], position: [x_depth, 0.0, 0.0], color: col(bump * 2.0) }, // A
+		// Same as above but with different tex co-ordinates
+		//BACKWARDS left-right
+		Vertex { tex: [0., 0.], position: [0.0, y_height, 0.0], color: col(bump) }, // C
+		Vertex { tex: [1., 0.], position: [0.0, y_height, z_width], color: col(bump) }, // D
+		Vertex { tex: [1., 1.], position: [0., 0., z_width], color: col(-bump) },   // B
+		Vertex { tex: [0., 1.], position: [0., 0.0, 0.0], color: col(-bump) },      // A
+		Vertex { tex: [1., 0.], position: [x_depth, y_height, 0.0], color: col(bump) }, // C
+		Vertex { tex: [0., 0.], position: [x_depth, y_height, z_width], color: col(bump) }, // D
+		Vertex { tex: [0., 1.], position: [x_depth, 0., z_width], color: col(bump * 2.0) }, // B
+		Vertex { tex: [1., 1.], position: [x_depth, 0.0, 0.0], color: col(bump * 2.0) }, // A
+		// RIGHT needs textures backwards
+		//1 => 16
+		Vertex { tex: [0., 0.], position: [0.0, y_height, z_width], color: col(bump) }, // D
+		//2 => 17
+		Vertex { tex: [0., 1.], position: [0., 0., z_width], color: col(-bump) }, // B
+		//5 => 18
+		Vertex { tex: [1., 0.], position: [x_depth, y_height, z_width], color: col(bump) }, // D
+		//6 => 19
+		Vertex { tex: [1., 1.], position: [x_depth, 0., z_width], color: col(bump * 2.0) }, // B
 	]
+	//TODO: can duplicate vertex with different texture co-ordinates.
 }
 
 /*
@@ -357,46 +408,46 @@ const fn cube_indicies(offset: u16) -> [u16; 36] {
 		//TOP
 		// 6,5,4,
 		// 4,7,6,
-		offset + 6,
-		offset + 7,
-		offset + 4, //TODO only need external faces
-		offset + 4,
-		offset + 5,
-		offset + 6, // // //BOTTOM
+		8 + offset + 6, //back
+		8 + offset + 7,
+		8 + offset + 4, //TODO only need external faces
+		8 + offset + 4,
+		8 + offset + 5,
+		8 + offset + 6, // // //
 		// 0,1,2,
 		// 2,3,0,
-		offset + 0,
-		offset + 3,
-		offset + 2,
-		offset + 2,
-		offset + 1,
-		offset + 0, //right
+		8 + offset + 0, //front
+		8 + offset + 3,
+		8 + offset + 2,
+		8 + offset + 2,
+		8 + offset + 1,
+		8 + offset + 0, //
 		// 5,6,2,
 		// 2,1,5,
-		offset + 5,
-		offset + 1,
-		offset + 2,
-		offset + 2,
-		offset + 6,
-		offset + 5, // //left
+		offset + 18, //5,//right ! (BACKWARDS)
+		offset + 16, //1,
+		offset + 17, //2,
+		offset + 17, //2,
+		offset + 19, //6,
+		offset + 18, //5, // //
 		// 7,4,0,
 		// 0,3,7,
-		offset + 7,
+		offset + 7, //left
 		offset + 3,
 		offset + 0,
 		offset + 0,
 		offset + 4,
-		offset + 7, // //front
+		offset + 7, // //
 		// 7,3,2,
 		// 2,6,7,
-		offset + 7,
+		offset + 7, //defnitely this is bottom!
 		offset + 6,
 		offset + 2,
 		offset + 2,
 		offset + 3,
 		offset + 7,
-		//back
-		offset + 4,
+		//
+		offset + 4, //top
 		offset + 0,
 		offset + 1,
 		offset + 1,
@@ -411,7 +462,7 @@ const fn cube_indicies(offset: u16) -> [u16; 36] {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Deserialize, Serialize, Debug)]
 struct Instance {
 	position: [f32; 3],
-	color: u32,
+	color: u32, //r g b a - could use alpha to point to emojii 0-4 mod 2... gets you 255
 }
 
 impl Instance {
@@ -429,7 +480,7 @@ impl Instance {
 					// While our vertex shader only uses locations 0, and 1 now, in later tutorials
 					// we'll be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict
 					// with them later
-					shader_location: 2,
+					shader_location: 3,
 					format: wgpu::VertexFormat::Float32x3,
 				},
 				// A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a
@@ -437,7 +488,7 @@ impl Instance {
 				// the shader.
 				wgpu::VertexAttribute {
 					offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-					shader_location: 3,
+					shader_location: 4,
 					format: wgpu::VertexFormat::Uint32,
 				},
 			],
@@ -692,6 +743,24 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
 					count: None,
 				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 3,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						multisampled: sample_count > 1,
+						view_dimension: wgpu::TextureViewDimension::D2,
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					},
+					count: None,
+				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 4,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					// This should match the filterable field of the
+					// corresponding Texture entry above.
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
 			],
 			label: Some("camera_bind_group_layout"),
 		});
@@ -700,6 +769,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//	loaded_textures = true;
 
 	let (diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue).await;
+	let (diffuse_texture_view_emoji, diffuse_sampler_emoji) =
+		load_textures_emoji(&device, &queue).await;
 	// diffuse_texture_view =diffuse_texture_view1;
 	// diffuse_sampler = diffuse_sampler1;
 	//}
@@ -716,6 +787,14 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				binding: 2,
 				resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
 			},
+			wgpu::BindGroupEntry {
+				binding: 3,
+				resource: wgpu::BindingResource::TextureView(&diffuse_texture_view_emoji),
+			},
+			wgpu::BindGroupEntry {
+				binding: 4,
+				resource: wgpu::BindingResource::Sampler(&diffuse_sampler_emoji),
+			},
 		],
 		label: Some("camera_bind_group"),
 	});
@@ -729,19 +808,19 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let mut vertices = vec![]; //cube
 	let start_cube = vertices.len(); //block
-	vertices.extend(rectangle(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
+	vertices.extend(cube(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
 	let start_block = vertices.len(); //block
-	vertices.extend(rectangle(10., 0.5, 10., 0., 0.0, 0.));
+	vertices.extend(cube(10., 0.5, 10., 0., 0.0, 0.));
 	let start_chain = vertices.len(); //chain
-	vertices.extend(rectangle(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
+	vertices.extend(cube(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
 	let start_ground = vertices.len(); //ground
-	vertices.extend(rectangle(ground_width, 10., ground_width, 0.0, 0.0, 0.));
+	vertices.extend(cube(ground_width, 10., ground_width, 0.0, 0.0, 0.));
 	let start_selected = vertices.len(); //selected
-	vertices.extend(rectangle(CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, 0., 0., 0.));
+	vertices.extend(cube(CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, CUBE_WIDTH + 0.2, 0., 0., 0.));
 	let start_textured = vertices.len(); // textured rectangle
 	vertices.extend(&rect_instances(texture_map.len()));
 
-	// vertices.extend(rectangle(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
+	// vertices.extend(cube(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
 	indicies.extend(cube_indicies(start_cube as u16));
@@ -820,7 +899,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			targets: &[Some(wgpu::ColorTargetState {
 				// 4.
 				format: TextureFormat::Rgba8UnormSrgb,
-				blend: Some(wgpu::BlendState::REPLACE),
+				blend: Some(
+					wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+				),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
 		}),
@@ -1504,7 +1585,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 async fn load_textures(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,
-) -> (wgpu::TextureView, wgpu::Sampler, HashMap<(u32, u32), (usize,usize)>) {
+) -> (wgpu::TextureView, wgpu::Sampler, HashMap<(u32, u32), (usize, usize)>) {
 	// let chain_str = "0-2000";//details.doturl.chain_str();
 	// let window = web_sys::window().unwrap();
 	let mut width = 0;
@@ -1846,7 +1927,7 @@ async fn load_textures(
 			}
 		}
 
-		let mut bake_img = vec![];//0u8; (bake_height as u32 * bake_width as u32) as usize];
+		let mut bake_img = vec![]; //0u8; (bake_height as u32 * bake_width as u32) as usize];
 
 		let colors_per_pixel = 3_u32;
 		let img_width_px = img_width as u32 * colors_per_pixel; // 3 colors per pixel.
@@ -1856,8 +1937,7 @@ async fn load_textures(
 				let x_source = x % img_width_px as u32;
 				let y_source = y + (col * bake_height as u32);
 				let z = ((y_source * img_width_px as u32) + x_source) as usize;
-				if z >= diffuse_rgba.len()
-				{
+				if z >= diffuse_rgba.len() {
 					println!("{col} , {x_source}, {y_source}, {z}");
 				}
 				bake_img.push(diffuse_rgba[z]);
@@ -1866,6 +1946,435 @@ async fn load_textures(
 
 		use jpeg_encoder::{ColorType, Encoder};
 		let mut encoder = Encoder::new_file("some.jpeg", 90).unwrap();
+		encoder.encode(&bake_img[..], bake_width, bake_height, ColorType::Rgb).unwrap();
+		println!("done initial bake");
+
+		load_textures_emoji(device, queue).await;
+		panic!("done");
+	}
+
+	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
+	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
+		// All textures are stored as 3D, we represent our 2D texture
+		// by setting depth to 1.
+		size: texture_size,
+		mip_level_count: 1, // We'll talk about this a little later
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		// Most images are stored using sRGB so we need to reflect that here.
+		format: wgpu::TextureFormat::Rgba8UnormSrgb,
+		// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
+		// COPY_DST means that we want to copy data to this texture
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		label: Some("diffuse_texture"),
+	});
+
+	queue.write_texture(
+		// Tells wgpu where to copy the pixel data
+		wgpu::ImageCopyTexture {
+			texture: &diffuse_texture,
+			mip_level: 0,
+			origin: wgpu::Origin3d::ZERO,
+			aspect: wgpu::TextureAspect::All,
+		},
+		// The actual pixel data
+		diffuse_rgba,
+		// The layout of the texture
+		wgpu::ImageDataLayout {
+			offset: 0, //TODO for different layouts
+			bytes_per_row: std::num::NonZeroU32::new(4 * width),
+			rows_per_image: None,
+		},
+		texture_size,
+	);
+
+	let diffuse_texture_view = diffuse_texture.create_view(&default());
+	let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		address_mode_u: wgpu::AddressMode::Repeat, //Repeat
+		address_mode_v: wgpu::AddressMode::Repeat, //ClampToEdge,
+		address_mode_w: wgpu::AddressMode::Repeat,
+		mag_filter: wgpu::FilterMode::Linear, //Linear,
+		min_filter: wgpu::FilterMode::Nearest,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		..default()
+	});
+
+	(diffuse_texture_view, diffuse_sampler, map)
+}
+
+fn emoji_index(emoji_name: &str) -> u8 {
+	match emoji_name {
+		"skull" => 0,
+		"thumbs_up" => 1,
+		"thumbs_down" => 2,
+		"warning" => 3,
+		"anchor" => 4,
+		"bank" => 5,
+		"black_nib" => 6,
+		"brain" => 7,
+		"bust" => 8,
+		"busts" => 9,
+		"calendar" => 10,
+		"check_box_with_check" => 11,
+		"counter_clockwise_arrows" => 12,
+		"envelope_with_arrow" => 13,
+		"spade_suit" => 14,
+		"cowboy_hat_face" => 15,
+		"crystal_ball" => 16,
+		"currency_exchange" => 17,
+		"detective" => 18,
+		"dollar" => 19,
+		"face_with_monocle" => 20,
+		"farmer" => 21,
+		"fire" => 22,
+		"fountain_pen" => 23,
+		"framed_picture" => 24,
+		"game_die" => 25,
+		"gear" => 26,
+		"hatching_chick" => 27,
+		"headstone" => 28,
+		"heavy_dollar" => 29,
+		"identification_card" => 30,
+		"incoming_envelope" => 31,
+		"left_speach_bubble" => 32,
+		"locked" => 33,
+		"loudspeaker" => 34,
+		"woman_artist" => 35,
+		"heart_decoration" => 36,
+		"locked_with_key" => 37,
+		"money_bag" => 38,
+		"newspaper" => 39,
+		"nine_oclock" => 40,
+		"old_key" => 41,
+		"alarm_clock" => 42,
+		"alembic" => 43,
+		"antenna" => 44,
+		"artistic_palette" => 45,
+		"baby_symbol" => 46,
+		"balance_scale" => 47,
+		"beating_heart" => 48,
+		"black_heart" => 49,
+		"broom" => 50,
+		"carrot" => 51,
+		"chart_decreasing" => 52,
+		"chart_increasing" => 53,
+		"classical_building" => 54,
+		"collision" => 55,
+		"crab" => 56,
+		"cross" => 57,
+		"face_savoring_food" => 58,
+		"gem_stone" => 59,
+		"ghost" => 60,
+		"palm_up_hand" => 61,
+		"partying_face" => 62,
+		"pause" => 63,
+		"pick" => 64,
+		"pig" => 65,
+		"pill" => 66,
+		"robot" => 67,
+		"rocket" => 68,
+		"shortcake" => 69,
+		"shuffle_tracks" => 70,
+		"snowflake" => 71,
+		"star" => 72,
+		"stopwatch" => 73,
+		"unlocked" => 74,
+		"log" => 75,
+		"cold_face" => 76,
+		"wrench" => 77,
+		"alien_monster" => 78,
+		"unicorn" => 79,
+		"bathtub" => 80,
+		_ => 255,
+	}
+}
+
+/// cargo run --features raw_images,bake to bake
+async fn load_textures_emoji(
+	device: &wgpu::Device,
+	queue: &wgpu::Queue,
+) -> (
+	wgpu::TextureView,
+	wgpu::Sampler,
+	//	HashMap<(&'static str, &'static str), (usize,usize)>
+) {
+	// let chain_str = "0-2000";//details.doturl.chain_str();
+	// let window = web_sys::window().unwrap();
+	let mut width = 0;
+	let mut height = 0;
+	// let mut map = HashMap::new();
+	let mut index = 0;
+	// const H: usize = 2;// 32; // 32 images per col - 128x128
+	// index += 1;
+	// map.insert(("balances", "withdraw"), (index / H, index % H)); //index += 1;
+	// index += 1;
+	// map.insert(("balances", "deposit"), (index / H, index % H)); //index += 1;
+	// index += 1;
+	// map.insert(("parainclusion", "candidateincluded"), (index / H, index % H)); //index += 1;
+	// index += 1;
+	// map.insert(("ethereum", "transact"), (index / H, index % H)); //index += 1;
+
+	//TODO: MAX height achieved!!! need to go wide...
+	// or have another texture buffer.
+	// MAX: 16384 for chrome, 8192 for firefox and iOS, but android limits to 4096!
+
+	// images must be inserted in same order as they are in the map.
+
+	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
+	//sips -z 100 300 *.jpeg to format them all to same aspect.
+	let mut images = vec![];
+	#[cfg(feature = "raw_images")]
+	{
+		//rsvg-convert -h 128 ./src/anchor.svg > anchor.png
+		let prefix = "/Users/bit/p/dotsamatown/assets/emoji/";
+
+		let v = [
+			"skull",
+			"thumbs_up",
+			"thumbs_down",
+			"warning",
+			"anchor",
+			"bank",
+			"black_nib",
+			"brain",
+			"bust",
+			"busts",
+			"calendar",
+			"check_box_with_check",
+			"counter_clockwise_arrows",
+			"envelope_with_arrow",
+			"spade_suit",
+			"cowboy_hat_face",
+			"crystal_ball",
+			"currency_exchange",
+			"detective",
+			"dollar",
+			"face_with_monocle",
+			"farmer",
+			"fire",
+			"fountain_pen",
+			"framed_picture",
+			"game_die",
+			"gear",
+			"hatching_chick",
+			"headstone",
+			"heavy_dollar",
+			"identification_card",
+			"incoming_envelope",
+			"left_speach_bubble",
+			"locked",
+			"loudspeaker",
+			"woman_artist",
+			"heart_decoration",
+			"locked_with_key",
+			"money_bag",
+			"newspaper",
+			"nine_oclock",
+			"old_key",
+			"alarm_clock",
+			"alembic",
+			"antenna",
+			"artistic_palette",
+			"baby_symbol",
+			"balance_scale",
+			"beating_heart",
+			"black_heart",
+			"broom",
+			"carrot",
+			"chart_decreasing",
+			"chart_increasing",
+			"classical_building",
+			"collision",
+			"crab",
+			"cross",
+			"face_savoring_food",
+			"gem_stone",
+			"ghost",
+			"palm_up_hand",
+			"partying_face",
+			"pause",
+			"pick",
+			"pig",
+			"pill",
+			"robot",
+			"rocket",
+			"shortcake",
+			"shuffle_tracks",
+			"snowflake",
+			"star",
+			"stopwatch",
+			"unlocked",
+			"log",
+			"cold_face",
+			"wrench",
+			"alien_monster",
+			"unicorn",
+			"bathtub",
+		];
+
+		for (i, im) in v.iter().enumerate() {
+			images.push(format!("{}{}_{}.png", prefix, i, im));
+		}
+		// images.push(format!("{}{}", prefix, )); //https://text2image.com/en/
+		// images.push(format!("{}{}", prefix, "2_thumbs_down.png"));
+		// images.push(format!("{}{}", prefix, "0-skull.png"));
+	}
+
+	#[cfg(not(feature = "raw_images"))]
+	{
+		images.push(include_bytes!("../assets/branding/baked-emojis.jpeg").to_vec());
+	}
+
+	//MAX: 16k for chrome, safari. 8k height for firefox.
+
+	let mut diffuse_rgba2 = Vec::new();
+
+	let mut found = 0;
+	// let mut i = 0;
+	for bytes in &images {
+		// i += 1;
+		// println!("{i} {bytes}");
+		#[cfg(feature = "bake")]
+		let (img_data, img_width, img_height, add_alpha) = load_png_image(bytes).unwrap();
+		#[cfg(not(feature = "bake"))]
+		let (img_data, img_width, img_height, add_alpha) = {
+			let mut decoder = Decoder::new(std::io::Cursor::new(bytes));
+			let diffuse_rgb: Vec<u8> = decoder.decode().expect("failed to decode image");
+
+			let metadata = decoder.info().unwrap();
+			(diffuse_rgb, metadata.width, metadata.height, true)
+		};
+
+		// let url = &format!("https://bafybeif4gcbt2q3stnuwgipj2g4tc5lvvpndufv2uknaxjqepbvbrvqrxm.ipfs.dweb.link/{}.jpeg", chain_str);
+		// log!("try get {}", url);
+		//  let mut opts = RequestInit::new();
+		// opts.method("GET");
+		// opts.mode(RequestMode::Cors);
+		//  let request = Request::new_with_str_and_init(&banner_url, &opts)?;
+
+		// let response = JsFuture::from(window.fetch_with_str(url))
+		// .await
+		// .map(|r| r.dyn_into::<web_sys::Response>().unwrap())
+		// .map_err(|e| e.dyn_into::<js_sys::TypeError>().unwrap());
+
+		// if let Err(err) = &response {
+		// 	log!("Failed to fetch asset {url}: {err:?}");
+		// }
+		// let response = response.unwrap();
+		// //.map_err(|_| AssetIoError::NotFound(path.to_path_buf()))?;
+
+		// let data = JsFuture::from(response.array_buffer().unwrap())
+		// 	.await
+		// 	.unwrap();
+
+		// let bytes = js_sys::Uint8Array::new(&data).to_vec();
+
+		// let mut decoder = Decoder::new(std::io::Cursor::new(bytes));
+		// let diffuse_rgb: Vec<u8> = decoder.decode().expect("failed to decode image");
+
+		// let decoder = image_png::Decoder::new(bytes);
+
+		// let metadata = decoder.info().unwrap();
+
+		// let diffuse_rgba2 = vec![
+		// 	255, 0, 0, 255,
+		// 	0, 255, 0, 255,
+		// 	0, 0, 255, 255,
+		// 	255, 0, 255, 255,
+		// ];
+
+		if width == 0 {
+			width += img_width as u32;
+			for (i, byte) in img_data.iter().enumerate() {
+				diffuse_rgba2.push(*byte);
+				// Add alpha channel
+				if add_alpha && i % 3 == 2 {
+					diffuse_rgba2.push(255);
+				}
+			}
+		} else {
+			if width == img_width as u32 {
+				found += 1;
+
+				for (i, byte) in img_data.iter().enumerate() {
+					diffuse_rgba2.push(*byte);
+					// Add alpha channel
+					if add_alpha && i % 3 == 2 {
+						diffuse_rgba2.push(255);
+					}
+				}
+			}
+		}
+		//	assert!(img.format == png::ColorType::GreyScale);
+		height += img_height as u32;
+
+		// let width = 2;
+		// let height = 2;
+
+		// assert_eq!(diffuse_rgba.len() as u32, width * height * 4);
+		// log!("first 100 bytes: {:?}", &diffuse_rgba[..100]);
+
+		// log!("metadata: {:?}", metadata);
+		// let diffuse = [150_u8;4 * 10 * 10];
+		// let diffuse_rgba = &diffuse[..];
+	}
+
+	#[cfg(not(feature = "bake"))]
+	assert!(height < 4096, "Android phones don't allow textures longer than that");
+
+	log!("found images {found}");
+	let diffuse_rgba = diffuse_rgba2.as_slice();
+
+	#[cfg(feature = "bake")]
+	{
+		const grid_height: u16 = 9u16;
+		const img_height: u16 = 128;
+		const img_width: u16 = 128;
+		const bake_height: u16 = 128 * grid_height;
+		let image_columns = 1 + dbg!((found * img_height) / bake_height);
+		let bake_width = dbg!(img_width * image_columns);
+		let images_on_last_column = dbg!(((found * img_height) % bake_height) / img_height);
+		let extra_blank_images_needed = (bake_height / img_height) - images_on_last_column;
+
+		// Remove alpha channel as jpegs don't do alpha.
+		let mut diffuse_rgba: Vec<u8> = diffuse_rgba2
+			.as_slice()
+			.iter()
+			.enumerate()
+			.filter_map(|(i, pixel)| if i % 4 == 3 { None } else { Some(*pixel) })
+			.collect();
+
+		// Add blank images to make long enough
+		// to be refactored into perfect rectangle:
+		for _img in 0..extra_blank_images_needed {
+			for _width in 0..img_width {
+				for _height in 0..img_height {
+					for _color in 0..3 {
+						diffuse_rgba.push(0_u8);
+					}
+				}
+			}
+		}
+
+		let mut bake_img = vec![]; //0u8; (bake_height as u32 * bake_width as u32) as usize];
+
+		let colors_per_pixel = 3_u32;
+		let img_width_px = img_width as u32 * colors_per_pixel; // 3 colors per pixel.
+		for y in 0..(bake_height as u32) {
+			for x in 0..(bake_width as u32 * colors_per_pixel) {
+				let col = x / img_width_px as u32;
+				let x_source = x % img_width_px as u32;
+				let y_source = y + (col * bake_height as u32);
+				let z = ((y_source * img_width_px as u32) + x_source) as usize;
+				if z >= diffuse_rgba.len() {
+					println!("{col} , {x_source}, {y_source}, {z}");
+				}
+				bake_img.push(diffuse_rgba[z]);
+			}
+		}
+
+		use jpeg_encoder::{ColorType, Encoder};
+		let mut encoder = Encoder::new_file("some-emojis.jpeg", 90).unwrap();
 		encoder.encode(&bake_img[..], bake_width, bake_height, ColorType::Rgb).unwrap();
 		println!("hi");
 		panic!("done");
@@ -1917,7 +2426,49 @@ async fn load_textures(
 		..default()
 	});
 
-	(diffuse_texture_view, diffuse_sampler, map)
+	(diffuse_texture_view, diffuse_sampler)
+}
+
+#[cfg(feature = "raw_images")]
+fn load_png_image(path: &str) -> std::io::Result<(Vec<u8>, u16, u16, bool)> {
+	use png::ColorType::*;
+	use std::{borrow::Cow, fs::File};
+	let mut decoder = png::Decoder::new(File::open(path)?);
+	decoder.set_transformations(png::Transformations::normalize_to_color8());
+	let mut reader = decoder.read_info()?;
+	let mut img_data = vec![0; reader.output_buffer_size()];
+	let info = reader.next_frame(&mut img_data)?;
+
+	let data = match info.color_type {
+		// Rgb => (img_data, png::ClientFormat::U8U8U8),
+		Rgba => img_data,
+		// Grayscale => (
+		//     {
+		//         let mut vec = Vec::with_capacity(img_data.len() * 3);
+		//         for g in img_data {
+		//             vec.extend([g, g, g].iter().cloned())
+		//         }
+		//         vec
+		//     },
+		//     png::ClientFormat::U8U8U8,
+		// ),
+		// GrayscaleAlpha => (
+		//     {
+		//         let mut vec = Vec::with_capacity(img_data.len() * 3);
+		//         for ga in img_data.chunks(2) {
+		//             let g = ga[0];
+		//             let a = ga[1];
+		//             vec.extend([g, g, g, a].iter().cloned())
+		//         }
+		//         vec
+		//     },
+		//     png::ClientFormat::U8U8U8U8,
+		// ),
+		_ => unreachable!("uncovered color type"),
+	};
+
+	Ok((data, info.width as u16, info.height as u16, false))
+	// format: format,
 }
 
 fn try_select(
@@ -1981,8 +2532,11 @@ fn try_select(
 		pos[1] += -0.1;
 		pos[2] += -0.1;
 		selected_instance_data.clear();
+
+		// This alpha selects the cold face emoji which the shader special cases to
+		// be selected cube.
 		selected_instance_data
-			.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
+			.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.3) });
 
 		(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetEventDetails(index));
 	} else {
@@ -2520,6 +3074,10 @@ fn as_rgba_u32(red: f32, green: f32, blue: f32, alpha: f32) -> u32 {
 		(blue * 255.0) as u8,
 		(alpha * 255.0) as u8,
 	])
+}
+
+fn as_rgbemoji_u32(red: f32, green: f32, blue: f32, alpha: u8) -> u32 {
+	u32::from_le_bytes([(red * 255.0) as u8, (green * 255.0) as u8, (blue * 255.0) as u8, alpha])
 }
 
 // fn clear_world(// details: &Query<Entity, With<ClearMeAlwaysVisible>>,

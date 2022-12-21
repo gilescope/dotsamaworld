@@ -2,15 +2,14 @@
 
 ![code quality](https://badgen.net/badge/code%20quality:/yolo/green?icon=awesome)
 
-Dotsama world is one vision of what's happening in the polkadot ecosystem.
-It's an experiment to see what we can see and I look forward to evolving it
-and seeing where it leads to.
+Dotsama world is one vision of what's happening in the polkadot ecosystem right now.
 
 PRs and suggestions (issuse) welcome along with crazy forks!
 
 Thank you Bevy and all your plugin ecosystem for making this project a real joy to do.
+(Alas I had to move off bevy due to lack of instancing support but would not have got started without it!)
 
-! This is very experimental and under active dev. I'll clean up the code once I know what it is I'm creating. !
+! Very experimental and under active dev. !
 
 ![Image](https://github.com/gilescope/dotsamaworld-visual-history/blob/main/chapter2/Screenshot%20from%202022-05-08%2010-03-11.png?raw=true)
 
@@ -71,9 +70,10 @@ Note: spacemouse support is not on by default.
 | Feature      | Description                                        |
 | ------------ | -------------------------------------------------- |
 | spacemouse   | n-degrees of freedom mouse support                 |
-| adaptive-fps | show as far back as your graphics card can support |
 
 ## Recording and Playback
+
+(Currently disabled)
 
 It should record your journey in a file called `record.csv`. If you want to play it back, then rename it to `play.csv` and it will execute it. The format is:
 | time in seconds elapsed | x | y | z | rx | ry | rz | rw |
@@ -86,4 +86,6 @@ If you like this project please consider donating to https://www.mriyaaid.org/ .
 
 ## License
 
-License: MIT/Apache2 just like rust.
+The cool emojis currently come from https://github.com/microsoft/fluentui-emoji and are licensed under the MIT license. (Thank you for making and open sourcing these. I've rendered them to png and baked them into one image.)
+
+License: MIT or Apache2 at your option just like rust.

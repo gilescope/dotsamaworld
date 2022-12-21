@@ -1,9 +1,6 @@
 // Vertex shader
 
-struct InstanceInput {
-    @location(2) instance_position: vec3<f32>,
-    @location(3) instance_color: u32,
-};
+
 
 struct CameraUniform {
     view_proj: mat4x4<f32>,
@@ -15,16 +12,26 @@ var<uniform> camera: CameraUniform;
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(2)
 var s_diffuse: sampler;
+@group(0) @binding(3)
+var t_diffuse_emoji: texture_2d<f32>;
+@group(0) @binding(4)
+var s_diffuse_emoji: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
-    //TODO: maybe you can have 2 more f32s to b aligned.
+    @location(2) tex: vec2<f32>,
+};
+struct InstanceInput {
+    @location(3) instance_position: vec3<f32>,
+    @location(4) instance_color: u32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @location(0) color: vec3<f32>,
+    @location(1) tex: vec2<f32>,
+    @location(2) tex_index: u32,
 }
 
 // TODO: add in global time, have rain happen in vertex shader.
@@ -44,15 +51,24 @@ fn vs_main(
             vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
             vec4<u32>(255u)) );
 
-        let offset = (1.0 / 40.0) * f32(coords[0]);
+        let offset_y = (1.0 / 40.0) * f32(coords[0]);
         let offset_x = (1.0 / 2.0) * f32(coords[1]);
 
         let unexplained_magic = 1.666; // TODO: why do we need to do this for it to look right?
-        out.color = vec4<f32>(offset_x + (model.color[0] / 2.0), offset + (unexplained_magic * model.color[1]), 0.0, 0.0);
+        out.color = vec3<f32>(offset_x + (model.color[0] / 2.0), offset_y + (unexplained_magic * model.color[1]), 0.0);
     } else {
-        out.color = vec4<f32>(model.color, 1.0) + (
-            vec4<f32>((vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
-            vec4<u32>(255u)) / 255.0);
+        // Alpha channel is at least 1.
+        let v = (vec4<u32>(instance.instance_color) >> vec4<u32>(0u, 8u, 16u, 24u)) &
+            vec4<u32>(255u);
+        let inst_color = (
+            vec4<f32>(v) / 255.0);
+
+        out.color = model.color + vec3<f32>(inst_color[0], inst_color[1], inst_color[2]);
+
+        if inst_color[3] < 1.0 {
+            out.tex = model.tex;
+            out.tex_index = u32(v[3]);
+        }
     }
     return out;
 }
@@ -74,11 +90,30 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     
     //TODO: we are sampling every pixel, even ones we don't need to.
     let z = textureSample(t_diffuse, s_diffuse, vec2<f32>(in.color[0], in.color[1]));//1. - 
-    let y = in.color;
+
+//    let offset: f32;//u32(in.color[3]* 256.0);
+    // if in.tex[0] != 0 && in.tex[1] != 0 {
+    //     let offset = 0.0;
+    // } else {
+    //     let offset = 0.0;
+    // }
+    let offset: u32 = in.tex_index;
+    let height: u32 = 9u;
+    let heightf = f32(height);
+    let off_col = offset % height;
+    let off_row = offset / height;
+    let offset_y = (1.0 / f32(height)) * f32(off_col);
+    let offset_x = (1.0 / f32(height)) * f32(off_row);
+
+    let y = vec4<f32>(in.color, 1.0) + (8.0 * textureSample(t_diffuse_emoji, s_diffuse_emoji, vec2<f32>(offset_x + (in.tex[0] / heightf), offset_y + (in.tex[1] / heightf))));//1. - 
+    let selected = vec4<f32>(0., 0., 1., 0.4);
+    //let y = vec4<f32>(in.color, 1.0);
 
     //is texture
-    if in.color[2] == 0.0 && in.color[3] == 0.0 {
+    if in.color[2] == 0.0 {
         return mix(fog_color, z, fog_factor);
+    } else if offset == 76u {//cold face emoji.
+        return selected;
     } else {
         return mix(fog_color, y, fog_factor);
     }

@@ -177,11 +177,15 @@ where
 			let metad = metad.unwrap();
 
 			if let frame_metadata::RuntimeMetadata::V14(ref m) = metad.1 {
+				let mut pallets = crate::PALLETS.lock().unwrap();
 				for p in &m.pallets {
 					if p.name == "Sudo" {
 						log!("metad: {}", &p.name);
 						sudo = true;
 						break
+					}
+					if !pallets.contains(&p.name) {
+						pallets.insert(p.name.clone());
 					}
 				}
 			}
@@ -646,11 +650,16 @@ async fn process_extrinsic<'a, 'scale>(
 	let mut start_link: Vec<(String, LinkType)> = vec![];
 	let end_link: Vec<(String, LinkType)> = vec![];
 	let mut msg_count = 0;
+	let mut value = None;
 
 	let (pallet, variant) = if let Some((pallet, "0", variant, payload)) = ext.only3() {
 		match (pallet, variant) {
 			("System", "remark") => {
 				log!("REMARK {:?}", payload);
+				if let Some(scale_borrow::Value::ScaleOwned(own)) = payload.get("remark") {
+					log!("REMARK {:?}", String::from_utf8((**own).clone()));
+					value = Some(String::from_utf8((**own).clone()).unwrap());
+				}
 				// match &payload.get("0") {
 				// 	scale_value::ValueDef::Primitive(scale_value::Composite::Unnamed(
 				// 		chars_vals,
@@ -1171,7 +1180,7 @@ async fn process_extrinsic<'a, 'scale>(
 			pallet: pallet.to_string(),
 			variant: variant.to_string(),
 			raw: ex_slice.to_vec(),
-			value: None,
+			value,
 		},
 	})
 

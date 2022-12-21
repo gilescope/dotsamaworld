@@ -774,6 +774,7 @@ dependencies = [
  "log",
  "palette",
  "parity-scale-codec",
+ "png",
  "polkadyn",
  "polkapipe",
  "pollster",

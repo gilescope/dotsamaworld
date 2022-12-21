@@ -97,8 +97,8 @@ pub fn ui_bars_system(
 					// 		log!("Error opening link {:?}", e);
 					// 	}
 					// }
-					if let Some(val) = &selected.value {
-						let (val, _s) = scale_value::stringify::from_str(val);
+					if let Some(vall) = &selected.value {
+						let (val, _s) = scale_value::stringify::from_str(vall);
 						if let Ok(val) = val {
 							let val_decoded = scale_value_to_borrowed::convert(&val, true);
 
@@ -136,6 +136,8 @@ pub fn ui_bars_system(
 							}
 
 							funk(ui, &val_decoded);
+						} else {
+							ui.heading(vall);
 						}
 						//             .default_open(depth < 1)
 						// ui.label(&val.to_string());
