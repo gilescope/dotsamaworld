@@ -15,27 +15,27 @@ bake = ["jpeg-encoder", "png"]
 raw_images = []
 
 [dependencies]
-glam = "*"
-winit = { version = "0.27.3", features = ["x11"] }
-cgmath = "0.18"
+glam = "0.22.0"
+winit = { version = "0.27.5", features = ["x11"] }
+cgmath = "0.18.0"
 
-pollster = "0.2"
-egui_wgpu_backend = "0.19"
-egui_winit_platform = { version = "0.16", features = [] } #"webbrowser" , "clipboard"
-wgpu = { version = "0.13", features = ["webgl"] }
-primitive-types = { version = "0.11", default-features = false, features = [
+pollster = "0.2.5"
+egui_wgpu_backend = "0.20.0"
+egui_winit_platform = { version = "0.16.0", features = [] } #"webbrowser" , "clipboard"
+wgpu = { version = "0.14.2", features = ["webgl"] }
+primitive-types = { version = "0.12.1", default-features = false, features = [
     "serde_no_std",
 ] }
-log = { version = "0.4.14", default-features = false }
+log = { version = "0.4.17", default-features = false }
 async-std = { version = "1.12.0", features = [] }
-async-trait = "0.1"
-async-recursion = "*"
-bytemuck = "*"
+async-trait = "0.1.60"
+async-recursion = "1.0.0"
+bytemuck = "1.12.3"
 # Not needed since rust 1.63
-lazy_static = "*"
-futures = { version = "0.3.13", default-features = false, features = [] }
+lazy_static = "1.4.0"
+futures = { version = "0.3.25", default-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
-hex = "*"
+hex = "0.4.3"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", default-features = false }
 parity-scale-codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = [
     "derive",
@@ -45,12 +45,12 @@ parity-scale-codec = { package = "parity-scale-codec", version = "3.2.1", defaul
 palette = { version = "0.6.1", features = [
     "libm",
 ], default-features = false } # why: git ref as waiting for publish of > 0.6. perceptual color scheme LCH: https://lea.verou.me/2020/04/lch-colors-in-css-what-why-and-how/
-fastrand = { version = "*", default-features = false }
+fastrand = { version = "1.8.0", default-features = false }
 #serde_bytes = "0.11"
-serde = { version = "*", default-features = false }
-serde_json = { version = "*", default-features = false }
-url = { version = "*", default-features = false }
-form_urlencoded = "*"
+serde = { version = "1.0.151", default-features = false }
+serde_json = { version = "1.0.91", default-features = false }
+url = { version = "2.3.1", default-features = false }
+form_urlencoded = "1.1.0"
 # async-tungstenite = "*"
 # color-eyre = { version = "0.5", default-features = false }
 # dashmap = { version = "*" }
@@ -67,7 +67,7 @@ form_urlencoded = "*"
 frame-metadata = { git="https://github.com/paritytech/frame-metadata.git", default-features = false, features = ["v14", "decode"] }
 
 
-scale-info = { version = "*", features = ["serde"] }
+scale-info = { version = "2.3.1", features = ["serde"] }
 
 scale-value = {  git="https://github.com/paritytech/scale-value.git",  default-features = false, features = ["from_string"] }
 # scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
@@ -87,14 +87,14 @@ polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "6008ee0f7fbf9
 # desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
 
-egui = { version = "0.19", default-features = false }
+egui = { version = "0.19.0", default-features = false }
 # egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
 # image = { version = "0.24", features = ["jpeg"], default-features = false }
 
-jpeg-decoder = { version = "0.3", default-features = false }
-jpeg-encoder = {version = "*", optional = true }
+jpeg-decoder = { version = "0.3.0", default-features = false }
+jpeg-encoder = { version = "0.5.1", optional = true }
 
 # bevy_flycam = { git = "https://github.com/gilescope/bevy_flycam", optional = true, rev = "6d0adbc6884f8becfed7cd943c1acc85f8743824" }
 # bevy_flycam = { path = "/Users/bit/p/bevy_flycam", optional = true }
@@ -104,42 +104,42 @@ jpeg-encoder = {version = "*", optional = true }
 # bevy_polyline = "0.3"
 
 [target.'cfg(all(not(target_env = "msvc"),not(target_arch = "wasm32")))'.dependencies]
-tikv-jemallocator = "0.5"
+tikv-jemallocator = "0.5.0"
 
 #
 # Dependencies for native only.
 #
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-async-tls = { version = "*", default-features = false }
-futures = { version = "0.3.13", default-features = false, features = [] }
-chrono = { version = "*", default-features = false, features = ["clock"]}
+async-tls = { version = "0.11.0", default-features = false }
+futures = { version = "0.3.25", default-features = false, features = [] }
+chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
 polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "79b53c781056c4991b5bd95e6684284752d6cc7f", features = [
     "wss",
 ] }
 # polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
 #     "wss",
 # ] }
-async-tungstenite = { version = "0.15.0", default-features = true, features = [
+async-tungstenite = { version = "0.19.0", default-features = true, features = [
     "async-tls",
     "async-std-runtime",
 ] }
-png = { version = "*", optional=true }
+png = { version = "0.17.7", optional = true }
 
 #
 # Dependencies for WASM only.
 #
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-gloo-events = "*"
-js-sys = "*"
+gloo-events = "0.1.2"
+js-sys = "0.3.60"
 # rexie is for indexeddb web caching
 # rexie = "0.4"
 # console_log = "*"
-console_error_panic_hook = "0.1"
-chrono = { version = "*", default-features = false, features = ["wasmbind","clock"] }
-getrandom = { version = "0.2.7", features = ["wasm-bindgen", "js"] }
+console_error_panic_hook = "0.1.7"
+chrono = { version = "0.4.23", default-features = false, features = ["wasmbind","clock"] }
+getrandom = { version = "0.2.8", features = ["wasm-bindgen", "js"] }
 #tracing-wasm = "*"
-wasm-bindgen = "*"
-ws_stream_wasm = "*"
+wasm-bindgen = "0.2.83"
+ws_stream_wasm = "0.7.3"
 # wasm32 branch
 polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "79b53c781056c4991b5bd95e6684284752d6cc7f", features = [
     "ws-web",
@@ -150,7 +150,7 @@ polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "79b53c78105
 
 # wee_alloc = "0.4.5"
 gloo-worker = "0.2.1"
-wasm-bindgen-futures = "*"
+wasm-bindgen-futures = "0.4.33"
 # bevy_web_asset = "0.4"
 # bevy_tasks = "0.8"
 # bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen.git" }
@@ -166,7 +166,7 @@ wasm-bindgen-futures = "*"
 
 #async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
-version = "0.3"
+version = "0.3.60"
 features = [
     'console',
     'Document',
@@ -184,7 +184,7 @@ features = [
 ]
 
 [dev-dependencies]
-pollster = "*"
+pollster = "0.2.5"
 
 [profile.dev]
 opt-level = 1
@@ -211,4 +211,4 @@ incremental = true
 # [replace]
 # Waiting on https://github.com/rust-windowing/winit/pull/2188 to be merged.
 # "winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
-"winit"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }
+# "winit"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }

@@ -649,6 +649,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		width: size.width,
 		height: size.height,
 		present_mode: wgpu::PresentMode::Fifo, //Immediate not supported on web
+		alpha_mode: wgpu::CompositeAlphaMode::Auto,
 	};
 	surface.configure(&device, &surface_config);
 
@@ -768,9 +769,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//if !loaded_textures {
 	//	loaded_textures = true;
 
-	let (diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue).await;
+
+	let (diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue, sample_count).await;
 	let (diffuse_texture_view_emoji, diffuse_sampler_emoji) =
-		load_textures_emoji(&device, &queue).await;
+		load_textures_emoji(&device, &queue, sample_count).await;
 	// diffuse_texture_view =diffuse_texture_view1;
 	// diffuse_sampler = diffuse_sampler1;
 	//}
@@ -1582,9 +1584,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	});
 }
 
+//TODO: use https://github.com/gfx-rs/wgpu/pull/2781
 async fn load_textures(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,
+	sample_count: u32
 ) -> (wgpu::TextureView, wgpu::Sampler, HashMap<(u32, u32), (usize, usize)>) {
 	// let chain_str = "0-2000";//details.doturl.chain_str();
 	// let window = web_sys::window().unwrap();
@@ -1954,18 +1958,26 @@ async fn load_textures(
 	}
 
 	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
+
+	let usage: wgpu::TextureUsages = if sample_count == 1 {
+		wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+	} else {
+		wgpu::TextureUsages::TEXTURE_BINDING | 
+		// wgpu::TextureUsages::COPY_DST |
+		wgpu::TextureUsages::RENDER_ATTACHMENT
+	};
 	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
 		// All textures are stored as 3D, we represent our 2D texture
 		// by setting depth to 1.
 		size: texture_size,
 		mip_level_count: 1, // We'll talk about this a little later
-		sample_count: 1,
+		sample_count,
 		dimension: wgpu::TextureDimension::D2,
 		// Most images are stored using sRGB so we need to reflect that here.
 		format: wgpu::TextureFormat::Rgba8UnormSrgb,
 		// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
 		// COPY_DST means that we want to copy data to this texture
-		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		usage,
 		label: Some("diffuse_texture"),
 	});
 
@@ -2093,6 +2105,7 @@ fn emoji_index(emoji_name: &str) -> u8 {
 async fn load_textures_emoji(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,
+	sample_count: u32
 ) -> (
 	wgpu::TextureView,
 	wgpu::Sampler,
@@ -2386,7 +2399,7 @@ async fn load_textures_emoji(
 		// by setting depth to 1.
 		size: texture_size,
 		mip_level_count: 1, // We'll talk about this a little later
-		sample_count: 1,
+		sample_count,
 		dimension: wgpu::TextureDimension::D2,
 		// Most images are stored using sRGB so we need to reflect that here.
 		format: wgpu::TextureFormat::Rgba8UnormSrgb,

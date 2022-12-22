@@ -5,3 +5,8 @@ record.csv
 *.metadata.scale
 dist
 node_modules
+assets/emoji/src/*.svg
+assets/emoji/*.png
+assets/emoji/.DS_Store
+.DS_Store
+some.jpeg
