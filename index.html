@@ -23,6 +23,12 @@
     canvas {
       background-color: white;
     }
+
+    @media only screen and (max-width: 1024px) {
+        #grabmouse {
+          display: none;
+        }
+    }
   </style>
   <!--link data-trunk rel="copy-dir" href="assets/branding/" /-->
   <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-keep-debug="true" data-no-demangle="false"
