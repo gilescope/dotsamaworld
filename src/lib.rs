@@ -1293,7 +1293,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						let texture = texture_map.get(&key);
 						if let Some(texture_index) = texture {
 							let (y,x) = texture_index;
-							let texture_loc = (x + (y << 8)) as u32; 
+							let texture_loc = (x + (y << 8)) as u32;
 							textured_instance_data.push(Instance{color: texture_loc, ..*instance});
 						}
 					}
@@ -2452,7 +2452,7 @@ fn texture_usage(sample_count: u32) -> wgpu::TextureUsages {
 	if sample_count == 1 {
 		wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
 	} else {
-		wgpu::TextureUsages::TEXTURE_BINDING 
+		wgpu::TextureUsages::TEXTURE_BINDING
 		// wgpu::TextureUsages::COPY_DST |
 		| wgpu::TextureUsages::RENDER_ATTACHMENT
 	}
