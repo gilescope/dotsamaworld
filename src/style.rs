@@ -40,7 +40,7 @@ pub fn color_block_number(block_number: i64, darkside: bool) -> u32 {
 		(block_number % 360) as f32,
 	);
 	let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
-	as_rgba_u32(rgb.red, rgb.green, rgb.blue, 0.7)
+	as_rgba_u32(rgb.red, rgb.green, rgb.blue, 2.0) // alpha above 1 so not a texture.
 }
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {

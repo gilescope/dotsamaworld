@@ -272,13 +272,14 @@ pub fn ui_bars_system(
 		.show(egui_context, |ui| {
 			// ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
 			ui.horizontal(|ui| {
-				let _combo = ComboBox::from_label("Env")
+				ui.heading("Env:");
+				let _combo = ComboBox::from_label("")
 					.selected_text(format!("{}", spec.env))
 					.show_ui(ui, |ui| {
+						ui.selectable_value(&mut spec.env, Env::Local, "local");
 						ui.selectable_value(&mut spec.env, Env::Prod, "dotsama");
 						// ui.selectable_value(&mut spec.env, Env::SelfSovereign, "independents");
 						// ui.selectable_value(&mut spec.env, Env::Test, "test");
-						ui.selectable_value(&mut spec.env, Env::Local, "local");
 					});
 
 				// ui.add(

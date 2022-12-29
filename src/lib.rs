@@ -818,7 +818,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let start_cube = vertices.len(); //block
 	vertices.extend(cube(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH, 0., 0., 0.));
 	let start_block = vertices.len(); //block
-	vertices.extend(cube(10., 0.5, 10., 0., 0.0, 0.));
+	vertices.extend(cube(10., 0.3, 10., 0., 0.0, 0.));
 	let start_chain = vertices.len(); //chain
 	vertices.extend(cube(10., CHAIN_HEIGHT, 100000., 0.0, 0.0, 0.));
 	let start_ground = vertices.len(); //ground
@@ -3751,11 +3751,15 @@ fn add_blocks(
 	// Add all the useful blocks
 
 	let layer = chain_info.chain_url.layer() as f32;
-	let (base_x, base_y, base_z) = (
+	let (base_x, mut base_y, base_z) = (
 		(block_num) - 4.,
 		LAYER_GAP * layer,
 		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
 	);
+
+	if let BuildDirection::Down = build_direction {
+		base_y -= 0.5;
+	}
 
 	const DOT_HEIGHT: f32 = 1.;
 	const HIGH: f32 = 100.;
