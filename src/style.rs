@@ -47,7 +47,6 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 	let darkside = entry.details().doturl.is_darkside();
 	// let msg = crate::content::is_message(entry);
 
-
 	match entry {
 		DataEntity::Event(data_event @ DataEvent { .. }) => style_data_event(data_event),
 		// match event.pallet.as_str() {
@@ -72,15 +71,12 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 			);
 			let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
 
-			let emoji = emojidot::extrinsic_emoji(details.pallet.as_str(), details.variant.as_str());
+			let emoji =
+				emojidot::extrinsic_emoji(details.pallet.as_str(), details.variant.as_str());
 			if let Some(some) = emoji {
 				ExStyle { color: as_rgbemoji_u32(rgb.red, rgb.green, rgb.blue, emoji_index(some)) }
 			} else {
-				log!(
-					"missing extrinsic {}, {}",
-					details.pallet.as_str(),
-					details.variant.as_str()
-				);
+				log!("missing extrinsic {}, {}", details.pallet.as_str(), details.variant.as_str());
 				ExStyle { color: as_rgbemoji_u32(rgb.red, rgb.green, rgb.blue, 255) }
 			}
 		},
@@ -91,8 +87,7 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 	let darkside = entry.details.doturl.is_darkside();
 	let raw = &entry.details;
 
-	let alpha =  emojidot::event_emoji(raw.pallet.as_str(), raw.variant.as_str());
-
+	let alpha = emojidot::event_emoji(raw.pallet.as_str(), raw.variant.as_str());
 
 	// let msg = crate::content::is_event_message(entry);
 	if matches!(
@@ -101,19 +96,11 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 		                               * !completed variant. */
 	) || entry.details.success == Success::Sad
 	{
-		let alpha = if let Some(alpha) = alpha {
-			emoji_index(alpha)
-		} else {
-			255
-		};
+		let alpha = if let Some(alpha) = alpha { emoji_index(alpha) } else { 255 };
 		return ExStyle { color: as_rgbemoji_u32(1., 0., 0., alpha) }
 	}
 	if entry.details.success == Success::Worried {
-		let alpha = if let Some(alpha) = alpha {
-			emoji_index(alpha)
-		} else {
-			255
-		};
+		let alpha = if let Some(alpha) = alpha { emoji_index(alpha) } else { 255 };
 		return ExStyle {
 			// Trump Orange
 			color: as_rgbemoji_u32(1., 0.647_058_84, 0., alpha),
@@ -128,10 +115,6 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 	let rgb: palette::rgb::Srgb = palette::rgb::Srgb::from_color(color);
 
 	// println!("rgb {} {} {}", rgb.red, rgb.green, rgb.blue);
-	let alpha = if let Some(alpha) = alpha {
-		emoji_index(alpha)
-	} else {
-		255
-	};
+	let alpha = if let Some(alpha) = alpha { emoji_index(alpha) } else { 255 };
 	ExStyle { color: as_rgbemoji_u32(rgb.red, rgb.green, rgb.blue, alpha) }
 }

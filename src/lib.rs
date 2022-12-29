@@ -619,7 +619,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let features = if sample_count > 1 {
 		wgpu::Features::default() | wgpu::Features::CLEAR_TEXTURE
 	} else {
-		wgpu::Features::default() 
+		wgpu::Features::default()
 	};
 
 	let (device, queue) = pollster::block_on(adapter.request_device(
@@ -775,8 +775,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	//if !loaded_textures {
 	//	loaded_textures = true;
 
-
-	let (diffuse_texture_view, diffuse_sampler, texture_map) = load_textures(&device, &queue, sample_count).await;
+	let (diffuse_texture_view, diffuse_sampler, texture_map) =
+		load_textures(&device, &queue, sample_count).await;
 	let (diffuse_texture_view_emoji, diffuse_sampler_emoji) =
 		load_textures_emoji(&device, &queue, sample_count).await;
 	// diffuse_texture_view =diffuse_texture_view1;
@@ -907,9 +907,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			targets: &[Some(wgpu::ColorTargetState {
 				// 4.
 				format: TextureFormat::Rgba8UnormSrgb,
-				blend: Some(
-					wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
-				),
+				blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
 		}),
@@ -1597,7 +1595,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 async fn load_textures(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,
-	sample_count: u32
+	sample_count: u32,
 ) -> (wgpu::TextureView, wgpu::Sampler, HashMap<(u32, u32), (usize, usize)>) {
 	// let chain_str = "0-2000";//details.doturl.chain_str();
 	// let window = web_sys::window().unwrap();
@@ -1968,7 +1966,7 @@ async fn load_textures(
 
 	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
 
-	let usage: wgpu::TextureUsages = texture_usage( sample_count);
+	let usage: wgpu::TextureUsages = texture_usage(sample_count);
 
 	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
 		// All textures are stored as 3D, we represent our 2D texture
@@ -2109,7 +2107,7 @@ fn emoji_index(emoji_name: char) -> u8 {
 async fn load_textures_emoji(
 	device: &wgpu::Device,
 	queue: &wgpu::Queue,
-	sample_count: u32
+	sample_count: u32,
 ) -> (
 	wgpu::TextureView,
 	wgpu::Sampler,
@@ -2400,8 +2398,7 @@ async fn load_textures_emoji(
 
 	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
 
-
-	let usage: wgpu::TextureUsages = texture_usage( sample_count);
+	let usage: wgpu::TextureUsages = texture_usage(sample_count);
 
 	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
 		// All textures are stored as 3D, we represent our 2D texture

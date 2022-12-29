@@ -1094,28 +1094,33 @@ async fn process_extrinsic<'a, 'scale>(
 						// log!("BATCH {:?}", v);
 
 						let uuv = unwrap_value(unwrap_value(v).unwrap()).unwrap();
-						 
+
 						// log!("BATCH UNWRAPPED {:?}", uuv);
-						// if let scale_value::ValueDef::Variant(scale_value::Variant { name: _, values}) = &v.value {
-						
-							/*
-							Value { value: Variant(
-								Variant { 
-									name: "Utility", 
-									values: Unnamed(
-										[
-											Value { 
-												value: Variant(
-													Variant { name: "batch_all", values: Named([("calls", Value { value: Composite(Unnamed([Value { value: Variant(Variant { name: "Balances", values: Unnamed([Value { value: Variant(Variant { name: "transfer", values: Named([("dest", Value { value: Variant(Variant { name: "Id", values: Unnamed([Value { value: 
-							*/
+						// if let scale_value::ValueDef::Variant(scale_value::Variant { name: _,
+						// values}) = &v.value {
+
+						/*
+						Value { value: Variant(
+							Variant {
+								name: "Utility",
+								values: Unnamed(
+									[
+										Value {
+											value: Variant(
+												Variant { name: "batch_all", values: Named([("calls", Value { value: Composite(Unnamed([Value { value: Variant(Variant { name: "Balances", values: Unnamed([Value { value: Variant(Variant { name: "transfer", values: Named([("dest", Value { value: Variant(Variant { name: "Id", values: Unnamed([Value { value:
+						*/
 						// }
- 
 
 						let mut i = 0;
 						for (_, instruction) in args {
-							let val = if let scale_value::ValueDef::Composite(scale_value::Composite::Unnamed(uuv)) = &uuv.value {
+							let val = if let scale_value::ValueDef::Composite(
+								scale_value::Composite::Unnamed(uuv),
+							) = &uuv.value
+							{
 								uuv.iter().nth(i)
-							} else { None };
+							} else {
+								None
+							};
 							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) =
 								instruction.only3()
 							{
@@ -1132,8 +1137,11 @@ async fn process_extrinsic<'a, 'scale>(
 									end_link: vec![],
 									msg_count: 0,
 									details: Details {
-										value: val.map(|v| scale_value::stringify::to_string(
-							&v.clone().remove_context())),
+										value: val.map(|v| {
+											scale_value::stringify::to_string(
+												&v.clone().remove_context(),
+											)
+										}),
 										// raw: ex_slice.to_vec(), //TODO reference not own.
 										pallet: inner_pallet.to_string(),
 										variant: inner_variant.to_string(),
@@ -1224,21 +1232,20 @@ async fn process_extrinsic<'a, 'scale>(
 }
 
 fn unwrap_value<T>(v: &scale_value::Value<T>) -> Option<&scale_value::Value<T>> {
-	if let scale_value::ValueDef::Variant(scale_value::Variant { name: _, values}) = &v.value {
+	if let scale_value::ValueDef::Variant(scale_value::Variant { name: _, values }) = &v.value {
 		if let scale_value::Composite::Unnamed(vals) = values {
 			for v in vals {
-				return Some(v); //return first
+				return Some(v) //return first
 			}
 		}
 		if let scale_value::Composite::Named(vals) = values {
 			for (_name, v) in vals {
-				return Some(v); //return first
+				return Some(v) //return first
 			}
 		}
 	}
 	None
 }
-
 
 async fn check_reserve_asset<'scale, 'b>(
 	args: &scale_borrow::Value<'scale>,
