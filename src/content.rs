@@ -37,20 +37,13 @@ fn is_boring(pallet: &str, variant: &str) -> bool {
     }
 }
 
-pub fn is_event_message(entry: &DataEvent) -> bool {
-	match entry {
-		&DataEvent { ref details, .. } => {
-			matches!(
-				details.pallet.as_str().to_ascii_lowercase().as_str(),
-				"ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
-			)
-		},
-	}
-}
-
-pub fn is_message(entry: &DataEntity) -> bool {
-	match entry {
-		&DataEntity::Event(ref event) => is_event_message(event),
-		_ => false,
-	}
-}
+// pub fn is_event_message(entry: &DataEvent) -> bool {
+// 	match entry {
+// 		&DataEvent { ref details, .. } => {
+// 			matches!(
+// 				details.pallet.as_str().to_ascii_lowercase().as_str(),
+// 				"ump" | "dmpqueue" | "polkadotxcm" | "xcmpallet"
+// 			)
+// 		},
+// 	}
+// }

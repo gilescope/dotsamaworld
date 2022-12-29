@@ -2051,11 +2051,11 @@ fn emoji_index(emoji_name: &str) -> u8 {
 		"🪦" => 28,
 		"💲" => 29,
 		"🪪" => 30,
-		"📨" => 31,
+		"📨" => 31,// ️‍📨 or 📨
 		"🗨️" => 32,
 		"🔒" => 33,
 		"📢" => 34,
-		"🎨" => 35,
+		// "🎨" => 35,
 		"💟" => 36,
 		"🔐" => 37,
 		"💰" => 38,
@@ -2120,6 +2120,7 @@ async fn load_textures_emoji(
 	let mut width = 0;
 	let mut height = 0;
 	// let mut map = HashMap::new();
+	#[cfg(feature = "raw_images")]
 	let mut index = 0;
 	// const H: usize = 2;// 32; // 32 images per col - 128x128
 	// index += 1;

@@ -45,7 +45,7 @@ pub fn color_block_number(block_number: i64, darkside: bool) -> u32 {
 
 pub fn style_event(entry: &DataEntity) -> ExStyle {
 	let darkside = entry.details().doturl.is_darkside();
-	let msg = crate::content::is_message(entry);
+	// let msg = crate::content::is_message(entry);
 
 
 	match entry {
