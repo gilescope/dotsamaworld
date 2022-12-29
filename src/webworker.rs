@@ -92,6 +92,7 @@ impl Worker for IOWorker {
 				let details = DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
 				let chain_info =
 					(*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);
+				log!("respond to selected item request");
 				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
 			},
 			BridgeMessage::GetExtrinsicDetails(cube_index) => {

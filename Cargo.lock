@@ -852,6 +852,7 @@ dependencies = [
  "egui",
  "egui_wgpu_backend",
  "egui_winit_platform",
+ "emojidot",
  "fastrand",
  "form_urlencoded",
  "frame-metadata",
@@ -955,6 +956,10 @@ checksum = "9542a40106fdba943a055f418d1746a050e1a903a049b030c2b097d4686a33cf"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "emojidot"
+version = "0.1.0"
 
 [[package]]
 name = "epaint"

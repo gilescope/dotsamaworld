@@ -616,9 +616,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		.unwrap();
 
 	//TODO: can we await instead of block_on here?
+	let features = if sample_count > 1 {
+		wgpu::Features::default() | wgpu::Features::CLEAR_TEXTURE
+	} else {
+		wgpu::Features::default() 
+	};
+
 	let (device, queue) = pollster::block_on(adapter.request_device(
 		&wgpu::DeviceDescriptor {
-			features: default(), // | gpu::Features::CLEAR_TEXTURE
+			features,
 			limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
 			label: None,
 		},
@@ -1308,8 +1314,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			}
 
 			//todo rain in gpu
-			rain(&mut extrinsic_instance_data, &mut extrinsic_target_heights);
-			rain(&mut event_instance_data, &mut event_target_heights);
+			if frames % 4 == 0 {
+				rain(&mut extrinsic_instance_data, &mut extrinsic_target_heights);
+				rain(&mut event_instance_data, &mut event_target_heights);
+			}
 
 			// TODO: when refreshing a buffer can we append to it???
 			if ground_instance_data_count != ground_instance_data.len() {
@@ -1456,7 +1464,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &depth_texture.view,
 						depth_ops: Some(wgpu::Operations {
-							load: wgpu::LoadOp::Clear(1.0),
+							load: //wgpu::LoadOp::Load, 
+							wgpu::LoadOp::Clear(1.0),
 							store: true,
 						}),
 						stencil_ops: None,
@@ -1959,13 +1968,8 @@ async fn load_textures(
 
 	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
 
-	let usage: wgpu::TextureUsages = if sample_count == 1 {
-		wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
-	} else {
-		wgpu::TextureUsages::TEXTURE_BINDING | 
-		// wgpu::TextureUsages::COPY_DST |
-		wgpu::TextureUsages::RENDER_ATTACHMENT
-	};
+	let usage: wgpu::TextureUsages = texture_usage( sample_count);
+
 	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
 		// All textures are stored as 3D, we represent our 2D texture
 		// by setting depth to 1.
@@ -2016,87 +2020,87 @@ async fn load_textures(
 
 fn emoji_index(emoji_name: &str) -> u8 {
 	match emoji_name {
-		"skull" => 0,
-		"thumbs_up" => 1,
-		"thumbs_down" => 2,
-		"warning" => 3,
-		"anchor" => 4,
-		"bank" => 5,
-		"black_nib" => 6,
-		"brain" => 7,
-		"bust" => 8,
-		"busts" => 9,
-		"calendar" => 10,
-		"check_box_with_check" => 11,
-		"counter_clockwise_arrows" => 12,
-		"envelope_with_arrow" => 13,
-		"spade_suit" => 14,
-		"cowboy_hat_face" => 15,
-		"crystal_ball" => 16,
-		"currency_exchange" => 17,
-		"detective" => 18,
-		"dollar" => 19,
-		"face_with_monocle" => 20,
-		"farmer" => 21,
-		"fire" => 22,
-		"fountain_pen" => 23,
-		"framed_picture" => 24,
-		"game_die" => 25,
-		"gear" => 26,
-		"hatching_chick" => 27,
-		"headstone" => 28,
-		"heavy_dollar" => 29,
-		"identification_card" => 30,
-		"incoming_envelope" => 31,
-		"left_speach_bubble" => 32,
-		"locked" => 33,
-		"loudspeaker" => 34,
-		"woman_artist" => 35,
-		"heart_decoration" => 36,
-		"locked_with_key" => 37,
-		"money_bag" => 38,
-		"newspaper" => 39,
-		"nine_oclock" => 40,
-		"old_key" => 41,
-		"alarm_clock" => 42,
-		"alembic" => 43,
-		"antenna" => 44,
-		"artistic_palette" => 45,
-		"baby_symbol" => 46,
-		"balance_scale" => 47,
-		"beating_heart" => 48,
-		"black_heart" => 49,
-		"broom" => 50,
-		"carrot" => 51,
-		"chart_decreasing" => 52,
-		"chart_increasing" => 53,
-		"classical_building" => 54,
-		"collision" => 55,
-		"crab" => 56,
-		"cross" => 57,
-		"face_savoring_food" => 58,
-		"gem_stone" => 59,
-		"ghost" => 60,
-		"palm_up_hand" => 61,
-		"partying_face" => 62,
-		"pause" => 63,
-		"pick" => 64,
-		"pig" => 65,
-		"pill" => 66,
-		"robot" => 67,
-		"rocket" => 68,
-		"shortcake" => 69,
-		"shuffle_tracks" => 70,
-		"snowflake" => 71,
-		"star" => 72,
-		"stopwatch" => 73,
-		"unlocked" => 74,
-		"log" => 75,
-		"cold_face" => 76,
-		"wrench" => 77,
-		"alien_monster" => 78,
-		"unicorn" => 79,
-		"bathtub" => 80,
+		"💀" => 0,
+		"👍" => 1,
+		"👎" => 2,
+		"⚠️" => 3,
+		"⚓" => 4,
+		"🏦" => 5,
+		"✒️" => 6,
+		"🧠" => 7,
+		"👤" => 8,
+		"👥" => 9,
+		"📅" => 10,
+		"☑️" => 11,
+		"🔄" => 12,
+		"📩" => 13,
+		"♠️" => 14,
+		"🤠" => 15,
+		"🔮" => 16,
+		"💱" => 17,
+		"🕵️" => 18,
+		"💵" => 19,
+		"🧐" => 20,
+		"🧑‍🌾" => 21,
+		"🔥" => 22,
+		"🖋️" => 23,
+		"🖼️" => 24,
+		"🎲" => 25,
+		"⚙️" => 26,
+		"🐣" => 27,
+		"🪦" => 28,
+		"💲" => 29,
+		"🪪" => 30,
+		"📨" => 31,
+		"🗨️" => 32,
+		"🔒" => 33,
+		"📢" => 34,
+		"🎨" => 35,
+		"💟" => 36,
+		"🔐" => 37,
+		"💰" => 38,
+		"📰" => 39,
+		"🕘" => 40,
+		"🗝️" => 41,
+		"⏰" => 42,
+		"⚗️" => 43,
+		"📶" => 44,
+		"🎨" => 45,
+		"👶" => 46,
+		"⚖️" => 47,
+		"💓" => 48,
+		"🖤" => 49,
+		"🧹" => 50,
+		"🥕" => 51,
+		"📉" => 52,
+		"📈" => 53,
+		"🏛️" => 54,
+		"💥" => 55,
+		"🦀" => 56,
+		"❌" => 57,
+		"😋" => 58,
+		"💎" => 59,
+		"👻" => 60,
+		"🫴" => 61,
+		"🥳" => 62,
+		"⏸️" => 63,
+		"⛏️" => 64,
+		"🐖" => 65,
+		"💊" => 66,
+		"🤖" => 67,
+		"🚀" => 68,
+		"🍰" => 69,
+		"🔀" => 70,
+		"❄️" => 71,
+		"⭐" => 72,
+		"⏱️" => 73,
+		"🔓" => 74,
+		"🪵" => 75,
+		"🥶" => 76,
+		"🔧" => 77,
+		"👾" => 78,
+		"🦄" => 79,
+		"🛁" => 80,
 		_ => 255,
 	}
 }
@@ -2394,6 +2398,10 @@ async fn load_textures_emoji(
 	}
 
 	let texture_size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
+
+
+	let usage: wgpu::TextureUsages = texture_usage( sample_count);
+
 	let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
 		// All textures are stored as 3D, we represent our 2D texture
 		// by setting depth to 1.
@@ -2405,7 +2413,7 @@ async fn load_textures_emoji(
 		format: wgpu::TextureFormat::Rgba8UnormSrgb,
 		// TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
 		// COPY_DST means that we want to copy data to this texture
-		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		usage,
 		label: Some("diffuse_texture"),
 	});
 
@@ -2440,6 +2448,16 @@ async fn load_textures_emoji(
 	});
 
 	(diffuse_texture_view, diffuse_sampler)
+}
+
+fn texture_usage(sample_count: u32) -> wgpu::TextureUsages {
+	if sample_count == 1 {
+		wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+	} else {
+		wgpu::TextureUsages::TEXTURE_BINDING 
+		// wgpu::TextureUsages::COPY_DST |
+		| wgpu::TextureUsages::RENDER_ATTACHMENT
+	}
 }
 
 #[cfg(feature = "raw_images")]
@@ -2567,8 +2585,9 @@ fn try_select(
 			pos[1] += -0.1;
 			pos[2] += -0.1;
 			selected_instance_data.clear();
+			//specific alpha value!
 			selected_instance_data
-				.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.7) });
+				.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.3) });
 
 			(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetExtrinsicDetails(index));
 		}
@@ -2887,6 +2906,7 @@ fn source_data(
 					pending.extend(update);
 				},
 				WorkerResponse::Details(index, details, chain_info) => {
+					log!("got selected from backend");
 					*SELECTED.lock().unwrap() = Some((index, details, chain_info));
 				},
 			})

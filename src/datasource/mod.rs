@@ -505,6 +505,7 @@ where
 					&extrinsic,
 					DotUrl { extrinsic: Some(i as u32), ..blockurl.clone() },
 					// source.url(),
+					&extrinsic2,
 				)
 				.await;
 				if let Some(mut entity) = entity {
@@ -628,6 +629,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ex_slice: &'scale [u8],
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
+	ext2: &scale_value::Value<scale_value::scale::TypeId>,
 	// url: &str,
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
@@ -1083,12 +1085,37 @@ async fn process_extrinsic<'a, 'scale>(
 				if variant.contains("batch") {
 					// log!("found batch {:?}", payload);
 					if let Some(args) = payload.get("calls") {
+						let v = ext2;
+						// log!("BATCH {:?}", v);
+
+						let uuv = unwrap_value(unwrap_value(v).unwrap()).unwrap();
+						 
+						// log!("BATCH UNWRAPPED {:?}", uuv);
+						// if let scale_value::ValueDef::Variant(scale_value::Variant { name: _, values}) = &v.value {
+						
+							/*
+							Value { value: Variant(
+								Variant { 
+									name: "Utility", 
+									values: Unnamed(
+										[
+											Value { 
+												value: Variant(
+													Variant { name: "batch_all", values: Named([("calls", Value { value: Composite(Unnamed([Value { value: Variant(Variant { name: "Balances", values: Unnamed([Value { value: Variant(Variant { name: "transfer", values: Named([("dest", Value { value: Variant(Variant { name: "Id", values: Unnamed([Value { value: 
+							*/
+						// }
+ 
+
+						let mut i = 0;
 						for (_, instruction) in args {
+							let val = if let scale_value::ValueDef::Composite(scale_value::Composite::Unnamed(uuv)) = &uuv.value {
+								uuv.iter().nth(i)
+							} else { None };
 							if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) =
 								instruction.only3()
 							{
 								// log!(
-								// 	"found batch instructionC {} {} {:?}",
+								// 	"found batch instructionC {} {} extrinsic {:?}",
 								// 	inner_pallet,
 								// 	inner_variant,
 								// 	instruction
@@ -1100,6 +1127,8 @@ async fn process_extrinsic<'a, 'scale>(
 									end_link: vec![],
 									msg_count: 0,
 									details: Details {
+										value: val.map(|v| scale_value::stringify::to_string(
+							&v.clone().remove_context())),
 										// raw: ex_slice.to_vec(), //TODO reference not own.
 										pallet: inner_pallet.to_string(),
 										variant: inner_variant.to_string(),
@@ -1120,6 +1149,7 @@ async fn process_extrinsic<'a, 'scale>(
 									.await;
 								}
 							}
+							i += 1;
 						}
 					}
 				}
@@ -1187,6 +1217,23 @@ async fn process_extrinsic<'a, 'scale>(
 	// let ext = decoder::decode_extrinsic(&meta, &mut ext_bytes.0.as_slice()).expect("can decode
 	// extrinsic");
 }
+
+fn unwrap_value<T>(v: &scale_value::Value<T>) -> Option<&scale_value::Value<T>> {
+	if let scale_value::ValueDef::Variant(scale_value::Variant { name: _, values}) = &v.value {
+		if let scale_value::Composite::Unnamed(vals) = values {
+			for v in vals {
+				return Some(v); //return first
+			}
+		}
+		if let scale_value::Composite::Named(vals) = values {
+			for (_name, v) in vals {
+				return Some(v); //return first
+			}
+		}
+	}
+	None
+}
+
 
 async fn check_reserve_asset<'scale, 'b>(
 	args: &scale_borrow::Value<'scale>,

@@ -103,7 +103,6 @@ pub fn ui_bars_system(
 							let val_decoded = scale_value_to_borrowed::convert(&val, true);
 
 							if let Some(v) = val_decoded.expect3("Ethereum", "0", "Executed") {
-								log!("yeah baby {:?}", &v);
 								if let Some(tx_hash) = v.find2("transaction_hash", "0") {
 									if let scale_borrow::Value::ScaleOwned(tx) = tx_hash {
 										let mut eth_tx_map = HashMap::new();
