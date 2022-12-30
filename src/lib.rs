@@ -872,8 +872,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let ground_instance_data: Vec<Instance> = vec![
 		// Instance{ position: [-ground_width/2.0,-100.,-ground_width/2.0], color:
 		// as_rgba_u32(-1.0, -1.0, -1.0, 1.0) },
-		Instance { position: [-ground_width / 2.0, -500., -ground_width / 2.0], color: c },
-		Instance { position: [-ground_width / 2.0, 500., -ground_width / 2.0], color: c },
+		 Instance { position: [-ground_width / 2.0, -100., -ground_width / 2.0], color: c },
+		// Instance { position: [-ground_width / 2.0, 500., -ground_width / 2.0], color: c },
 		// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 	];
 
@@ -2926,6 +2926,7 @@ fn source_data(
 				bridge.send(BridgeMessage::GetNewBlocks);
 			}
 			async_std::task::sleep(Duration::from_millis(300)).await;
+			log!("asking bridge msg...");
 		}
 	};
 
@@ -2982,7 +2983,6 @@ fn do_datasources(sovereigns: Sovereigns, as_of: Option<DotUrl>) {
 #[cfg(target_arch = "wasm32")]
 async fn do_datasources<F, R>(
 	sovereigns: Sovereigns,
-	// relays: Vec<Vec<ChainInfo>>,
 	as_of: Option<DotUrl>,
 	callback: &'static F,
 ) where
@@ -3004,16 +3004,14 @@ async fn do_datasources<F, R>(
 		}
 
 		let mut send_map = Some(send_map);
-		//let mut sov_relay = vec![];
 		for (chain, rc) in relay2 {
 			// log!("listening to {}", chain.info.chain_ws);
 
 			let maybe_sender = if chain.chain_url.is_relay() { send_map.take() } else { None };
 
-			// let lock_clone = chain.shared;
 			let as_of = as_of.clone();
-			// log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 			let chain_info = chain.clone();
+			// log!("as of for chain {:?} index {}", &as_of, chain.chain_index);
 
 			let block_watcher = datasource::BlockWatcher {
 				tx: Some(callback),
@@ -3021,10 +3019,7 @@ async fn do_datasources<F, R>(
 				as_of,
 				receive_channel: Some(rc),
 				sender: maybe_sender,
-				// source
 			};
-
-			//let block_watcher = Box::leak(Box::new(block_watcher));
 
 			#[cfg(target_arch = "wasm32")]
 			wasm_bindgen_futures::spawn_local(block_watcher.watch_blocks());
@@ -3631,11 +3626,11 @@ fn render_block(
 			// ground.
 			let (boring, fun): (Vec<_>, Vec<_>) =
 				ext_with_events.into_iter().partition(|(e, _)| {
-					if let Some(ext) = e {
-						content::is_utility_extrinsic(ext)
-					} else {
-						true
-					}
+					// if let Some(ext) = e {
+					// 	content::is_utility_extrinsic(ext)
+					// } else {
+						false
+					//}
 				});
 
 			add_blocks(
@@ -3655,22 +3650,22 @@ fn render_block(
 				render_details, // &mut event_dest, // &mut event_instances,
 			);
 
-			add_blocks(
-				chain_info,
-				block_num,
-				boring,
-				// &mut commands,
-				// &mut materials,
-				BuildDirection::Down,
-				links,
-				// &mut polyline_materials,
-				// &mut polylines,
-				// &encoded,
-				// &mut handles,
-				&mut render.extrinsic_instances,
-				&mut render.event_instances,
-				render_details, // &mut event_dest, // &mut event_instances,
-			);
+			// add_blocks(
+			// 	chain_info,
+			// 	block_num,
+			// 	boring,
+			// 	// &mut commands,
+			// 	// &mut materials,
+			// 	BuildDirection::Down,
+			// 	links,
+			// 	// &mut polyline_materials,
+			// 	// &mut polylines,
+			// 	// &encoded,
+			// 	// &mut handles,
+			// 	&mut render.extrinsic_instances,
+			// 	&mut render.event_instances,
+			// 	render_details, // &mut event_dest, // &mut event_instances,
+			// );
 			//event.send(RequestRedraw);
 		},
 		DataUpdate::NewChain(chain_info, sudo) => {

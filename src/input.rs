@@ -141,6 +141,9 @@ impl CameraController {
 		// Move up/down. Since we don't use roll, we can just
 		// modify the y coordinate directly.
 		camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+		if camera.position.y < 1.0 {
+			camera.position.y = 1.0;
+		}
 
 		if let Some(val) = self.rotate_horizontal_stack.pop() {
 			self.rotate_horizontal += val;

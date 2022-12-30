@@ -3,16 +3,17 @@ use crate::{DataEntity, DataEvent};
 /// Is this extrinsic part of the overheads of running this blockchain?
 /// For the relay chain including parachain blocks is useful work.
 pub fn is_utility_extrinsic(event: &DataEntity) -> bool {
-	match *event {
-		DataEntity::Extrinsic { ref details, msg_count, .. } => {
-			if msg_count > 0 {
-				return false
-			}
-			is_boring(details.pallet.as_str(), details.variant.as_str())
-		},
-		DataEntity::Event(DataEvent { ref details, .. }) =>
-			details.parent.is_none() || is_boring(&details.pallet, &details.variant),
-	}
+    return false;
+	// match *event {
+	// 	DataEntity::Extrinsic { ref details, msg_count, .. } => {
+	// 		if msg_count > 0 {
+	// 			return false
+	// 		}
+	// 		is_boring(details.pallet.as_str(), details.variant.as_str())
+	// 	},
+	// 	DataEntity::Event(DataEvent { ref details, .. }) =>
+	// 		details.parent.is_none() || is_boring(&details.pallet, &details.variant),
+	// }
 }
 
 fn is_boring(pallet: &str, variant: &str) -> bool {
