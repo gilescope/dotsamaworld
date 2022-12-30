@@ -183,7 +183,9 @@ pub struct ChainStats {
 
 impl ChainStats {
 	fn avg_free_transactions(&self) -> Option<u64> {
-		let max_block_size = 500_000_000_000u64; //todo: get from system state call
+							 
+		//currently max ever seen + 100m
+		let max_block_size = 500_227_690_912u64; //todo: get from system state call
 										 // let min_block_weight = 5_000_000_000u64;
 
 		if self.total_extrinsics == 0 {

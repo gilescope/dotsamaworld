@@ -197,7 +197,7 @@ pub fn get_network(selected_env: &Env) -> Vec<Vec<(Option<u32>, String, Vec<&'st
 
 					// kusama auction batch 9
 					(Some(2124), "Amplitude".into(), vec!["rpc-amplitude.pendulumchain.tech"]), /* 42: Amplitude */
-					(Some(2125), "Tinker".into(), vec!["tinker.invarch.network"]),              /* 43: Tinkernet */
+					(Some(2125), "Tinker".into(), vec!["tinker.invarch.network", "wss://invarch-tinkernet.api.onfinality.io:443/public-ws"]),              /* 43: Tinkernet */
 					// 44: renewal kinsugi
 					// 45: renewal heiko finance
 					// 46: renewal Altair
