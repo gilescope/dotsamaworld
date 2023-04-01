@@ -6,6 +6,7 @@
 #![feature(async_closure)]
 #![feature(stmt_expr_attributes)]
 #![feature(let_chains)]
+#![feature(async_fn_in_trait)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_in_or_patterns)]

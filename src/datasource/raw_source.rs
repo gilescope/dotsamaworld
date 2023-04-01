@@ -1,7 +1,4 @@
-// use async_std::stream::StreamExt;
 use crate::log;
-use async_trait::async_trait;
-use polkapipe::Backend;
 use primitive_types::H256;
 #[cfg(not(target_arch = "wasm32"))]
 use {
@@ -28,7 +25,6 @@ impl AgnosticBlock {
 }
 
 /// A way to source untransformed raw data.
-#[async_trait(?Send)]
 pub trait Source {
 	async fn fetch_block_hash(&mut self, block_number: u32) -> Result<Option<H256>, BError>;
 
@@ -226,30 +222,30 @@ pub trait Source {
 // #[cfg(target_arch="wasm32")]
 // type WS2 = SplitSink<WsStream, ws_stream_wasm::WsMessage>;
 
-#[cfg(target_arch = "wasm32")]
-type WSBackend = polkapipe::ws_web::Backend;
+// #[cfg(target_arch = "wasm32")]
+// type WSBackend = polkapipe::ws_web::Backend;
 
-#[cfg(not(target_arch = "wasm32"))]
-type WSBackend = polkapipe::ws::Backend<
-	SinkErrInto<
-		SplitSink<
-			WebSocketStream<
-				async_tungstenite::stream::Stream<
-					async_std::net::TcpStream,
-					async_tls::client::TlsStream<async_std::net::TcpStream>,
-				>,
-			>,
-			Message,
-		>,
-		Message,
-		polkapipe::Error,
-	>,
->;
+// #[cfg(not(target_arch = "wasm32"))]
+// type WSBackend = polkapipe::ws::Backend<
+// 	SinkErrInto<
+// 		SplitSink<
+// 			WebSocketStream<
+// 				async_tungstenite::stream::Stream<
+// 					async_std::net::TcpStream,
+// 					async_tls::client::TlsStream<async_std::net::TcpStream>,
+// 				>,
+// 			>,
+// 			Message,
+// 		>,
+// 		Message,
+// 		polkapipe::Error,
+// 	>,
+// >;
 
 //#[derive(Clone)]
 pub struct RawDataSource {
 	ws_url: Vec<String>,
-	client: Option<WSBackend>,
+	client: Option<polkapipe::PolkaPipe::<polkapipe::ws_web::Backend>>,
 }
 
 type BError = polkapipe::Error;
@@ -262,25 +258,25 @@ impl RawDataSource {
 	}
 
 	#[cfg(target_arch = "wasm32")]
-	async fn client(&mut self) -> Option<&mut WSBackend> {
+	async fn client(&mut self) -> Option<&mut polkapipe::PolkaPipe::<polkapipe::ws_web::Backend>> {
 		if self.client.is_none() {
 			let urls: Vec<_> = self.ws_url.iter().map(|s| s.as_ref()).collect();
-			if let Ok(client) = polkapipe::ws_web::Backend::new(urls.as_slice()).await {
-				self.client = Some(client);
+			if let Ok(client) = polkapipe::ws_web::Backend::new(urls.as_slice()).await  {
+				self.client = Some(polkapipe::PolkaPipe::<polkapipe::ws_web::Backend>{rpc:client});
 			}
 		}
 		self.client.as_mut()
 	}
 
-	#[cfg(not(target_arch = "wasm32"))]
-	async fn client(&mut self) -> Option<&mut WSBackend> {
-		if self.client.is_none() {
-			if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url[0]).await {
-				self.client = Some(client);
-			}
-		}
-		self.client.as_mut()
-	}
+	// #[cfg(not(target_arch = "wasm32"))]
+	// async fn client(&mut self) -> Option<&mut WSBackend> {
+	// 	if self.client.is_none() {
+	// 		if let Ok(client) = polkapipe::ws::Backend::new_ws2(&self.ws_url[0]).await {
+	// 			self.client = Some(client);
+	// 		}
+	// 	}
+	// 	self.client.as_mut()
+	// }
 }
 
 // #[async_trait(?Send)]
@@ -288,7 +284,6 @@ impl RawDataSource {
 // 	async fn process_incoming_messages(&self);
 // }
 
-#[async_trait(?Send)]
 impl Source for RawDataSource {
 	// #[cfg(target_arch="wasm32")]
 	// async fn process_incoming_messages(&mut self) -> WSBackend {
