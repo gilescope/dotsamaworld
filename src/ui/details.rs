@@ -34,6 +34,9 @@ pub struct Details
 	// pub chain_name: String,
 	pub raw: Vec<u8>,
 	pub value: Option<String>, //scale Value as string
+
+	// pointers to other details that are linked together.
+	pub links: Vec<usize>,
 }
 
 // use egui::Grid;
@@ -83,30 +86,30 @@ pub struct Details
 // 	}
 // }
 
-pub fn configure_visuals(// egui_ctx: ResMut<EguiContext>,
-	// mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
-) {
-	// egui_ctx.ctx_mut().set_visuals(egui::Visuals {
-	//     window_rounding: 0.0.into(),
-	//     // scale:1.2,
-	//     ..default()
-	// });
-	// egui_ctx.ctx_mut().set_style(egui::Style {
-	//     spacing: Spacing {
-	//         text_edit_width: 1000000.,
-	//         ..default()
-	//     },
-	//     ..default()
-	// });
-	// egui_ctx.ctx_mut().set_debug_on_hover(true);
-	// egui_ctx.ctx_mut().set_widgets(
-	//     egui::Widgets {
-	//         ..default()
-	//     }
-	// );
-	//  .desired_width(f32::INFINITY)
-	// if let Some(window) = windows.get_primary().is_some()
-	{
-		// egui_settings.scale_factor = 1.5;
-	}
-}
+// pub fn configure_visuals(// egui_ctx: ResMut<EguiContext>,
+// 	// mut egui_settings: ResMut<EguiSettings>, //  ,windows: Res<Windows>
+// ) {
+// 	// egui_ctx.ctx_mut().set_visuals(egui::Visuals {
+// 	//     window_rounding: 0.0.into(),
+// 	//     // scale:1.2,
+// 	//     ..default()
+// 	// });
+// 	// egui_ctx.ctx_mut().set_style(egui::Style {
+// 	//     spacing: Spacing {
+// 	//         text_edit_width: 1000000.,
+// 	//         ..default()
+// 	//     },
+// 	//     ..default()
+// 	// });
+// 	// egui_ctx.ctx_mut().set_debug_on_hover(true);
+// 	// egui_ctx.ctx_mut().set_widgets(
+// 	//     egui::Widgets {
+// 	//         ..default()
+// 	//     }
+// 	// );
+// 	//  .desired_width(f32::INFINITY)
+// 	// if let Some(window) = windows.get_primary().is_some()
+// 	{
+// 		// egui_settings.scale_factor = 1.5;
+// 	}
+// }

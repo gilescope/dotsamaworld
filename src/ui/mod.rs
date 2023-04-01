@@ -33,9 +33,9 @@ pub fn ui_bars_system(
 	_destination: &mut Destination,
 	fps: u32,
 	tps: u32,
-	selected_details: Option<(u32, Details, ChainInfo)>,
+	selected_details: Vec<(u32, Details, ChainInfo)>,
 ) {
-	if selected_details.is_some() {
+	if !selected_details.is_empty() {
 		occupied_screen_space.left = egui::SidePanel::left("left_panel")
 			.resizable(true)
 			.show(egui_context, |ui| {
@@ -76,7 +76,7 @@ pub fn ui_bars_system(
 				// }
 				use egui::Link;
 
-				if let Some((_cube_index, selected, chain_info)) = &selected_details {
+				if let Some((_cube_index, selected, chain_info)) = selected_details.first() {
 					ui.heading(&selected.variant);
 					ui.heading(&selected.pallet);
 					ui.separator();

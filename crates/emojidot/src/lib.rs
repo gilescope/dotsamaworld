@@ -185,6 +185,7 @@ pub fn event_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("Xyk", "AssetsSwapped") => Some('💱'),
 		("Xyk", "LiquidityBurned") => Some('🔥'),
 		("XcmpQueue", "Fail") => Some('⚠'),
+		("XTransfer", "Withdrawn") => Some('💰'),
 		("ZenlinkProtocol", "LiquidityAdded") => Some('📈'),
 		("ZenlinkProtocol", "AssetSwap") => Some('💱'),
 		_ => None
@@ -240,6 +241,7 @@ pub fn extrinsic_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("Farming", "withdraw_claim") => Some('🌾'),
 		("Farming", "deposit") => Some('🌾'),
 		("Honzon", "adjust_loan") => Some('✒'),
+		("Honzon", "adjust_loan_by_debit_value") => Some('✒'),
 		
 		("ImOnline", "heartbeat") => Some('💓'),
 		("Identity", "set_identity") => Some('🪪'),
@@ -264,6 +266,7 @@ pub fn extrinsic_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("PolkadotXcm", "limited_reserve_transfer_assets") => Some('🔀'),
 		("ParaInherent", "enter") => Some('⚙'),
 		("Pablo", "add_liquidity") => Some('📈'),
+		("Pablo", "remove_liquidity") => Some('📉'),
 		("Pablo", "swap") => Some('🔀'),
 		("ParachainStaking", "delegator_bond_more") => Some('🔒'),
 		("ParachainStaking", "schedule_revoke_delegation") => Some('❌'),

@@ -36,7 +36,7 @@ impl IOWorker {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum WorkerResponse {
 	RenderUpdate(RenderUpdate, u64), //free transactions
-	Details(u32, Details, ChainInfo),
+	Details(Vec<(u32, Details, ChainInfo)>),
 }
 
 impl Worker for IOWorker {
@@ -89,40 +89,31 @@ impl Worker for IOWorker {
 				}
 			},
 			BridgeMessage::GetEventDetails(cube_index) => {
-				let details = DETAILS.lock().unwrap().event_instances[cube_index as usize].clone();
-				let chain_info =
-					(*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);
+				let instances = &DETAILS.lock().unwrap().event_instances;
+				let details = instances[cube_index as usize].clone();
+				let sov_lock = SOVEREIGNS.lock().unwrap();
+				let sovs = sov_lock.as_ref().unwrap();
+				let chain_info = sovs.chain_info(&details.doturl);
 				log!("respond to selected item request");
-				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
+								
+				let links = details.links.clone();
+				let mut results = vec![(cube_index, details, chain_info)];
+
+				for link in links {
+					let details = instances[cube_index as usize].clone();
+					let chain_info = sovs.chain_info(&details.doturl);
+					results.push((link as u32, details, chain_info));
+				}
+
+				scope.respond(id, WorkerResponse::Details(results));
 			},
 			BridgeMessage::GetExtrinsicDetails(cube_index) => {
 				let details =
 					DETAILS.lock().unwrap().extrinsic_instances[cube_index as usize].clone();
 				let chain_info =
 					(*SOVEREIGNS.lock().unwrap()).as_ref().unwrap().chain_info(&details.doturl);
-				scope.respond(id, WorkerResponse::Details(cube_index, details, chain_info));
+				scope.respond(id, WorkerResponse::Details(vec![(cube_index, details, chain_info)]));
 			},
 		}
-
-		// 	let chain_info = ChainInfo{
-		// 		chain_ws: String::from("kusama-rpc.polkadot.io"),
-		// // pub chain_id: Option<NonZeroU32>,
-		// // pub chain_drawn: bool,
-		// // Negative is other direction from center.
-		// 		chain_index: 1,
-		// 		chain_url: DotUrl{ sovereign:Some(1), env:Env::Prod, ..DotUrl::default() },
-		// 	};
-		// 	// let url = chain_name_to_url(&chain_info.chain_ws);
-		// 	// let source = datasource::RawDataSource::new(&url);
-		// 	let block_watcher = datasource::BlockWatcher{
-		// 				tx: None,
-		// 				chain_info ,
-		// 				as_of: None,
-		// 				receive_channel: None,
-		// 				sender: None,
-		// 			};
-
-		// 	async_std::task::block_on(block_watcher.watch_blocks());
-		// self.link.respond(id, (msg, 42));
 	}
 }

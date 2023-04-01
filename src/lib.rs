@@ -79,6 +79,7 @@ mod movement;
 mod style;
 mod texture;
 mod ui;
+mod resize;
 
 #[cfg(target_family = "wasm")]
 pub mod webworker;
@@ -126,6 +127,10 @@ lazy_static! {
 }
 
 lazy_static! {
+	static ref LINKS: Arc<Mutex<Vec<MessageSource>>> = default();
+}
+
+lazy_static! {
 	static ref CHAIN_STATS: Arc<Mutex<HashMap<isize, ChainStats>>> = default();
 }
 
@@ -134,7 +139,7 @@ lazy_static! {
 }
 
 lazy_static! {
-	static ref SELECTED: Arc<std::sync::Mutex<Option<(u32, Details, ChainInfo)>>> = default();
+	static ref SELECTED: Arc<std::sync::Mutex<Vec<(u32, Details, ChainInfo)>>> = default();
 }
 
 lazy_static! {
@@ -464,7 +469,7 @@ const fn cube_indicies(offset: u16) -> [u16; 36] {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Deserialize, Serialize, Debug)]
 struct Instance {
 	position: [f32; 3],
-	color: u32, //r g b a - could use alpha to point to emojii 0-4 mod 2... gets you 255
+	color: u32, //r g b a - uses alpha to point to 255 emojiis.
 }
 
 impl Instance {
@@ -497,6 +502,59 @@ impl Instance {
 		}
 	}
 }
+
+// #[repr(C)]
+// #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Deserialize, Serialize, Debug)]
+// struct RainbowInstance {
+// 	position: [f32; 3],
+// 	destination: [f32; 3],
+// 	color: u32, //r g b a - could use alpha to point to emoji 0-4 mod 2... gets you 255
+// 	link_type: u32 // we get this for free due to alignment...
+// }
+
+// impl RainbowInstance {
+// 	fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+// 		use std::mem;
+// 		wgpu::VertexBufferLayout {
+// 			array_stride: mem::size_of::<Instance>() as wgpu::BufferAddress,
+// 			// We need to switch from using a step mode of Vertex to Instance
+// 			// This means that our shaders will only change to use the next
+// 			// instance when the shader starts processing a new instance
+// 			step_mode: wgpu::VertexStepMode::Instance,
+// 			attributes: &[
+// 				wgpu::VertexAttribute {
+// 					offset: 0,
+// 					// While our vertex shader only uses locations 0, and 1 now, in later tutorials
+// 					// we'll be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict
+// 					// with them later
+// 					shader_location: 5,
+// 					format: wgpu::VertexFormat::Float32x3,
+// 				},
+// 				wgpu::VertexAttribute {
+// 					offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+// 					// While our vertex shader only uses locations 0, and 1 now, in later tutorials
+// 					// we'll be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict
+// 					// with them later
+// 					shader_location: 6,
+// 					format: wgpu::VertexFormat::Float32x3,
+// 				},
+// 				// A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a
+// 				// slot for each vec4. We'll have to reassemble the mat4 in
+// 				// the shader.
+// 				wgpu::VertexAttribute {
+// 					offset: mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
+// 					shader_location: 7,
+// 					format: wgpu::VertexFormat::Uint32,
+// 				},
+// 				wgpu::VertexAttribute {
+// 					offset: mem::size_of::<[f32; 7]>() as wgpu::BufferAddress, // This is actually 6 f32 + 1 u32 size
+// 					shader_location: 8,
+// 					format: wgpu::VertexFormat::Uint32,
+// 				},
+// 			],
+// 		}
+// 	}
+// }
 
 async fn async_main() -> std::result::Result<(), ()> {
 	#[cfg(target_family = "wasm")]
@@ -601,8 +659,6 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let mut inspector = Inspector::default();
 	let mut occupied_screen_space = ui::OccupiedScreenSpace::default();
 
-	ui::details::configure_visuals();
-
 	let instance = wgpu::Instance::new(wgpu::Backends::all());
 	// SAFETY: `window` Handle must be a valid object to create a surface upon
 	// and must remain valid for the lifetime of the returned surface.
@@ -646,9 +702,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// size.height = 768;
 
 	let channel = std::sync::mpsc::channel();
-	let resize_sender: OnResizeSender = channel.0;
+	let resize_sender: resize::OnResizeSender = channel.0;
 	let resize_receiver = Mutex::new(channel.1);
-	setup_viewport_resize_system(Mutex::new(resize_sender));
+	resize::setup_viewport_resize_system(Mutex::new(resize_sender));
 
 	let surface_format = surface.get_supported_formats(&adapter)[0];
 	let mut surface_config = wgpu::SurfaceConfiguration {
@@ -879,8 +935,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	let mut chain_instance_data = vec![];
 	let mut block_instance_data = vec![];
-	let mut extrinsic_instance_data = vec![];
-	let mut event_instance_data = vec![];
+	let mut extrinsic_instance_data : Vec<Instance> = vec![];
+	let mut event_instance_data : Vec<Instance> = vec![];
 	let mut selected_instance_data = vec![];
 	let mut textured_instance_data: Vec<Instance> = vec![];
 
@@ -1058,10 +1114,19 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 
 		let selected_details = SELECTED.lock().unwrap().clone();
+		// TODO: avoid doing this every frame...
+		selected_instance_data.clear();
+		for (index, details, chain_info) in &selected_details {
+			if details.doturl.event.is_some() {
+				selected_instance_data.push(create_selected_instance(&event_instance_data[*index as usize].clone()));
+			} else {
+				selected_instance_data.push(create_selected_instance(&extrinsic_instance_data[*index as usize].clone()));
+			}
+		}
 
 		// viewport_resize_system(&resize_receiver);
 		#[cfg(target_family = "wasm")]
-		if let Some(new_size) = viewport_resize_system(&resize_receiver) {
+		if let Some(new_size) = resize::viewport_resize_system(&resize_receiver) {
 			log!("set new size width: {} height: {}", new_size.width, new_size.height);
 			// window.set_inner_size(new_size);
 			window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
@@ -1151,7 +1216,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 									&MouseScrollDelta::PixelDelta(
 										PhysicalPosition { y: -(prev_dist - cur_dist), x:0. }));
 							}
-							*SELECTED.lock().unwrap() = None;
+							*SELECTED.lock().unwrap() = vec![];
 							selected_instance_data.clear();
 						} else {
 
@@ -2578,20 +2643,23 @@ fn try_select(
 			glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
 		);
 		if let Some((index, instance)) = selected {
-			// ground_instance_data.push(Instance { position: near_clicked.into(), color:
-			// as_rgba_u32(0.3, 0.3, 0.3, 1.) });
-			let mut pos = instance.position;
-			pos[0] += -0.1;
-			pos[1] += -0.1;
-			pos[2] += -0.1;
 			selected_instance_data.clear();
-			//specific alpha value!
-			selected_instance_data
-				.push(Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.3) });
+			selected_instance_data.push(create_selected_instance(&instance));
 
 			(*REQUESTS.lock().unwrap()).push(BridgeMessage::GetExtrinsicDetails(index));
 		}
 	}
+}
+
+fn create_selected_instance(picked_instance: &Instance) -> Instance {
+	let mut pos = picked_instance.position;
+		pos[0] += -0.1;
+		pos[1] += -0.1;
+		pos[2] += -0.1;
+
+	// This alpha selects the cold face emoji which the shader special cases to
+	// be selected cube.
+	Instance { position: pos, color: as_rgba_u32(0.1, 0.1, 0.9, 0.3) }
 }
 
 fn get_selected(
@@ -2905,9 +2973,9 @@ fn source_data(
 					let mut pending = UPDATE_QUEUE.lock().unwrap();
 					pending.extend(update);
 				},
-				WorkerResponse::Details(index, details, chain_info) => {
+				WorkerResponse::Details(selected_details) => {//index, details, chain_info
 					log!("got selected from backend");
-					*SELECTED.lock().unwrap() = Some((index, details, chain_info));
+					*SELECTED.lock().unwrap() = selected_details;
 				},
 			})
 			.spawn("./worker.js");
@@ -2926,7 +2994,7 @@ fn source_data(
 				bridge.send(BridgeMessage::GetNewBlocks);
 			}
 			async_std::task::sleep(Duration::from_millis(300)).await;
-			log!("asking bridge msg...");
+			// log!("asking bridge msg...");
 		}
 	};
 
@@ -3019,6 +3087,7 @@ async fn do_datasources<F, R>(
 				as_of,
 				receive_channel: Some(rc),
 				sender: maybe_sender,
+				forwards: true,
 			};
 
 			#[cfg(target_arch = "wasm32")]
@@ -3128,7 +3197,7 @@ fn as_rgbemoji_u32(red: f32, green: f32, blue: f32, alpha: u8) -> u32 {
 #[derive(Clone, Copy)]
 enum BuildDirection {
 	Up,
-	Down,
+	// Down,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -3156,7 +3225,7 @@ pub enum DataEntity {
 pub struct DataEvent {
 	details: Details,
 	start_link: Vec<(String, LinkType)>,
-	// end_link: Vec<String>,
+	end_link: Vec<(String, LinkType)>,
 }
 
 /// A tag to identify an entity as being the source of a message.
@@ -3165,6 +3234,8 @@ pub struct MessageSource {
 	/// Currently sending block id + hash of beneficiary address.
 	pub id: String,
 	pub link_type: LinkType,
+	pub source: Option<[f32;3]>,
+	pub source_index: usize,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, Debug)]
@@ -3173,6 +3244,7 @@ pub enum LinkType {
 	ReserveTransfer,
 	ReserveTransferMintDerivative,
 	ParaInclusion,
+	Balances,
 }
 
 static EMPTY_SLICE: Vec<DataEntity> = vec![];
@@ -3368,6 +3440,10 @@ fn render_block(
 	// for mut extrinsic_instances in extrinsic_instances.iter_mut() {
 	// 	for mut event_instances in event_instances.iter_mut() {
 	// 		for mut block_instances in block_instances.iter_mut() {
+
+	if links.len() > 0 {
+		log!("links {}", links.len());
+	}
 
 	match data_update {
 		DataUpdate::NewBlock(block) => {
@@ -3622,21 +3698,21 @@ fn render_block(
 			let ext_with_events =
 				datasource::associate_events(block.extrinsics.clone(), block.events);
 
-			// Leave infrastructure events underground and show user activity above
-			// ground.
-			let (boring, fun): (Vec<_>, Vec<_>) =
-				ext_with_events.into_iter().partition(|(e, _)| {
-					// if let Some(ext) = e {
-					// 	content::is_utility_extrinsic(ext)
-					// } else {
-						false
-					//}
-				});
+			// // Leave infrastructure events underground and show user activity above
+			// // ground.
+			// let (_boring, fun): (Vec<_>, Vec<_>) =
+			// 	ext_with_events.into_iter().partition(|(e, _)| {
+			// 		// if let Some(ext) = e {
+			// 		// 	content::is_utility_extrinsic(ext)
+			// 		// } else {
+			// 			false
+			// 		//}
+			// 	});
 
 			add_blocks(
 				chain_info,
 				block_num,
-				fun,
+				ext_with_events,
 				// &mut commands,
 				// &mut materials,
 				BuildDirection::Up,
@@ -3670,7 +3746,7 @@ fn render_block(
 		},
 		DataUpdate::NewChain(chain_info, sudo) => {
 			let is_relay = chain_info.chain_url.is_relay();
-			log!("adding new chain");
+			// log!("adding new chain");
 			render.textured_instances.push(Instance {
 				position: glam::Vec3::new(
 					0. - 8.5 - 28.,
@@ -3752,9 +3828,9 @@ fn add_blocks(
 		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
 	);
 
-	if let BuildDirection::Down = build_direction {
-		base_y -= 0.5;
-	}
+	// if let BuildDirection::Down = build_direction {
+	// 	base_y -= 0.5;
+	// }
 
 	const DOT_HEIGHT: f32 = 1.;
 	const HIGH: f32 = 100.;
@@ -3850,7 +3926,8 @@ fn add_blocks(
 
 				for (link, link_type) in block.start_link() {
 					log!("inserting source of rainbow!");
-					links.push(MessageSource { id: link.to_string(), link_type: *link_type });
+					links.push(MessageSource { source_index:render_details.extrinsic_instances.len(), id: link.to_string(), link_type: *link_type,
+						source:Some(glam::Vec3::new(px, py * build_dir, 5. + pz * rflip).into()) });
 				}
 
 				// let mut bun = commands.spawn_bundle(PbrBundle {
@@ -3980,11 +4057,40 @@ fn add_blocks(
 			// details.doturl.block_number.unwrap(),
 			// block_event_index);
 
+			let event_index = render_details.event_instances.len();
 			render_details.event_instances.push(event.details.clone());
 
 			for (link, link_type) in &event.start_link {
 				// println!("inserting source of rainbow (an event)!");
-				links.push(MessageSource { id: link.to_string(), link_type: *link_type });
+				links.push(MessageSource { source_index: event_index, id: link.to_string(), link_type: *link_type , source: Some(glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into())});
+			}
+
+			let end_loc : [f32;3] = glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into();
+			for (link, link_type) in &event.end_link {
+				log!("checking links: {}", links.len());
+				for MessageSource { source_index, id, link_type, source } in links.iter() {
+					// double link:
+					render_details.event_instances[event_index].links.push(*source_index);
+					if *source_index < render_details.event_instances.len() {
+						render_details.event_instances[*source_index].links.push(event_index);
+					}
+					else {
+						log!("link found fin first?!!!!! from {source:?} {source_index} to {event_index} {end_loc:?}");
+
+					}
+					if *id == *link {
+						log!("link found start to fin!!!!! from {source:?} to {end_loc:?}");
+
+						// rainbow_instances.push((
+						// 	RainbowInstance {
+						// 		position: source,
+						// 		destination: end_loc,
+						// 		color: style.color,
+						// 	},
+						// 	0,
+						// ));
+					}
+				}
 			}
 		}
 	}
@@ -4420,56 +4526,4 @@ pub enum BridgeMessage {
 	GetNewBlocks,
 	GetExtrinsicDetails(u32),
 	GetEventDetails(u32),
-}
-
-//from bevy_web_fullscreen https://github.com/ostwilkens/bevy_web_fullscreen/blob/master/LICENSE
-
-#[cfg(target_family = "wasm")]
-fn get_viewport_size() -> PhysicalSize<u32> {
-	let web_window = web_sys::window().expect("could not get window");
-	let document_element = web_window
-		.document()
-		.expect("could not get document")
-		.document_element()
-		.expect("could not get document element");
-
-	let width = document_element.client_width();
-	let height = document_element.client_height();
-
-	PhysicalSize::new(width as u32, height as u32)
-}
-
-use std::sync::mpsc::{Receiver, Sender};
-type OnResizeSender = Sender<()>;
-type OnResizeReceiver = Receiver<()>;
-
-//todo: needs to be in a mutex really?
-fn setup_viewport_resize_system(resize_sender: Mutex<OnResizeSender>) {
-	#[cfg(target_family = "wasm")]
-	{
-		let web_window = web_sys::window().expect("could not get window");
-		let local_sender = resize_sender.lock().unwrap().clone();
-
-		local_sender.send(()).unwrap();
-
-		gloo_events::EventListener::new(&web_window, "resize", move |_event| {
-			local_sender.send(()).unwrap();
-		})
-		.forget();
-	}
-}
-
-#[cfg(target_family = "wasm")]
-fn viewport_resize_system(
-	// mut window: &mut Window,
-	resize_receiver: &Mutex<OnResizeReceiver>,
-) -> Option<winit::dpi::PhysicalSize<u32>> {
-	if resize_receiver.lock().unwrap().try_recv().is_ok() {
-		let new_size = get_viewport_size();
-		//TODO: bugout if window size is already this.
-		if new_size.width > 0 && new_size.height > 0 {
-			return Some(new_size)
-		}
-	}
-	None
 }

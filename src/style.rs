@@ -65,7 +65,7 @@ pub fn style_event(entry: &DataEntity) -> ExStyle {
 		// }
 		DataEntity::Extrinsic { details, .. } => {
 			let color = palette::Lchuv::new(
-				if darkside { 40. } else { 80. },
+				if darkside { 30. } else { 50. },
 				80. + (calculate_hash(&details.variant) as f32 % 100.),
 				(calculate_hash(&details.pallet) as f32) % 360.,
 			);
@@ -108,7 +108,7 @@ pub fn style_data_event(entry: &DataEvent) -> ExStyle {
 	}
 
 	let color = palette::Lchuv::new(
-		if darkside { 40. } else { 80. },
+		if darkside { 30. } else { 50. },
 		80. + (calculate_hash(&raw.variant) as f32 % 100.),
 		(calculate_hash(&raw.pallet) as f32) % 360.,
 	);

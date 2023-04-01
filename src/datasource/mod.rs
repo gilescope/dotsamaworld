@@ -6,8 +6,6 @@ use crate::{
 use core::future::Future;
 use log::warn;
 use serde::{Deserialize, Serialize};
-// #[cfg(not(target_arch = "wasm32"))]
-// use async_tungstenite::tungstenite::util::NonBlockingResult;
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use std::{
@@ -16,6 +14,8 @@ use std::{
 	sync::atomic::Ordering,
 	time::Duration,
 };
+use crate::MessageSource;
+use crate::LINKS;
 
 //  use bevy::ecs::event::EventWriter;
 #[derive(Decode, Debug)]
@@ -138,6 +138,7 @@ where
 	pub as_of: Option<DotUrl>,
 	pub receive_channel: Option<async_std::channel::Receiver<(RelayBlockNumber, i64, H256)>>,
 	pub sender: Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
+	pub forwards: bool,
 }
 
 impl<F, R> BlockWatcher<F, R>
@@ -165,7 +166,7 @@ where
 		let mut source = RawDataSource::new(url.clone());
 
 		let para_id = chain_info.chain_url.para_id;
-		let mut links = vec![];
+		
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
@@ -180,7 +181,7 @@ where
 				let mut pallets = crate::PALLETS.lock().unwrap();
 				for p in &m.pallets {
 					if p.name == "Sudo" {
-						log!("metad: {}", &p.name);
+						// log!("metad: {}", &p.name);
 						sudo = true;
 						break
 					}
@@ -198,7 +199,7 @@ where
 			render_block(
 				DataUpdate::NewChain(chain_info.clone(), sudo),
 				&chain_info,
-				&mut links,
+				&mut vec![],
 				&mut render_update,
 				&mut render_details,
 			);
@@ -223,6 +224,7 @@ where
 						&sender,
 						our_data_epoc,
 						Some(timestamp_parent),
+						// &mut links
 					)
 					.await;
 					if our_data_epoc != DATASOURCE_EPOC.load(Ordering::Relaxed) {
@@ -268,7 +270,10 @@ where
 				}
 
 				let mut last_timestamp = None;
-				for block_number in as_of.block_number.unwrap().. {
+				let mut block_number = as_of.block_number.unwrap();
+				// for block_number in as_of.block_number.unwrap().. {
+				loop {
+					block_number = (block_number as i32 + if self.forwards { 1_i32 } else { -1_i32 }) as u32;
 					async_std::task::sleep(std::time::Duration::from_secs(2)).await;
 					// log!("get block {:?}", block_number);
 					let block_hash: Option<primitive_types::H256> =
@@ -298,7 +303,7 @@ where
 								weight: None,
 							}),
 							&chain_info,
-							&mut links,
+							&mut vec![],
 							&mut rend,
 							&mut render_details,
 						);
@@ -316,6 +321,7 @@ where
 						&sender,
 						our_data_epoc,
 						None,
+						// &mut links
 					)
 					.await
 					{
@@ -363,9 +369,11 @@ where
 						}
 
 						// yield val;
-						block_num += 1;
+						block_num = (block_num as i32 + if self.forwards { 1_i32 } else { -1_i32 }) as u32;
 					}
-					async_std::task::sleep(Duration::from_secs(6)).await;
+					if self.forwards {
+						async_std::task::sleep(Duration::from_secs(6)).await;
+					}
 				}
 			}
 		}
@@ -406,6 +414,7 @@ async fn process_extrinsics<S: Source, F, R>(
 	sender: &Option<HashMap<u32, async_std::channel::Sender<(RelayBlockNumber, i64, H256)>>>,
 	our_data_epoc: u32,
 	timestamp_parent: Option<i64>,
+	// links: &mut Vec<MessageSource>,
 ) -> Result<Option<i64>, ()>
 where
 	F: Fn((RenderUpdate, RenderDetails)) -> R + Send + Sync,
@@ -490,13 +499,22 @@ where
 						variant: "?".to_string(),
 						raw: encoded_extrinsic,
 						value: None,
+						links: vec![]
 					},
 				},
 			};
 			let ex_slice = &the_extrinsic.raw[..];
 			// let ex_slice = &ext_bytes.0;
 			let decode_result = polkadyn::decode_extrinsic(&metad, ex_slice);
+			
+
 			if let Ok(extrinsic2) = decode_result {
+				
+				// if let frame_metadata::RuntimeMetadata::V14(metadd) = &metad.1 {
+				// 	let id = extrinsic2.context;
+				// 	let r = (metadd).types.resolve(unsafe { std::mem::transmute(id) }).unwrap();
+				// 	log!("got docs {:?}", r.docs()); -- docs are always empty...
+				// }
 				// log!("an extrinsics  decoded {:?}", i);
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic2, true);
 				let entity = process_extrinsic(
@@ -525,7 +543,7 @@ where
 				exts.push(the_extrinsic.derived);
 			}
 		}
-		let (events, _start_link) =
+		let (events, _start_links) =
 			get_events_for_block(source, block_hash, sender, &blockurl, &metad, timestamp)
 				.await
 				.or(Err(()))?;
@@ -550,15 +568,18 @@ where
 		//FYI: blocks sometimes have no events in them.
 		let mut rend = RenderUpdate::default();
 		let mut render_details = RenderDetails::default();
-		let mut links = vec![]; //TODO should be global?
+		// let mut links = vec![]; //TODO should be global?
 		let weight = current.weight;
-		render_block(
-			DataUpdate::NewBlock(current),
-			chain_info,
-			&mut links,
-			&mut rend,
-			&mut render_details,
-		);
+		{
+			let mut links = &mut *LINKS.lock().unwrap();
+			render_block(
+				DataUpdate::NewBlock(current),
+				chain_info,
+				&mut links,
+				&mut rend,
+				&mut render_details,
+			);
+		}
 
 		let mut map = CHAIN_STATS.lock().unwrap();
 		let mut entry = map.entry(chain_info.chain_index).or_insert_with(
@@ -593,6 +614,8 @@ async fn find_timestamp<S: Source>(
 		for (i, encoded_extrinsic) in block.extrinsics.iter().enumerate() {
 			let result = polkadyn::decode_extrinsic(metad, encoded_extrinsic.as_slice());
 			if let Ok(extrinsic) = result {
+
+			//let docs = registry. id.docs();
 				let extrinsic = scale_value_to_borrowed::convert(&extrinsic, true);
 				if let Some(scale_borrow::Value::U64(val)) =
 					extrinsic.expect4("Timestamp", "0", "set", "now")
@@ -657,7 +680,7 @@ async fn process_extrinsic<'a, 'scale>(
 	let (pallet, variant) = if let Some((pallet, "0", variant, payload)) = ext.only3() {
 		match (pallet, variant) {
 			("System", "remark") => {
-				log!("REMARK {:?}", payload);
+				// log!("REMARK {:?}", payload);
 				if let Some(scale_borrow::Value::ScaleOwned(own)) = payload.get("remark") {
 					log!("REMARK {:?}", String::from_utf8((**own).clone()));
 					value = Some(String::from_utf8((**own).clone()).unwrap());
@@ -682,8 +705,8 @@ async fn process_extrinsic<'a, 'scale>(
 				// 	_ => {},
 				// }
 			},
-			("Balance", "deposit") => {
-				log!("found upward msgs (first time) {}", payload);
+			("Balances", "deposit") => {
+				
 				// start_link//
 				// end_link//
 			},
@@ -1224,6 +1247,7 @@ async fn process_extrinsic<'a, 'scale>(
 			variant: variant.to_string(),
 			raw: ex_slice.to_vec(),
 			value,
+			links: vec![]
 		},
 	})
 
@@ -1440,8 +1464,8 @@ async fn get_events_for_block(
 					let event = scale_value_to_borrowed::convert(event_val, true);
 
 					// let event = scale_value_to_borrowed::convert(&event2);
-					let start_link = vec![];
-					// let end_link = vec![];
+					let mut start_link = vec![];
+					let mut end_link = vec![];
 					let mut details = Details {
 						// url: source.url().to_string(),
 						doturl: DotUrl { ..block_url.clone() },
@@ -1475,6 +1499,41 @@ async fn get_events_for_block(
 
 					details.pallet = pallet.to_string();
 					details.variant = variant.to_string();
+
+					match (details.pallet.as_str(),details.variant.as_str()) {
+						("Balances","Deposit") => {
+							if let Some(("Balances", "0", "Deposit", tail)) = event.only3() {
+								if let Some(tail) = tail.get("who") {
+									if let Some(scale_borrow::Value::ScaleOwned(scale)) = tail.get("0") {
+										// log!("got here readddit {:?}", scale);
+										// start_link.push((hex::encode((*scale).as_slice()), LinkType::Balances));
+										end_link.push((hex::encode((*scale).as_slice()), LinkType::Balances));
+									}
+								}
+								// if let Some(tail) = tail.get("amount") {
+								// 	if let scale_borrow::Value::U64(amount) = tail {
+								// 		log!("got here amount {:?}", amount);
+								// 	}
+								// }
+							}
+						},
+						("Balances","Withdraw") => {
+							if let Some(("Balances", "0", "Withdraw", tail)) = event.only3() {
+								if let Some(tail) = tail.get("who") {
+									if let Some(scale_borrow::Value::ScaleOwned(scale)) = tail.get("0") {
+										log!("got here readddit2 {:?}", scale);
+										start_link.push((hex::encode((*scale).as_slice()), LinkType::Balances));
+									}
+								}
+								// if let Some(tail) = tail.get("amount") {
+								// 	if let scale_borrow::Value::U64(amount) = tail {
+								// 		log!("got here amount {:?}", amount);
+								// 	}
+								// }
+							}
+						},
+						_ => {}
+					}
 
 					if details.pallet == "ParaInclusion" && details.variant == "CandidateIncluded" {
 						if let Some(inner) = contents.find2("0", "descriptor") {
@@ -1545,7 +1604,7 @@ async fn get_events_for_block(
 					data_events.push(DataEvent {
 						// raw: ev_raw.unwrap(),
 						start_link,
-						// end_link,
+						end_link,
 						details,
 					})
 				})
