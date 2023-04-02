@@ -158,3 +158,15 @@ impl std::fmt::Display for DotUrl {
 		Ok(())
 	}
 }
+
+
+#[cfg(test)]
+mod tests{
+	use super::*;
+	#[test]
+	fn test_parse(){
+		let url =
+			DotUrl::parse("local:").unwrap();
+		assert_eq!(url.env, Env::Local);
+	}
+}

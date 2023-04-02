@@ -3362,15 +3362,17 @@ impl Sovereigns {
 //     }
 // }
 
+const TIME_SCALE: f64 = 200.;
+
 // Convert from x to timestamp
 pub fn x_to_timestamp(x: f32) -> i64 {
 	let zero = *BASETIME.lock().unwrap();
-	(zero + (x as f64 * 400.) as i64) / 1000
+	(zero + (x as f64 * TIME_SCALE) as i64) / 1000
 }
 
 pub fn timestamp_to_x(timestamp: i64) -> f32 {
 	let zero = *BASETIME.lock().unwrap();
-	(((timestamp - zero) as f64) / 400.) as f32
+	(((timestamp - zero) as f64) / TIME_SCALE) as f32
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -4078,8 +4080,7 @@ fn add_blocks(
 					render_details.event_instances[event_index].links.push(*source_index);
 					if *source_index < render_details.event_instances.len() {
 						render_details.event_instances[*source_index].links.push(event_index);
-					}
-					else {
+					} else {
 						log!("link found fin first?!!!!! from {source:?} {source_index} to {event_index} {end_loc:?}");
 
 					}
