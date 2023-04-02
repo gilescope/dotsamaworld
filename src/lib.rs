@@ -7,6 +7,7 @@
 #![feature(stmt_expr_attributes)]
 #![feature(let_chains)]
 #![feature(async_fn_in_trait)]
+#![allow(incomplete_features)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_in_or_patterns)]
@@ -648,6 +649,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	if !q.contains(':') {
 		q.push_str(":live");
 	}
+	log!("q: {}", q);
 
 	//"dotsama:/1//10504599".to_string()
 	let mut urlbar = ui::UrlBar::new(q.clone(), Utc::now().naive_utc(), Env::Local);
@@ -1117,7 +1119,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		let selected_details = SELECTED.lock().unwrap().clone();
 		// TODO: avoid doing this every frame...
 		selected_instance_data.clear();
-		for (index, details, chain_info) in &selected_details {
+		for (index, details, _chain_info) in &selected_details {
 			if details.doturl.event.is_some() {
 				selected_instance_data.push(create_selected_instance(&event_instance_data[*index as usize].clone()));
 			} else {
@@ -2855,6 +2857,7 @@ fn source_data(
 	}
 
 	let dot_url = DotUrl::parse(&event.source);
+	log!("dot_url parsed {:?}", &dot_url);
 
 	let is_live = if let Some(timestamp) = event.timestamp {
 		// if time is now or in future then we are live mode.
@@ -3037,6 +3040,7 @@ fn do_datasources(sovereigns: Sovereigns, as_of: Option<DotUrl>) {
 				as_of,
 				receive_channel: Some(rc),
 				sender: maybe_sender,
+				forwards: true
 			};
 
 			std::thread::spawn(
@@ -3195,11 +3199,11 @@ fn as_rgbemoji_u32(red: f32, green: f32, blue: f32, alpha: u8) -> u32 {
 // 	*BASETIME.lock().unwrap() = 0;
 // }
 
-#[derive(Clone, Copy)]
-enum BuildDirection {
-	Up,
-	// Down,
-}
+// #[derive(Clone, Copy)]
+// enum BuildDirection {
+// 	Up,
+// 	// Down,
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum DataEntity {
@@ -3716,7 +3720,7 @@ fn render_block(
 				ext_with_events,
 				// &mut commands,
 				// &mut materials,
-				BuildDirection::Up,
+				// BuildDirection::Up,
 				links,
 				// &mut polyline_materials,
 				// &mut polylines,
@@ -3809,7 +3813,7 @@ fn add_blocks(
 	chain_info: &ChainInfo,
 	block_num: f32,
 	block_events: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)>,
-	build_direction: BuildDirection,
+	// build_direction: BuildDirection,
 	links: &mut Vec<MessageSource>,
 	// polyline_materials: &mut ResMut<Assets<PolylineMaterial>>,
 	// polylines: &mut ResMut<Assets<Polyline>>,
@@ -3819,11 +3823,11 @@ fn add_blocks(
 	render_details: &mut RenderDetails,
 ) {
 	let rflip = chain_info.chain_url.rflip();
-	let build_dir = if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
+	let build_dir = 1.0; //if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
 
 	let layer = chain_info.chain_url.layer() as f32;
-	let (base_x, mut base_y, base_z) = (
+	let (base_x, base_y, base_z) = (
 		(block_num) - 4.,
 		LAYER_GAP * layer,
 		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,

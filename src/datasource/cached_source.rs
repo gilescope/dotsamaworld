@@ -1,5 +1,4 @@
 use crate::datasource::{raw_source::AgnosticBlock, Source};
-use async_trait::async_trait;
 use futures::TryFutureExt;
 use primitive_types::H256;
 
@@ -73,7 +72,6 @@ macro_rules! memoise {
 	}};
 }
 
-#[async_trait(?Send)]
 impl<S> Source for CachedDataSource<S>
 where
 	S: Source,
