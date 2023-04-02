@@ -2012,7 +2012,7 @@ dependencies = [
 [[package]]
 name = "polkapipe"
 version = "0.8.0"
-source = "git+https://github.com/gilescope/polkapipe?rev=9a42e31cff7c2c9c3a41aade1a8e386069bad6de#9a42e31cff7c2c9c3a41aade1a8e386069bad6de"
+source = "git+https://github.com/gilescope/polkapipe?rev=25153ab801e3913242b8dd3c3c2804d2ce7291d6#25153ab801e3913242b8dd3c3c2804d2ce7291d6"
 dependencies = [
  "async-mutex",
  "async-oneshot",

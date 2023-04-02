@@ -250,6 +250,22 @@ pub fn ui_bars_system(
 				// 		ui.add(egui::Image::new(texture, egui::Vec2::new(l, l / 3.)));
 				// 	}
 				// });
+
+					if ui.button("📋").clicked() {
+						let url = "ws://127.0.0.1:9944"; //selected.doturl.url;
+						log!("button clicked {}", url);
+						async_std::task::block_on(async {
+							let pipe = polkapipe::PolkaPipe{
+								rpc: polkapipe::ws_web::Backend::new(&[url]).await.unwrap(),
+							};
+							log!("pipe created");
+							// Hello world 0 lifetime, 0 nonce, signed by alice
+							let v = hex::decode("d5018400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d019264ccc4a8654543325ee6b3414f11c9563f04cc3aa3afb726fce3f25ff5db7bef7f229133d35b683cfbf66f94e2278512aa0eb6d8b9e3737e708262c34b0a8d0008000000072c48656c6c6f20776f726c64").unwrap();
+							log!("payload created");
+							let r = pipe.submit(v.as_slice()).await;
+							log!("result {:?}", r);
+						});
+					};
 				} else {
 					occupied_screen_space.left = 0.;
 				}

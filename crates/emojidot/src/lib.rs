@@ -60,6 +60,7 @@ pub fn event_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("Incentives", "WithdrawDexShare") => Some('📉'),
 		("Incentives", "ClaimRewards") => Some('🥕'),
 		("ImOnline", "HeartbeatReceived") => Some('💓'),
+		("ImOnline", "AllGood") => Some('👍'),
 		("Lighthouse", "BlockReward") => Some('🥕'),
 		("Loans", "DistributedSupplierReward") => Some('🥕'),
 		("Loans", "DistributedBorrowerReward") => Some('🥕'),

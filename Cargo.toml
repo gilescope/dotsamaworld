@@ -113,7 +113,7 @@ tikv-jemallocator = "0.5.0"
 async-tls = { version = "0.11.0", default-features = false }
 futures = { version = "0.3.25", default-features = false, features = [] }
 chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "9a42e31cff7c2c9c3a41aade1a8e386069bad6de", features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "25153ab801e3913242b8dd3c3c2804d2ce7291d6", features = [
     "wss",
 ] }
 # polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
@@ -141,7 +141,7 @@ getrandom = { version = "0.2.8", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "0.2.83"
 ws_stream_wasm = "0.7.3"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "9a42e31cff7c2c9c3a41aade1a8e386069bad6de", features = [
+polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "25153ab801e3913242b8dd3c3c2804d2ce7291d6", features = [
     "ws-web",
 ] }
 # polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [

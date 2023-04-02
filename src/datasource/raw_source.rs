@@ -223,10 +223,10 @@ pub trait Source {
 // type WS2 = SplitSink<WsStream, ws_stream_wasm::WsMessage>;
 
 #[cfg(target_arch = "wasm32")]
-type WSBackend = polkapipe::ws_web::Backend;
+pub(crate) type WSBackend = polkapipe::ws_web::Backend;
 
 #[cfg(not(target_arch = "wasm32"))]
-type WSBackend = polkapipe::ws::Backend<
+pub(crate) type WSBackend = polkapipe::ws::Backend<
 	SinkErrInto<
 		SplitSink<
 			WebSocketStream<
