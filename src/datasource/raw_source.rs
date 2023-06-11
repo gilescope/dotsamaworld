@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use parity_scale_codec::Encode;
 use polkapipe::Backend;
 use primitive_types::H256;
-
+use smoldot_light;
 #[cfg(not(target_arch = "wasm32"))]
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::{sink::SinkErrInto, stream::SplitSink};
-
+use futures::{channel::mpsc, prelude::*};
+use core::iter;
 #[derive(parity_scale_codec::Encode, parity_scale_codec::Decode)]
 pub struct AgnosticBlock {
 	pub block_number: u32,
@@ -256,6 +257,10 @@ type WSBackend = polkapipe::ws::Backend<
 pub struct RawDataSource {
 	ws_url: String,
 	client: Option<WSBackend>,
+	smol: Option<smoldot_light::Client::<
+        smoldot_light::platform::async_std::AsyncStdTcpWebSocket,
+		>>,
+	receiver: Option<mpsc::Receiver<String>>,
 }
 
 type BError = polkapipe::Error;
@@ -264,7 +269,70 @@ type BError = polkapipe::Error;
 /// This is the only type that should know about subxt
 impl RawDataSource {
 	pub fn new(url: &str) -> Self {
-		RawDataSource { ws_url: url.to_string(), client: None }
+		let mut client : smoldot_light::Client::<
+        smoldot_light::platform::async_std::AsyncStdTcpWebSocket,
+		> = smoldot_light::Client::<
+        smoldot_light::platform::async_std::AsyncStdTcpWebSocket,
+		>::new(smoldot_light::ClientConfig {
+			// The smoldot client will need to spawn tasks that run in the background. In order to do
+			// so, we need to provide a "tasks spawner".
+			tasks_spawner: Box::new(move |_name, task| {
+				async_std::task::spawn(task);
+			}),
+			system_name: env!("CARGO_PKG_NAME").into(),
+			system_version: env!("CARGO_PKG_VERSION").into(),
+	    });
+		let mut receiver = None;
+		if url.contains("polkadot") {
+			let (json_rpc_responses_tx, mut json_rpc_responses_rx) = mpsc::channel(32);
+			// receiver = Some(json_rpc_responses_rx);
+			let chain_id = client.add_chain(smoldot_light::AddChainConfig {
+				// The most important field of the configuration is the chain specification. This is a
+				// JSON document containing all the information necessary for the client to connect to said
+				// chain.
+				specification: include_str!("/home/gilescope/git/smoldot/bin/polkadot.json"),
+
+				// See above.
+				// Note that it is possible to pass `None`, in which case the chain will not be able to
+				// handle JSON-RPC requests. This can be used to save up some resources.
+				json_rpc_responses: Some(json_rpc_responses_tx),
+
+				// This field is necessary only if adding a parachain.
+				potential_relay_chains: iter::empty(),
+
+				// After a chain has been added, it is possible to extract a "database" (in the form of a
+				// simple string). This database can later be passed back the next time the same chain is
+				// added again.
+				// A database with an invalid format is simply ignored by the client.
+				// In this example, we don't use this feature, and as such we simply pass an empty string,
+				// which is intentionally an invalid database content.
+				database_content: "",
+
+				// The client gives the possibility to insert an opaque "user data" alongside each chain.
+				// This avoids having to create a separate `HashMap<ChainId, ...>` in parallel of the
+				// client.
+				// In this example, this feature isn't used. The chain simply has `()`.
+				user_data: (),
+			})
+			.unwrap();
+
+			client
+			.json_rpc_request(
+				r#"{"id":1,"jsonrpc":"2.0","method":"chain_subscribeNewHeads","params":[]}"#,
+				chain_id,
+			)
+			.unwrap();
+			  async_std::task::block_on(async move {
+				loop {
+					let response = json_rpc_responses_rx.next().await.unwrap();
+					println!("SMOLDOT JSON-RPC response: {}", response);
+				}
+			})
+		}
+
+		RawDataSource { ws_url: url.to_string(), client: None,
+			smol: Some(client), receiver
+		}
 	}
 
 	#[cfg(target_arch = "wasm32")]

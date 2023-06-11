@@ -33,7 +33,7 @@ futures = { version = "0.3.13", defalult-features = false, features = [] }
 # winit = { version = "*", default-features=false, features = ["x11"] }
 hex = "*"
 #smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
-parity-scale-codec = { package = "parity-scale-codec", version = "3.1.5", default-features = false, features = [
+parity-scale-codec = { package = "parity-scale-codec", version = "3.2.1", default-features = false, features = [
     "derive",
     "full",
     "bit-vec",
@@ -116,6 +116,8 @@ tikv-jemallocator = "0.5"
 # Dependencies for native only.
 #
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+smoldot-light = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
+
 chrono = { version = "*", default-features = false }
 bevy = { version = "0.8.1", default-features = false, features = [
     "bevy_winit",
@@ -175,7 +177,6 @@ bevy_web_fullscreen = { git = "https://github.com/ostwilkens/bevy_web_fullscreen
 # http-types= {git="https://github.com/http-rs/http-types.git"}
 #console_error_panic_hook = { version = "0.1", optional = true }
 
-#smoldot = { git= "https://github.com/paritytech/smoldot.git", defalult-features = false }
 
 #subxt = {git= "https://github.com/paritytech/subxt.git"}
 
