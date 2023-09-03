@@ -2603,18 +2603,17 @@ fn try_select(
 
 	// log!("new pos: {:?}", position);
 	let clicked1 = glam::Vec2::new(position.x as f32, position.y as f32);
-	let clicked2 = glam::Vec2::new(
+
+	let centered = glam::Vec2::new(
 		clicked1.x - size.width as f32 / 2.0,
 		size.height as f32 / 2.0 - clicked1.y,
 	);
-	// log!("new add: {:?}", clicked);
-	let clicked = glam::Vec2::new(clicked2.x / scale_x, clicked2.y / scale_y);
-	// log!("new adj: {:?}  {:?}  {:?}", clicked1, clicked2, clicked);
+	let unitised = glam::Vec2::new(centered.x / scale_x, centered.y / scale_y);
+	// log!("physical pos: {:?}, origin-center: {:?}  adj:{:?}", clicked1, centered, unitised);
 
-	let near_clicked = ndc_to_world.project_point3(clicked.extend(near_ndc));
-	let far_clicked = ndc_to_world.project_point3(clicked.extend(far_ndc));
-	let ray_direction_clicked = near_clicked - far_clicked;
-	let pos_clicked: glam::Vec3 = near_clicked;
+	let pos_clicked = ndc_to_world.project_point3(unitised.extend(near_ndc));
+	let far_clicked = ndc_to_world.project_point3(unitised.extend(far_ndc));
+	let ray_direction_clicked = pos_clicked - far_clicked;
 
 	let selected = get_selected(
 		pos_clicked,
@@ -2622,7 +2621,7 @@ fn try_select(
 		event_instance_data,
 		glam::Vec3::new(CUBE_WIDTH, CUBE_WIDTH, CUBE_WIDTH),
 	);
-	log!("selected = {:?}", selected);
+	log!("selected = {:?} pos={:?}", selected, pos_clicked);
 	if let Some((index, instance)) = selected {
 		// ground_instance_data.push(Instance { position: near_clicked.into(), color:
 		// as_rgba_u32(0.3, 0.3, 0.3, 1.) });
@@ -2666,7 +2665,7 @@ fn create_selected_instance(picked_instance: &Instance) -> Instance {
 }
 
 fn get_selected(
-	r_org: glam::Vec3,
+	ray_origin: glam::Vec3,
 	mut r_dir: glam::Vec3,
 	instances: &[Instance],
 	to_rt: glam::Vec3,
@@ -2686,12 +2685,12 @@ fn get_selected(
 
 		// lb is the corner of AABB with minimal coordinates - left bottom, rt is maximal corner
 		// r_org is origin of ray
-		let t1 = (lb.x - r_org.x) * dirfrac.x;
-		let t2 = (rt.x - r_org.x) * dirfrac.x;
-		let t3 = (lb.y - r_org.y) * dirfrac.y;
-		let t4 = (rt.y - r_org.y) * dirfrac.y;
-		let t5 = (lb.z - r_org.z) * dirfrac.z;
-		let t6 = (rt.z - r_org.z) * dirfrac.z;
+		let t1 = (lb.x - ray_origin.x) * dirfrac.x;
+		let t2 = (rt.x - ray_origin.x) * dirfrac.x;
+		let t3 = (lb.y - ray_origin.y) * dirfrac.y;
+		let t4 = (rt.y - ray_origin.y) * dirfrac.y;
+		let t5 = (lb.z - ray_origin.z) * dirfrac.z;
+		let t6 = (rt.z - ray_origin.z) * dirfrac.z;
 
 		let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
 		// let tmin = t1.clamp(t3.min(t4), t2).max(t5.min(t6));
