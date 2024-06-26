@@ -1,13 +1,3 @@
-#![feature(drain_filter)]
-#![feature(hash_drain_filter)]
-#![feature(slice_pattern)]
-#![feature(slice_group_by)]
-#![feature(option_get_or_insert_default)]
-#![feature(async_closure)]
-#![feature(stmt_expr_attributes)]
-#![feature(let_chains)]
-#![feature(async_fn_in_trait)]
-#![allow(incomplete_features)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::wildcard_in_or_patterns)]
@@ -576,7 +566,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 	//.expect("Failed to enable logging");
 
 	// App assumes the target dir exists for caching data
-	#[cfg(not(feature = "wasm32"))]
+	#[cfg(not(target_arch = "wasm32"))]
 	let _ = std::fs::create_dir_all("target");
 
 	let _low_power_mode = false;
@@ -2965,7 +2955,7 @@ fn source_data(
 	do_datasources(sovereigns, as_of);
 
 	#[cfg(target_family = "wasm")]
-	let t = async move || {
+	wasm_bindgen_futures::spawn_local(async move {
 		log("send to bridge");
 
 		let bridge: WorkerBridge<IOWorker> = crate::webworker::IOWorker::spawner()
@@ -2999,10 +2989,8 @@ fn source_data(
 			async_std::task::sleep(Duration::from_millis(300)).await;
 			// log!("asking bridge msg...");
 		}
-	};
+	});
 
-	#[cfg(target_family = "wasm")]
-	wasm_bindgen_futures::spawn_local(t());
 	#[cfg(target_family = "wasm")]
 	log!("sent to bridge");
 }
