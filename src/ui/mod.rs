@@ -251,21 +251,21 @@ pub fn ui_bars_system(
 				// 	}
 				// });
 
-					if ui.button("📋").clicked() {
-						let url = "ws://127.0.0.1:9944"; //selected.doturl.url;
-						log!("button clicked {}", url);
-						async_std::task::block_on(async {
-							let pipe = polkapipe::PolkaPipe{
-								rpc: polkapipe::ws_web::Backend::new(&[url]).await.unwrap(),
-							};
-							log!("pipe created");
-							// Hello world 0 lifetime, 0 nonce, signed by alice
-							let v = hex::decode("d5018400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d019264ccc4a8654543325ee6b3414f11c9563f04cc3aa3afb726fce3f25ff5db7bef7f229133d35b683cfbf66f94e2278512aa0eb6d8b9e3737e708262c34b0a8d0008000000072c48656c6c6f20776f726c64").unwrap();
-							log!("payload created");
-							let r = pipe.submit(v.as_slice()).await;
-							log!("result {:?}", r);
-						});
-					};
+					// if ui.button("📋").clicked() {
+					// 	let url = "ws://127.0.0.1:9944"; //selected.doturl.url;
+					// 	log!("button clicked {}", url);
+					// 	async_std::task::block_on(async {
+					// 		let pipe = polkapipe::PolkaPipe{
+					// 			rpc: polkapipe::ws_web::Backend::new(&[url]).await.unwrap(),
+					// 		};
+					// 		log!("pipe created");
+					// 		// Hello world 0 lifetime, 0 nonce, signed by alice
+					// 		let v = hex::decode("d5018400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d019264ccc4a8654543325ee6b3414f11c9563f04cc3aa3afb726fce3f25ff5db7bef7f229133d35b683cfbf66f94e2278512aa0eb6d8b9e3737e708262c34b0a8d0008000000072c48656c6c6f20776f726c64").unwrap();
+					// 		log!("payload created");
+					// 		let r = pipe.submit(v.as_slice()).await;
+					// 		log!("result {:?}", r);
+					// 	});
+					// };
 				} else {
 					occupied_screen_space.left = 0.;
 				}
@@ -412,12 +412,17 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 				let (mut k, v) = &pairs[0];
 				let mut v: &scale_borrow::Value = v;
 
-				while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
-					header.push_str(k);
-					header.push('.');
-					let (nk, nv) = &nested_pairs[0];
-					k = nk;
-					v = nv;
+				while matches!(&v, scale_borrow::Value::Object(_)) {
+					if let scale_borrow::Value::Object(nested_pairs) = &v {
+						if nested_pairs.len() != 1 {
+							break;
+						}
+						header.push_str(k);
+						header.push('.');
+						let (nk, nv) = &nested_pairs[0];
+						k = nk;
+						v = nv;
+					}
 				}
 				header.push_str(k);
 				// use egui::CollapsingHeader;
@@ -430,12 +435,15 @@ fn funk<'r>(ui: &'r mut Ui, val: &scale_borrow::Value) {
 						let mut header = String::new();
 						let mut v: &scale_borrow::Value = v;
 
-						while let scale_borrow::Value::Object(nested_pairs) = &v && nested_pairs.len() == 1 {
-							header.push_str(k);
-							header.push('.');
-							let (nk, nv) = &nested_pairs[0];
-							k = nk;
-							v = nv;
+						while matches!(&v, scale_borrow::Value::Object(_)) {
+							if let scale_borrow::Value::Object(nested_pairs) = &v {
+								if nested_pairs.len() != 1 { break; }
+								header.push_str(k);
+								header.push('.');
+								let (nk, nv) = &nested_pairs[0];
+								k = nk;
+								v = nv;
+							}
 						}
 						header.push_str(k);
 						// use egui::CollapsingHeader;

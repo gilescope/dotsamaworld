@@ -1648,6 +1648,7 @@ pub fn associate_events(
 	events: Vec<DataEvent>,
 ) -> Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> {
 	let mut events: Vec<_> = events.into_iter().enumerate().collect();
+
 	let mut ext: Vec<(Option<DataEntity>, Vec<(usize, DataEvent)>)> = ext
 		.into_iter()
 		.map(|extrinsic| {
@@ -1661,15 +1662,20 @@ pub fn associate_events(
 				panic!("bad stuff happened");
 			};
 			// println!("{} count ", events.len());
-			(
+			let selected_events: Vec<_> = events.iter()
+				.filter(|(_index, ev)| match ev.details.parent {
+					Some(extrinsic_id) => extrinsic_id == eid,
+					_ => false,
+				}).cloned()
+				.collect();
+			for (index, event) in selected_events.iter().rev() {
+				events.remove(*index);
+			}
+			let res: (Option<DataEntity>, Vec<(usize, DataEvent)>) = (
 				Some(extrinsic),
-				events
-					.drain_filter(|ev| match ev.1.details.parent {
-						Some(extrinsic_id) => extrinsic_id == eid,
-						_ => false,
-					})
-					.collect(),
-			)
+				selected_events,
+			);
+			res
 		})
 		.collect();
 
@@ -1678,7 +1684,6 @@ pub fn associate_events(
 	}
 
 	ext
-	//leftovers in events should be utils..
 }
 
 #[cfg(test)]
