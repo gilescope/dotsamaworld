@@ -1,0 +1,13 @@
+[package]
+name = "scale-value-to-borrowed"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# scale-value="*"
+scale-value = { workspace = true }
+# scale-value={git="https://github.com/gilescope/scale-value.git", branch="wasm32" }
+# scale-value = {path="/home/gilescope/git/scale-value" }
+scale-borrow = { path= "../scale-borrow", features= ["bitvec"] }

@@ -652,7 +652,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ex_slice: &'scale [u8],
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
-	ext2: &scale_value::Value<scale_value::scale::TypeId>,
+	ext2: &scale_value::Value<u32>,
 	// url: &str,
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
