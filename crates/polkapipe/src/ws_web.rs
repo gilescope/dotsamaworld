@@ -81,7 +81,12 @@ impl Rpc for Backend {
 		log::trace!("RPC now waiting for response ...");
 
 		match recv.await {
-			Ok(msg) => Ok(msg.result.unwrap()),
+			Ok(msg) => {
+				match msg.result {
+					Some(val) => Ok(val),
+					None => {Err(jsonrpc::Error::EmptyBatch)},
+				}
+			},
 			Err(_err) => Err(jsonrpc::Error::EmptyBatch),
 		}
 	}
