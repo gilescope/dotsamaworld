@@ -1,0 +1,28 @@
+[package]
+name = "scale-borrow"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+parity-scale-codec = { version = "3.2.1", default-features = false, features = [
+    "full",
+] }
+scale-info = { version = "2.3", default-features = false, features = [] }
+scale-value = { workspace = true }
+hex = { version = "*", optional = true }
+
+[dev-dependencies]
+parity-scale-codec = { version = "3.2.1", default-features = false, features = [
+    "bit-vec",
+    "full",
+] }
+scale-info = { version = "2.3", default-features = false, features = [
+    "bit-vec",
+] }
+frame-metadata = { version="16.0.0", default-features = false, features = ["current", "decode"] }
+wasm-bindgen-test = "0.3.0"
+
+[features]
+default = ["display"]
+display = ["hex"]
+bitvec = ["parity-scale-codec/bit-vec", "scale-info/bit-vec"]

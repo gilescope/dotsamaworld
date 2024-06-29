@@ -652,7 +652,7 @@ async fn process_extrinsic<'a, 'scale>(
 	ex_slice: &'scale [u8],
 	ext: &scale_borrow::Value<'scale>,
 	extrinsic_url: DotUrl,
-	ext2: &scale_value::Value<scale_value::scale::TypeId>,
+	ext2: &scale_value::Value<u32>,
 	// url: &str,
 ) -> Option<DataEntity> {
 	// let _block_number = extrinsic_url.block_number.unwrap();
@@ -1662,18 +1662,19 @@ pub fn associate_events(
 				panic!("bad stuff happened");
 			};
 			// println!("{} count ", events.len());
-			let selected_events: Vec<_> = events.iter()
-				.filter(|(_index, ev)| match ev.details.parent {
+			let selected_events: Vec<(usize,(usize, DataEvent))> = events.iter().enumerate()
+				.filter(|(_index, (_, ev))| match ev.details.parent {
 					Some(extrinsic_id) => extrinsic_id == eid,
 					_ => false,
-				}).cloned()
-				.collect();
-			for (index, event) in selected_events.iter().rev() {
+				})
+				.map(|(i,s)| (i,s.clone())).collect();
+			
+			for (index, _event) in selected_events.iter().rev() {
 				events.remove(*index);
 			}
 			let res: (Option<DataEntity>, Vec<(usize, DataEvent)>) = (
 				Some(extrinsic),
-				selected_events,
+				selected_events.into_iter().map(|(_, e)| (e.clone())).collect(),
 			);
 			res
 		})

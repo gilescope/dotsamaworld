@@ -52,39 +52,30 @@ serde_json = { version = "1.0.91", default-features = false }
 url = { version = "2.3.1", default-features = false }
 form_urlencoded = "1.1.0"
 # async-tungstenite = "*"
-# color-eyre = { version = "0.5", default-features = false }
-# dashmap = { version = "*" }
 # open = { git = "https://github.com/gilescope/open-rs.git", rev = "255025b420dbfec81d0c28e67055402e14295921" }
+
 #
 # substrate deps
 #
 
-# frame-metadata = "15.0.0"
-# frame-metadata = { git = "https://github.com/integritee-network/frame-metadata.git", default-features = false, features = [
-#     "v14",
-#     "full_derive",
-# ] }
-frame-metadata = { git="https://github.com/paritytech/frame-metadata.git", default-features = false, features = ["v14", "decode"] }
+frame-metadata = { version = "16.0.0", default-features = false, features = ["current", "decode"] }
 
 
 scale-info = { version = "2.3.1", features = ["serde"] }
 
-scale-value = {  git="https://github.com/paritytech/scale-value.git",  default-features = false, features = ["from_string"] }
+scale-value = {  workspace = true }
 # scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
 # scale-value = {path="/home/gilescope/git/scale-value" }
 
-scale-borrow = { git = "https://github.com/gilescope/scale-borrow", features = [
+scale-borrow = { path= "crates/scale-borrow", features = [
     "bitvec",
     "display",
-], rev = "a342a594c4ee8d6946f07c4229c503798f0a71da" }
-scale-value-to-borrowed = { git = "https://github.com/gilescope/scale-value-to-borrowed", features = [
+] }
+scale-value-to-borrowed = { path= "crates/scale-value-to-borrowed", features = [
     
-], rev = "49987d24fb2a116cc4ecf39bb1d9b7506178db7d" }
+] }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
-polkadyn = { git = "https://github.com/gilescope/polkadyn", rev = "178b8fe44192e19a0912354fe08a21ef9d2abda6" }
-# polkadyn = { path = "/home/gilescope/git/polkadyn" }
-# desub = { git = "https://github.com/paritytech/desub/" }
-# desub-current = { git = "https://github.com/paritytech/desub/", branch="giles-metadata-v15" }
+polkadyn = { path = "crates/polkadyn" }
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
 
 egui = { version = "0.19.0", default-features = false }
@@ -113,12 +104,9 @@ tikv-jemallocator = "0.5.0"
 async-tls = { version = "0.11.0", default-features = false }
 futures = { version = "0.3.25", default-features = false, features = [] }
 chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "25153ab801e3913242b8dd3c3c2804d2ce7291d6", features = [
+polkapipe = { path= "crates/polkapipe", features = [
     "wss",
 ] }
-# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
-#     "wss",
-# ] }
 async-tungstenite = { version = "0.19.0", default-features = true, features = [
     "async-tls",
     "async-std-runtime",
@@ -141,12 +129,9 @@ getrandom = { version = "0.2.8", features = ["wasm-bindgen", "js"] }
 wasm-bindgen = "0.2.83"
 ws_stream_wasm = "0.7.3"
 # wasm32 branch
-polkapipe = { git = "https://github.com/gilescope/polkapipe", rev = "25153ab801e3913242b8dd3c3c2804d2ce7291d6", features = [
+polkapipe = { path= "crates/polkapipe", features = [
     "ws-web",
 ] }
-# polkapipe = { path = "/Users/bit/p/polkapipe", default-features = false, features = [
-#     "ws-web",
-# ] }
 
 # wee_alloc = "0.4.5"
 gloo-worker = "0.2.1"
@@ -163,6 +148,8 @@ wasm-bindgen-futures = "0.4.33"
 
 #subxt = {git= "https://github.com/paritytech/subxt.git"}
 
+[workspace.dependencies]
+scale-value= { version = "0.16.0" }
 
 #async-std = { version = "1.9.0", features = ["attributes", "tokio1"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
@@ -204,11 +191,3 @@ debug = true
 strip = "none"
 panic = "unwind"
 incremental = true
-
-# Till v16 published
-[patch.crates-io]
-"frame-metadata"={ git="https://github.com/paritytech/frame-metadata.git" }
-# [replace]
-# Waiting on https://github.com/rust-windowing/winit/pull/2188 to be merged.
-# "winit:0.27.5"={ git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
-# "winit"={ git="https://github.com/gilescope/winit.git", branch="web-touch-event" }
