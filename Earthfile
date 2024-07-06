@@ -15,7 +15,7 @@ prep:
 
 build:
     FROM +prep
-    DO rust+CARGO --args="build --release --target wasm32-unknown-unknown" --output="release/[^/\.]+"
+    DO rust+CARGO --args="build --release --workspace --target wasm32-unknown-unknown" --output="release/[^/\.]+"
 
 fmt:
     FROM +prep
@@ -23,9 +23,9 @@ fmt:
 
 check:
     FROM +prep
-    DO rust+CARGO --args="clippy --target wasm32-unknown-unknown"
+    DO rust+CARGO --args="clippy --target wasm32-unknown-unknown --workspace"
 
 test:
     FROM +prep
     RUN apt-get update && apt-get install gcc pkg-config openssl libasound2-dev cmake build-essential python3 libfreetype6-dev libexpat1-dev libxcb-composite0-dev libssl-dev libx11-dev libfontconfig1-dev -y -qq
-    DO rust+CARGO --args="test --locked --verbose"
+    DO rust+CARGO --args="test --workspace --locked --verbose"
