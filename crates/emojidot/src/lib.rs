@@ -242,6 +242,7 @@ pub fn extrinsic_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("Farming", "withdraw_lp") => Some('📉'),
 		("Farming", "withdraw_claim") => Some('🌾'),
 		("Farming", "deposit") => Some('🌾'),
+		("Grandpa", "noteStalled") => Some('🔧'),
 		("Honzon", "adjust_loan") => Some('✒'),
 		("Honzon", "adjust_loan_by_debit_value") => Some('✒'),
 		("ImOnline", "heartbeat") => Some('💓'),

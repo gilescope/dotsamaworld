@@ -1189,6 +1189,29 @@ async fn process_extrinsic<'a, 'scale>(
 						}
 					}
 				}
+				if variant.contains("sudo") {
+					if let Some(instruction) = payload.get("call") {
+						if let Some((inner_pallet, "0", inner_variant, extrinsic_payload)) =
+							instruction.only3()
+						{
+							//TODO: if the sudo is a batch...
+							children.push(DataEntity::Extrinsic {
+								args: vec![format!("{}", instruction)],
+								contains: vec![],
+								start_link: vec![],
+								end_link: vec![],
+								msg_count: 0,
+								details: Details {
+									value: Some(extrinsic_payload.to_string()),
+									pallet: inner_pallet.to_string(),
+									variant: inner_variant.to_string(),
+									doturl: extrinsic_url.clone(),
+									..Details::default()
+								},
+							});
+						}
+					}
+				}
 			},
 		}
 
