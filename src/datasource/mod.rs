@@ -14,12 +14,7 @@ use std::{
 	sync::atomic::Ordering,
 	time::Duration,
 };
-use crate::MessageSource;
 use crate::LINKS;
-
-//  use bevy::ecs::event::EventWriter;
-#[derive(Decode, Debug)]
-pub struct ExtrinsicVec(pub Vec<u8>);
 
 mod time_predictor;
 //mod cached_source_inc_web;
@@ -478,11 +473,6 @@ where
 		for (i, encoded_extrinsic) in extrinsics.into_iter().enumerate() {
 			// log!("an extrinsics {:?}", i);
 
-			// let <ExtrinsicVec as Decode >::decode(&mut ext_bytes.as_slice());
-			//TODO: did we need to double decode extrinsics????
-
-			// 	<ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice()).unwrap().0;
-
 			let the_extrinsic = OwnedScale {
 				raw: encoded_extrinsic.clone(),
 				derived: DataEntity::Extrinsic {
@@ -582,7 +572,7 @@ where
 		}
 
 		let mut map = CHAIN_STATS.lock().unwrap();
-		let mut entry = map.entry(chain_info.chain_index).or_insert_with(
+		let entry = map.entry(chain_info.chain_index).or_insert_with(
 			//ChainStats {// start: Utc::now().timestamp(),
 			default, // }
 		);
@@ -655,22 +645,6 @@ async fn process_extrinsic<'a, 'scale>(
 	ext2: &scale_value::Value<u32>,
 	// url: &str,
 ) -> Option<DataEntity> {
-	// let _block_number = extrinsic_url.block_number.unwrap();
-	// let para_id = extrinsic_url.para_id.clone();
-	// let s : String = ext_bytes;
-	// ext_bytes.using_encoded(|ref slice| {
-	//     assert_eq!(slice, &b"\x0f");
-
-	// let encoded_extrinsic = ext_bytes.encode();
-	// let ex_slice = <ExtrinsicVec as Decode>::decode(&mut encoded_extrinsic.as_slice())
-	//     .unwrap()
-	//     .0;
-	// This works too but unsafe:
-	//let ex_slice2: Vec<u8> = unsafe { std::mem::transmute(ext_bytes.clone()) };
-
-	// use parity_scale_codec::Encode;
-	// ext_bytes.encode();
-
 	let mut children = vec![];
 	let mut start_link: Vec<(String, LinkType)> = vec![];
 	let end_link: Vec<(String, LinkType)> = vec![];

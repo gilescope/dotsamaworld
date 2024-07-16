@@ -2,7 +2,6 @@
 
 pub mod details;
 pub mod doturl;
-pub mod toggle;
 use crate::{log, Anchor, ChainInfo, Destination, Env, Inspector, FREE_TXS};
 use cgmath::Point3;
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -20,8 +19,6 @@ pub struct OccupiedScreenSpace {
 	//pub right: f32,
 	pub bottom: f32,
 }
-
-// pub struct OriginalCameraTransform(pub Transform);
 
 pub fn ui_bars_system(
 	egui_context: &mut egui::Context,
@@ -343,8 +340,7 @@ pub fn ui_bars_system(
 					ui.heading(format!("found: {}", found));
 				}
 				ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-					ui.add(toggle::toggle(&mut anchor.deref_mut().follow_chain));
-					ui.heading("Follow:");
+					ui.checkbox(&mut anchor.deref_mut().follow_chain, "Follow");
 					// spec.location.deref_mut().ui(ui, StringAttributes { multiline: false },
 					// egui_context);
 				});

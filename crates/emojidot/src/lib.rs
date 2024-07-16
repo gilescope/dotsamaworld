@@ -72,6 +72,7 @@ pub fn event_emoji(pallet: &str, variant: &str) -> Option<char> {
 		("Loans", "RepaidBorrow") => Some('⭐'),
 		("Loans", "Borrowed") => Some('💰'),
 		("Loans", "RewardPaid") => Some('🥕'),
+		("Midnight", "ContractCalled") => Some('🔀'),
 		("Midnight", "TxApplied") => Some('👍'),
 		("Mining", "MiningResourceMintedTo") => Some('⛏'),
 		("MultiTokens", "TokenCreated") => Some('👶'),

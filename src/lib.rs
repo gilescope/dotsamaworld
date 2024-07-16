@@ -648,10 +648,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	//"dotsama:/1//10504599".to_string()
 	let mut urlbar = ui::UrlBar::new(q.clone(), Utc::now().naive_utc(), Env::Local);
-	// app.insert_resource();
 	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
-	// let mouse_capture = movement::MouseCapture::default();
 	let mut anchor = Anchor::default();
 	let mut destination = movement::Destination::default();
 	let mut inspector = Inspector::default();
@@ -1095,7 +1093,6 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// let diffuse_texture_view: wgpu::TextureView;
 	// let diffuse_sampler : wgpu::Sampler;
 
-	// Don't try and select something if your in the middle of moving
 	// let mut last_movement_time = Utc::now();
 	event_loop.run(move |event, _, _control_flow| {
 		let selected_instance_buffer;
@@ -1106,6 +1103,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 		let scale_x = size.width as f32 / hidpi_factor as f32;
 		let scale_y = size.height as f32 / hidpi_factor as f32;
+
+		if anchor.follow_chain {
+			camera.position.x += 0.01;
+		}
 
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
@@ -1218,7 +1219,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 							selected_instance_data.clear();
 						} else {
 
-							//TODO: distingush from one finger touch move and a select.
+							//TODO: distinguish from one finger touch move and a select.
 
 							// one finger move touch.
 							log!("Touch! {:?}", &location);
@@ -1425,7 +1426,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				});
 			// }
 
-			// render selected instance buffer eachtime as selected item might have changed
+			// render selected instance buffer each time as selected item might have changed
 			selected_instance_buffer =
 			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 				label: Some("selected Instance Buffer"),
@@ -1446,7 +1447,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			let output = surface.get_current_texture().unwrap();
 			let view = output.texture.create_view(&default());
 
-			let output_frame = output; //
+			let output_frame = output;
 
 			let output_view = view;
 
@@ -2845,7 +2846,7 @@ fn source_data(
 	mut sovereigns: Sovereigns,
 	// details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	// clean_me: Query<Entity, With<ClearMe>>,
-	mut spec: &mut UrlBar,
+	spec: &mut UrlBar,
 	// handles: Res<ResourceHandles>,
 	// #[cfg(not(target_arch="wasm32"))]
 	// writer: EventWriter<DataSourceStreamEvent>,
@@ -3119,7 +3120,7 @@ fn draw_chain_rect(
 	// let encoded: String = url::form_urlencoded::Serializer::new(String::new())
 	// 	.append_pair("rpc", &chain_info.chain_ws)
 	// 	.finish();
-	let is_relay = chain_info.chain_url.is_relay();
+	// let is_relay = chain_info.chain_url.is_relay();
 	// commands
 	// 	.spawn_bundle(PbrBundle {
 	// 		mesh: handles.chain_rect_mesh.clone(),
@@ -3536,7 +3537,6 @@ fn render_block(
 			// 	.append_pair("rpc", &chain_info.chain_ws)
 			// 	.finish();
 
-			let is_relay = chain_info.chain_url.is_relay();
 			let details = Details {
 				doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
 
@@ -3756,8 +3756,6 @@ fn render_block(
 			//event.send(RequestRedraw);
 		},
 		DataUpdate::NewChain(chain_info, sudo) => {
-			let is_relay = chain_info.chain_url.is_relay();
-			// log!("adding new chain");
 			render.textured_instances.push(Instance {
 				position: glam::Vec3::new(
 					0. - 8.5 - 28.,
@@ -3833,7 +3831,7 @@ fn add_blocks(
 	let build_dir = 1.0; //if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
 
-	let layer = chain_info.chain_url.layer() as f32;
+	// let layer = chain_info.chain_url.layer() as f32;
 	let (base_x, base_y, base_z) = (
 		(block_num) - 4.,
 		0.,
@@ -4078,9 +4076,9 @@ fn add_blocks(
 			}
 
 			let end_loc : [f32;3] = glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into();
-			for (link, link_type) in &event.end_link {
+			for (link, _link_type) in &event.end_link {
 				log!("checking links: {}", links.len());
-				for MessageSource { source_index, id, link_type, source } in links.iter() {
+				for MessageSource { source_index, id, link_type: _, source } in links.iter() {
 					// double link:
 					render_details.event_instances[event_index].links.push(*source_index);
 					if *source_index < render_details.event_instances.len() {
@@ -4319,143 +4317,6 @@ fn rain(
 // static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
 // static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
-// fn update_visibility(
-// 	// mut entity_low_midfi: Query<(
-// 	// 	&mut Visibility,
-// 	// 	&GlobalTransform,
-// 	// 	With<ClearMe>,
-// 	// 	Without<HiFi>,
-// 	// 	Without<MedFi>,
-// 	// )>,
-// 	// mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
-// 	// mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
-// 	// player_query: Query<&Transform, With<Viewport>>,
-// 	frustum: Query<&Frustum, With<Viewport>>,
-// 	mut instances: Query<&mut InstanceMaterialData, Without<ChainInstances>>,
-// 	// #[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
-// 	// #[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
-// 	// #[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
-// ) {
-// 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
-
-// 	let frustum: &Frustum = frustum.get_single().unwrap();
-// 	for mut instance_data in instances.iter_mut() {
-// 		let mut new_vis = Vec::with_capacity(instance_data.0.len());
-
-// 		//HOT!
-// 		for instance in instance_data.0.iter() {
-// 			let mut vis = true;
-// 			for plane in &frustum.planes {
-// 				if plane.normal_d().dot(instance.position.extend(1.0)) //+ sphere.radius
-// 				 <= 0.0 {
-// 					vis = false;
-// 					break;
-// 				}
-// 			}
-
-// 			new_vis.push(vis);
-// 		}
-// 		instance_data.1 = new_vis;
-// 	}
-
-// 	// let transform: &Transform = player_query.get_single().unwrap();
-// 	// let x = transform.translation.x;
-// 	// let y = transform.translation.y;
-
-// 	// let user_y = y.signum();
-
-// 	// // If nothing's visible because we're far away make a few things visible so you know which
-// 	// dir // to go in and can double click to get there...
-// 	// #[cfg(feature = "adaptive-fps")]
-// 	// if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-// 	// 	let min = diag.history_len();
-// 	// 	if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-// 	// 		// println!("avg {}\t{}", avg, visible_width.0);
-// 	// 		let target = 30.;
-// 	// 		let avg = avg as f32;
-// 	// 		if avg < target && visible_width.0 > 100. {
-// 	// 			visible_width.0 -= (target - avg) / 4.;
-// 	// 		}
-// 	// 		// Because of frame rate differences it will go up much faster than it will go down!
-// 	// 		else if avg > target && visible_width.0 < 1000. {
-// 	// 			visible_width.0 += (avg - target) / 32.;
-// 	// 		}
-// 	// 	}
-// 	// }
-
-// 	// let width = visible_width.0;
-// 	// let (min, max) = (x - width, x + width);
-
-// 	// let mut vis_count = 0;
-// 	// for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if vis.is_visible {
-// 	// 		vis_count += 1;
-// 	// 	}
-// 	// }
-// 	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if y > 500. {
-// 	// 		vis.is_visible = false;
-// 	// 	}
-// 	// }
-// 	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if y > 800. {
-// 	// 		vis.is_visible = false;
-// 	// 	}
-// 	// }
-
-// 	// if vis_count == 0 {
-// 	// 	for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
-// 	// 		vis.is_visible = true;
-// 	// 	}
-// 	// }
-
-// 	// println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
-// }
-
-// pub fn right_click_system(
-// 	mouse_button_input: Res<Input<MouseButton>>,
-// 	touches_input: Res<Touches>,
-// 	// hover_query: Query<
-// 	//     (Entity, &Hover, ChangeTrackers<Hover>),
-// 	//     (Changed<Hover>, With<PickableMesh>),
-// 	// >,
-// 	// selection_query: Query<
-// 	//     (Entity, &Selection, ChangeTrackers<Selection>),
-// 	//     (Changed<Selection>, With<PickableMesh>),
-// 	// >,
-// 	// _query_details: Query<&Details>,
-// 	click_query: Query<(Entity, &Hover)>,
-// ) {
-// 	if mouse_button_input.just_pressed(MouseButton::Right) ||
-// 		touches_input.iter_just_pressed().next().is_some()
-// 	{
-// 		for (_entity, hover) in click_query.iter() {
-// 			if hover.hovered() {
-// 				// Open browser.
-// 				// #[cfg(not(target_arch = "wasm32"))]
-// 				// let details = query_details.get(entity).unwrap();
-// 				// #[cfg(not(target_arch = "wasm32"))]
-// 				// open::that(&details.url).unwrap();
-// 				// picking_events.send(PickingEvent::Clicked(entity));
-// 			}
-// 		}
-// 	}
-// }
-
-// 	// Kick off the live mode automatically so people have something to look at
-// 	datasource_events.send(DataSourceChangedEvent {
-// 		//source: "dotsama:/1//10504599".to_string(),
-// 		// source: "local:live".to_string(),
-// 		source: "dotsama:live".to_string(),
-// 		timestamp: None,
-// 	});
-// }
 
 #[derive(Default)]
 pub struct Inspector {
