@@ -34,12 +34,9 @@ impl Streamable for Backend {
 }
 
 impl Backend {
-	pub fn new<U>(url: U) -> Self
-	where
-		U: TryInto<Url>,
-		<U as TryInto<Url>>::Error: fmt::Debug,
+	pub fn new(urls: &[Url]) -> Self
 	{
-		Backend(url.try_into().expect("Url"))
+		Backend(urls[0].clone())
 	}
 }
 
@@ -62,7 +59,10 @@ impl Rpc for Backend {
 		let mut res = client
 			.send(req)
 			.await
-			.map_err(|err| rpc::Error::Transport(err.into_inner().into()))?;
+			.map_err(|err| {
+				log::error!("error sending: {}", err);
+				standard_error(StandardError::InternalError, None)
+			})?;
 
 		let status = res.status();
 		#[cfg(feature = "logging")]
@@ -98,13 +98,14 @@ impl Rpc for Backend {
 #[cfg(test)]
 mod tests {
 	use super::Backend;
+	use surf::Url;
 
 	fn init() {
 		let _ = env_logger::builder().is_test(true).try_init();
 	}
 
 	fn polkadot_backend() -> crate::PolkaPipe<Backend> {
-		crate::PolkaPipe::<Backend> { rpc: Backend::new("http://rpc.polkadot.io") }
+		crate::PolkaPipe::<Backend> { rpc: Backend::new(&vec![Url::parse("http://rpc.polkadot.io").unwrap()]) }
 	}
 	//{"id":1,"jsonrpc":"2.0","method":"state_getKeys","params":["1234"]}
 	//websocat wss://statemint-rpc-tn.dwellir.com
