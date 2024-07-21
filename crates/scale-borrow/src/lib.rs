@@ -33,7 +33,7 @@ macro_rules! descale {
         impl <$scale> $n<$scale> {
             fn parse(data: &'scale [u8], top_type: UntrackedSymbol<TypeId>, types: &'scale scale_info::PortableRegistry) -> $n<$scale> {
                 let mut slf = $n::<$scale>::default();
-                crate::skeleton_decode(data, top_type.id(), &mut slf, types);
+                crate::skeleton_decode(data, top_type.id, &mut slf, types);
                 slf
             }
         }
@@ -617,7 +617,7 @@ mod tests {
         assert_eq!(xx.d, 4);
         assert_eq!(xx.e, 5);
 
-        let val = ValueBuilder::parse(&encoded, id.id(), &types);
+        let val = ValueBuilder::parse(&encoded, id.id, &types);
         assert_eq!(
             val,
             Value::Object(Box::new(vec![
@@ -673,7 +673,7 @@ mod tests {
         assert_eq!(xx.named_bool, true);
         assert_eq!(xx.named_bool2, "skip meh");
 
-        let val = ValueBuilder::parse(&encoded, id.id(), &types);
+        let val = ValueBuilder::parse(&encoded, id.id, &types);
         assert_eq!(
             val,
             Value::Object(Box::new(vec![

@@ -107,7 +107,6 @@ impl Default for MovementSettings {
 }
 
 /// Distance vertically between layer 0 and layer 1
-const LAYER_GAP: f32 = 0.;
 const CHAIN_HEIGHT: f32 = 0.001;
 const CUBE_WIDTH: f32 = 0.8;
 
@@ -165,6 +164,9 @@ pub struct ChainInfo {
 	pub chain_index: isize,
 	pub chain_url: DotUrl,
 	pub chain_name: String,
+
+	// Original id of relay chain attached to (to look up images).
+	pub relay_id: u32,
 }
 
 use chrono::DateTime;
@@ -287,28 +289,31 @@ impl Vertex {
 fn rect_instances(count: usize) -> Vec<Vertex> {
 	let count = count as f32;
 	let mut results = vec![];
-	let scale = 3.25;
+	let scale = 3.376;
 
-	results.push(Vertex {
-		position: [0., 0., 0.0],
-		tex: [0., 1. / count],
-		color: [0., 1. / count, -2.],
-	}); // A
-	results.push(Vertex { position: [scale, 0., 0.0], tex: [0., 0.], color: [0., 0., -2.] }); // B
-	results.push(Vertex {
-		position: [0., 0., 3. * scale],
-		tex: [1., 1. / count],
-		color: [1., 1. / count, -2.],
-	}); // C
-	results.push(Vertex { position: [scale, 0., 3. * scale], tex: [1., 0.], color: [1., 0., -2.] }); // D
+	// results.push(Vertex {
+	// 	position: [0., 0., 0.0],
+	// 	tex: [0., 1. / count],
+	// 	color: [0., 1. / count, -2.],
+	// }); // A
+	// results.push(Vertex { position: [scale, 0., 0.0], tex: [0., 0.], color: [0., 0., -2.] }); // B
+	// results.push(Vertex {
+	// 	position: [0., 0., 3. * scale],
+	// 	tex: [1., 1. / count],
+	// 	color: [1., 1. / count, -2.],
+	// }); // C
+	// results.push(Vertex { position: [scale, 0., 3. * scale], tex: [1., 0.], color: [1., 0., -2.] }); // D
 
-	//TODO: should one set of these texture positions be reversed?
 	results.push(Vertex {
 		position: [0., 0.3, 0.0],
 		tex: [0., 1. / count],
 		color: [0., 1. / count, -2.],
 	}); // A
-	results.push(Vertex { position: [scale, 0.3, 0.0], tex: [0., 0.], color: [0., 0., -2.] }); // B
+	results.push(Vertex {
+		position: [scale, 0.3, 0.0],
+		tex: [0., 0.],
+		color: [0., 0., -2.]
+	}); // B
 	results.push(Vertex {
 		position: [0., 0.3, 3. * scale],
 		tex: [1., 1. / count],
@@ -329,25 +334,25 @@ fn rect_instances(count: usize) -> Vec<Vertex> {
 /// Counter clockwise to show up as looking from outside at cube.
 // const INDICES: &[u16] = &cube_indicies(0);
 
-const fn rect_indicies(offset: u16) -> [u16; 12] {
+const fn rect_indicies(offset: u16) -> [u16; 6] {
 	let a = offset + 0;
 	let b = offset + 1;
 	let c = offset + 2;
 	let d = offset + 3;
 	[
-		a,
-		b,
-		d,
-		d,
-		c,
-		a,
-		// Second side (backwards)
-		d + 4,
-		b + 4,
-		a + 4,
-		a + 4,
-		c + 4,
-		d + 4,
+		// a,
+		// b,
+		// d,
+		// d,
+		// c,
+		// a,
+		// Second side (upwards)
+		d ,
+		b ,
+		a ,
+		a ,
+		c ,
+		d ,
 	]
 }
 
@@ -643,10 +648,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	//"dotsama:/1//10504599".to_string()
 	let mut urlbar = ui::UrlBar::new(q.clone(), Utc::now().naive_utc(), Env::Local);
-	// app.insert_resource();
 	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
-	// let mouse_capture = movement::MouseCapture::default();
 	let mut anchor = Anchor::default();
 	let mut destination = movement::Destination::default();
 	let mut inspector = Inspector::default();
@@ -1090,7 +1093,6 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// let diffuse_texture_view: wgpu::TextureView;
 	// let diffuse_sampler : wgpu::Sampler;
 
-	// Don't try and select something if your in the middle of moving
 	// let mut last_movement_time = Utc::now();
 	event_loop.run(move |event, _, _control_flow| {
 		let selected_instance_buffer;
@@ -1101,6 +1103,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 		let scale_x = size.width as f32 / hidpi_factor as f32;
 		let scale_y = size.height as f32 / hidpi_factor as f32;
+
+		if anchor.follow_chain {
+			camera.position.x += 0.01;
+		}
 
 		// Pass the winit events to the platform integration.
 		platform.handle_event(&event);
@@ -1213,7 +1219,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 							selected_instance_data.clear();
 						} else {
 
-							//TODO: distingush from one finger touch move and a select.
+							//TODO: distinguish from one finger touch move and a select.
 
 							// one finger move touch.
 							log!("Touch! {:?}", &location);
@@ -1345,11 +1351,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					chain_instance_data.extend(render_update.chain_instances.clone());
 
 					for instance in &render_update.textured_instances {
-						let key = if instance.color > 99_000 {
-							(1, instance.color - 100_000)
-						} else {
-							(0, instance.color)
-						};
+						let key = (instance.color / 1000, instance.color % 1000);
 						let texture = texture_map.get(&key);
 						if let Some(texture_index) = texture {
 							let (y,x) = texture_index;
@@ -1424,7 +1426,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				});
 			// }
 
-			// render selected instance buffer eachtime as selected item might have changed
+			// render selected instance buffer each time as selected item might have changed
 			selected_instance_buffer =
 			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 				label: Some("selected Instance Buffer"),
@@ -1445,7 +1447,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			let output = surface.get_current_texture().unwrap();
 			let view = output.texture.create_view(&default());
 
-			let output_frame = output; //
+			let output_frame = output;
 
 			let output_view = view;
 
@@ -1797,7 +1799,15 @@ async fn load_textures(
 	index += 1;
 	map.insert((1, 2052), (index / H, index % H));
 	index += 1;
-	map.insert((1, 2086), (index / H, index % H)); //index += 1;
+	map.insert((1, 2086), (index / H, index % H));
+	index += 1;
+	map.insert((2, 0), (index / H, index % H));
+	index += 1;
+	map.insert((3, 0), (index / H, index % H));
+	index += 1;
+	map.insert((4, 0), (index / H, index % H));
+	index += 1;
+	map.insert((5, 0), (index / H, index % H));
 
 	//TODO: MAX height achieved!!! need to go wide...
 	// or have another texture buffer.
@@ -1807,8 +1817,8 @@ async fn load_textures(
 
 	//sips -s format jpeg s.png --out ./assets/branding/0-2129.jpeg
 	//sips -z 100 300 *.jpeg to format them all to same aspect.
-	let mut images = vec![];
-	#[cfg(feature = "raw_images")]
+	let mut images : Vec<Vec<u8>> = vec![];
+	#[cfg(feature = "bake")]
 	{
 		images.push(include_bytes!("../assets/branding/0.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/0-999.jpeg").to_vec()); //https://text2image.com/en/
@@ -1878,14 +1888,19 @@ async fn load_textures(
 		images.push(include_bytes!("../assets/branding/1-2051.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/1-2052.jpeg").to_vec());
 		images.push(include_bytes!("../assets/branding/1-2086.jpeg").to_vec());
+
+		images.push(include_bytes!("../assets/branding/2.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/3.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/4.jpeg").to_vec());
+		images.push(include_bytes!("../assets/branding/5.jpeg").to_vec());
 	}
 
-	#[cfg(not(feature = "raw_images"))]
+	#[cfg(not(feature = "bake"))]
 	{
 		images.push(include_bytes!("../assets/branding/baked.jpeg").to_vec());
 	}
 
-	//MAX: 16k for chrome, safari. 8k height for firefox.
+	//MAX image height: 16k for chrome, safari. 8k height for firefox.
 
 	let mut diffuse_rgba2 = Vec::new();
 
@@ -2020,7 +2035,8 @@ async fn load_textures(
 		encoder.encode(&bake_img[..], bake_width, bake_height, ColorType::Rgb).unwrap();
 		println!("done initial bake");
 
-		load_textures_emoji(device, queue).await;
+		let sample_count = 1;
+		load_textures_emoji(device, queue, sample_count).await;
 		panic!("done");
 	}
 
@@ -2310,9 +2326,9 @@ async fn load_textures_emoji(
 	for bytes in &images {
 		// i += 1;
 		// println!("{i} {bytes}");
-		#[cfg(feature = "bake")]
+		#[cfg(feature = "raw_images")]
 		let (img_data, img_width, img_height, add_alpha) = load_png_image(bytes).unwrap();
-		#[cfg(not(feature = "bake"))]
+		#[cfg(not(feature = "raw_images"))]
 		let (img_data, img_width, img_height, add_alpha) = {
 			let mut decoder = Decoder::new(std::io::Cursor::new(bytes));
 			let diffuse_rgb: Vec<u8> = decoder.decode().expect("failed to decode image");
@@ -2464,7 +2480,7 @@ async fn load_textures_emoji(
 		// All textures are stored as 3D, we represent our 2D texture
 		// by setting depth to 1.
 		size: texture_size,
-		mip_level_count: 1, // We'll talk about this a little later
+		mip_level_count: 1,
 		sample_count,
 		dimension: wgpu::TextureDimension::D2,
 		// Most images are stored using sRGB so we need to reflect that here.
@@ -2830,7 +2846,7 @@ fn source_data(
 	mut sovereigns: Sovereigns,
 	// details: Query<Entity, With<ClearMeAlwaysVisible>>,
 	// clean_me: Query<Entity, With<ClearMe>>,
-	mut spec: &mut UrlBar,
+	spec: &mut UrlBar,
 	// handles: Res<ResourceHandles>,
 	// #[cfg(not(target_arch="wasm32"))]
 	// writer: EventWriter<DataSourceStreamEvent>,
@@ -2897,7 +2913,7 @@ fn source_data(
 		.enumerate()
 		.map(|(relay_index, relay)| {
 			let relay_url = DotUrl {
-				sovereign: Some(if relay_index == 0 { -1 } else { 1 }),
+				sovereign: Some(if relay_index == 0 { -1 } else { relay_index as i32 }),
 				block_number: None,
 				..dot_url.clone()
 			};
@@ -2906,7 +2922,7 @@ fn source_data(
 				.as_slice()
 				.iter()
 				.enumerate()
-				.map(|(chain_index, (para_id, chain_name, chain_names))| {
+				.map(|(chain_index, (relay_id, para_id, chain_name, chain_names))| {
 					let url = chain_name_to_url(chain_names);
 
 					// #[cfg(not(target_arch="wasm32"))]
@@ -2935,6 +2951,7 @@ fn source_data(
 						chain_name: chain_name.clone(),
 						chain_url: DotUrl { para_id: *para_id, ..relay_url.clone() },
 						// chain_name: parachain_name,
+						relay_id: *relay_id
 					}
 				})
 				.collect::<Vec<ChainInfo>>()
@@ -2951,6 +2968,7 @@ fn source_data(
 		sovereigns.relays.push(sov_relay);
 	}
 
+	log!("sov count {}", sovereigns.relays.len());
 	#[cfg(not(target_arch = "wasm32"))]
 	do_datasources(sovereigns, as_of);
 
@@ -3102,7 +3120,7 @@ fn draw_chain_rect(
 	// let encoded: String = url::form_urlencoded::Serializer::new(String::new())
 	// 	.append_pair("rpc", &chain_info.chain_ws)
 	// 	.finish();
-	let is_relay = chain_info.chain_url.is_relay();
+	// let is_relay = chain_info.chain_url.is_relay();
 	// commands
 	// 	.spawn_bundle(PbrBundle {
 	// 		mesh: handles.chain_rect_mesh.clone(),
@@ -3113,7 +3131,7 @@ fn draw_chain_rect(
 	// 		},
 	// 		transform: Transform::from_translation(Vec3::new(
 	// 			(10000. / 2.) - 35.,
-	// 			if is_relay { 0. } else { LAYER_GAP },
+	// 			0.,
 	// 			((RELAY_CHAIN_CHASM_WIDTH - 5.) +
 	// 				(BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 	// 				rfip,
@@ -3140,7 +3158,7 @@ fn draw_chain_rect(
 	chain_instances.push(Instance {
 		position: glam::Vec3::new(
 			0. - 35., //(1000. / 2.) - 35.,
-			if is_relay { 0. } else { LAYER_GAP } - CHAIN_HEIGHT / 2.0,
+			-CHAIN_HEIGHT / 2.0,
 			((RELAY_CHAIN_CHASM_WIDTH - 5.) + (BLOCK / 2. + BLOCK_AND_SPACER * chain_index as f32)) *
 				rfip,
 		)
@@ -3519,7 +3537,6 @@ fn render_block(
 			// 	.append_pair("rpc", &chain_info.chain_ws)
 			// 	.finish();
 
-			let is_relay = chain_info.chain_url.is_relay();
 			let details = Details {
 				doturl: DotUrl { extrinsic: None, event: None, ..block.blockurl.clone() },
 
@@ -3559,7 +3576,7 @@ fn render_block(
 
 				// let transform = Transform::from_translation(Vec3::new(
 				// 	0. + (block_num as f32),
-				// 	if is_relay { 0. } else { LAYER_GAP },
+				// 	0.,
 				// 	(RELAY_CHAIN_CHASM_WIDTH +
 				// 		BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 				// 		rflip,
@@ -3588,7 +3605,7 @@ fn render_block(
 				render.block_instances.push(Instance {
 					position: glam::Vec3::new(
 						0. + block_num - 5.,
-						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
+						-0.1,
 						(RELAY_CHAIN_CHASM_WIDTH +
 							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 							rflip,
@@ -3610,7 +3627,7 @@ fn render_block(
 				render.textured_instances.push(Instance {
 					position: glam::Vec3::new(
 						0. + block_num - 8.5,
-						if is_relay { -0.1 } else { -0.1 + LAYER_GAP },
+						-0.1,
 						(0.1 + RELAY_CHAIN_CHASM_WIDTH +
 							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 							chain_info.chain_url.rflip(),
@@ -3618,7 +3635,7 @@ fn render_block(
 					.into(),
 					// Encode the chain / parachain instead of the instance.color data.
 					// This will get translated to
-					color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } +
+					color: chain_info.relay_id * 1000 +
 						chain_info.chain_url.para_id.unwrap_or(0),
 				});
 				// bun.insert(details)
@@ -3739,38 +3756,37 @@ fn render_block(
 			//event.send(RequestRedraw);
 		},
 		DataUpdate::NewChain(chain_info, sudo) => {
-			let is_relay = chain_info.chain_url.is_relay();
-			// log!("adding new chain");
 			render.textured_instances.push(Instance {
 				position: glam::Vec3::new(
 					0. - 8.5 - 28.,
-					if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+					-0.13,
 					(0.1 + RELAY_CHAIN_CHASM_WIDTH +
 						BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 						chain_info.chain_url.rflip(),
 				)
 				.into(),
-				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 } +
+				color:
+					chain_info.relay_id * 1000 +
 					chain_info.chain_url.para_id.unwrap_or(0),
 			});
 
-			render.textured_instances.push(Instance {
-				position: glam::Vec3::new(
-					0. - 8.5 - 28. - 3.3,
-					if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
-					(0.1 + RELAY_CHAIN_CHASM_WIDTH +
-						BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
-						chain_info.chain_url.rflip(),
-				)
-				.into(),
-				color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 },
-			});
+			// render.textured_instances.push(Instance {
+			// 	position: glam::Vec3::new(
+			// 		0. - 8.5 - 28. - 3.3,
+			// 		-0.13,
+			// 		(0.1 + RELAY_CHAIN_CHASM_WIDTH +
+			// 			BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
+			// 			chain_info.chain_url.rflip(),
+			// 	)
+			// 	.into(),
+			// 	color: if chain_info.chain_url.is_darkside() { 0 } else { 100_000 },
+			// });
 
 			if sudo {
 				render.textured_instances.push(Instance {
 					position: glam::Vec3::new(
 						0. - 8.5 - 28. + 3.3,
-						if is_relay { -0.13 } else { -0.13 + LAYER_GAP },
+						-0.13,
 						(0.1 + RELAY_CHAIN_CHASM_WIDTH +
 							BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32) *
 							chain_info.chain_url.rflip(),
@@ -3815,10 +3831,10 @@ fn add_blocks(
 	let build_dir = 1.0; //if let BuildDirection::Up = build_direction { 1.0 } else { -1.0 };
 	// Add all the useful blocks
 
-	let layer = chain_info.chain_url.layer() as f32;
+	// let layer = chain_info.chain_url.layer() as f32;
 	let (base_x, base_y, base_z) = (
 		(block_num) - 4.,
-		LAYER_GAP * layer,
+		0.,
 		RELAY_CHAIN_CHASM_WIDTH + BLOCK_AND_SPACER * chain_info.chain_index.abs() as f32 - 4.,
 	);
 
@@ -4060,9 +4076,9 @@ fn add_blocks(
 			}
 
 			let end_loc : [f32;3] = glam::Vec3::new(x, (5. * build_dir) + y, 5. + z).into();
-			for (link, link_type) in &event.end_link {
+			for (link, _link_type) in &event.end_link {
 				log!("checking links: {}", links.len());
-				for MessageSource { source_index, id, link_type, source } in links.iter() {
+				for MessageSource { source_index, id, link_type: _, source } in links.iter() {
 					// double link:
 					render_details.event_instances[event_index].links.push(*source_index);
 					if *source_index < render_details.event_instances.len() {
@@ -4301,143 +4317,6 @@ fn rain(
 // static LAST_CLICK_TIME: AtomicI32 = AtomicI32::new(0);
 // static LAST_KEYSTROKE_TIME: AtomicI32 = AtomicI32::new(0);
 
-// fn update_visibility(
-// 	// mut entity_low_midfi: Query<(
-// 	// 	&mut Visibility,
-// 	// 	&GlobalTransform,
-// 	// 	With<ClearMe>,
-// 	// 	Without<HiFi>,
-// 	// 	Without<MedFi>,
-// 	// )>,
-// 	// mut entity_medfi: Query<(&mut Visibility, &GlobalTransform, With<MedFi>, Without<HiFi>)>,
-// 	// mut entity_hifi: Query<(&mut Visibility, &GlobalTransform, With<HiFi>, Without<MedFi>)>,
-// 	// player_query: Query<&Transform, With<Viewport>>,
-// 	frustum: Query<&Frustum, With<Viewport>>,
-// 	mut instances: Query<&mut InstanceMaterialData, Without<ChainInstances>>,
-// 	// #[cfg(feature = "adaptive-fps")] diagnostics: Res<'_, Diagnostics>,
-// 	// #[cfg(feature = "adaptive-fps")] mut visible_width: ResMut<Width>,
-// 	// #[cfg(not(feature = "adaptive-fps"))] visible_width: Res<Width>,
-// ) {
-// 	// TODO: have a lofi zone and switch visibility of the lofi and hifi entities
-
-// 	let frustum: &Frustum = frustum.get_single().unwrap();
-// 	for mut instance_data in instances.iter_mut() {
-// 		let mut new_vis = Vec::with_capacity(instance_data.0.len());
-
-// 		//HOT!
-// 		for instance in instance_data.0.iter() {
-// 			let mut vis = true;
-// 			for plane in &frustum.planes {
-// 				if plane.normal_d().dot(instance.position.extend(1.0)) //+ sphere.radius
-// 				 <= 0.0 {
-// 					vis = false;
-// 					break;
-// 				}
-// 			}
-
-// 			new_vis.push(vis);
-// 		}
-// 		instance_data.1 = new_vis;
-// 	}
-
-// 	// let transform: &Transform = player_query.get_single().unwrap();
-// 	// let x = transform.translation.x;
-// 	// let y = transform.translation.y;
-
-// 	// let user_y = y.signum();
-
-// 	// // If nothing's visible because we're far away make a few things visible so you know which
-// 	// dir // to go in and can double click to get there...
-// 	// #[cfg(feature = "adaptive-fps")]
-// 	// if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-// 	// 	let min = diag.history_len();
-// 	// 	if let Some(avg) = diag.values().map(|&i| i as u32).min() {
-// 	// 		// println!("avg {}\t{}", avg, visible_width.0);
-// 	// 		let target = 30.;
-// 	// 		let avg = avg as f32;
-// 	// 		if avg < target && visible_width.0 > 100. {
-// 	// 			visible_width.0 -= (target - avg) / 4.;
-// 	// 		}
-// 	// 		// Because of frame rate differences it will go up much faster than it will go down!
-// 	// 		else if avg > target && visible_width.0 < 1000. {
-// 	// 			visible_width.0 += (avg - target) / 32.;
-// 	// 		}
-// 	// 	}
-// 	// }
-
-// 	// let width = visible_width.0;
-// 	// let (min, max) = (x - width, x + width);
-
-// 	// let mut vis_count = 0;
-// 	// for (mut vis, transform, _, _, _) in entity_low_midfi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if vis.is_visible {
-// 	// 		vis_count += 1;
-// 	// 	}
-// 	// }
-// 	// for (mut vis, transform, _, _) in entity_hifi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if y > 500. {
-// 	// 		vis.is_visible = false;
-// 	// 	}
-// 	// }
-// 	// for (mut vis, transform, _, _) in entity_medfi.iter_mut() {
-// 	// 	let loc = transform.translation();
-// 	// 	vis.is_visible = min < loc.x && loc.x < max && loc.y.signum() == user_y;
-// 	// 	if y > 800. {
-// 	// 		vis.is_visible = false;
-// 	// 	}
-// 	// }
-
-// 	// if vis_count == 0 {
-// 	// 	for (mut vis, _, _, _, _) in entity_low_midfi.iter_mut().take(1000) {
-// 	// 		vis.is_visible = true;
-// 	// 	}
-// 	// }
-
-// 	// println!("viewport x = {},    {}  of   {} ", x, count_vis, count);
-// }
-
-// pub fn right_click_system(
-// 	mouse_button_input: Res<Input<MouseButton>>,
-// 	touches_input: Res<Touches>,
-// 	// hover_query: Query<
-// 	//     (Entity, &Hover, ChangeTrackers<Hover>),
-// 	//     (Changed<Hover>, With<PickableMesh>),
-// 	// >,
-// 	// selection_query: Query<
-// 	//     (Entity, &Selection, ChangeTrackers<Selection>),
-// 	//     (Changed<Selection>, With<PickableMesh>),
-// 	// >,
-// 	// _query_details: Query<&Details>,
-// 	click_query: Query<(Entity, &Hover)>,
-// ) {
-// 	if mouse_button_input.just_pressed(MouseButton::Right) ||
-// 		touches_input.iter_just_pressed().next().is_some()
-// 	{
-// 		for (_entity, hover) in click_query.iter() {
-// 			if hover.hovered() {
-// 				// Open browser.
-// 				// #[cfg(not(target_arch = "wasm32"))]
-// 				// let details = query_details.get(entity).unwrap();
-// 				// #[cfg(not(target_arch = "wasm32"))]
-// 				// open::that(&details.url).unwrap();
-// 				// picking_events.send(PickingEvent::Clicked(entity));
-// 			}
-// 		}
-// 	}
-// }
-
-// 	// Kick off the live mode automatically so people have something to look at
-// 	datasource_events.send(DataSourceChangedEvent {
-// 		//source: "dotsama:/1//10504599".to_string(),
-// 		// source: "local:live".to_string(),
-// 		source: "dotsama:live".to_string(),
-// 		timestamp: None,
-// 	});
-// }
 
 #[derive(Default)]
 pub struct Inspector {

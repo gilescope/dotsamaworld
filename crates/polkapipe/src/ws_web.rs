@@ -75,7 +75,10 @@ impl Rpc for Backend {
 				async_std::task::sleep(Duration::from_millis(delay as u64)).await;
 			}
 
-			lock.send_with_str(&msg).unwrap();
+			let res = lock.send_with_str(&msg);
+			if let Result::Err(_err) = res {
+				return Err(jsonrpc::Error::EmptyBatch);
+			}
 		}
 		#[cfg(feature = "logging")]
 		log::trace!("RPC now waiting for response ...");

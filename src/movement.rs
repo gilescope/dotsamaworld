@@ -2,34 +2,6 @@
 use crate::MovementSettings;
 // use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
 use glam::{Quat, Vec3};
-pub struct MouseCapture(pub bool);
-
-impl Default for MouseCapture {
-	fn default() -> Self {
-		Self(true)
-	}
-}
-
-// From dolly but not exposed
-// https://github.com/h3r2tic/dolly/blob/0276fb4b5fe2e11c70919af7dbbcd645711c8f48/src/util.rs
-pub(crate) trait Interpolate {
-	fn interpolate(self, other: Self, t: f32) -> Self;
-}
-
-impl Interpolate for Vec3 {
-	fn interpolate(self, other: Self, t: f32) -> Self {
-		Vec3::lerp(self, other, t)
-	}
-}
-
-impl Interpolate for Quat {
-	fn interpolate(self, other: Self, t: f32) -> Self {
-		// Technically should be a `slerp` for framerate independence, but the latter
-		// will rotate in the negative direction when interpolating a 180..360 degree rotation
-		// to the 0..180 range. See the comment about `yaw_degrees` in `YawPitch` for more details.
-		Quat::lerp(self.normalize(), other.normalize(), t).normalize()
-	}
-}
 
 #[derive(Default)]
 pub struct Destination {
