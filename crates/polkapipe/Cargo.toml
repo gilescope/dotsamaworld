@@ -12,26 +12,26 @@ repository = "https://github.com/gilescope/polkapipe"
 
 [dependencies]
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
-log = { version = "0.4.14", optional = true }
-jsonrpc = { version = "0.12.0", default-features = false }
-serde_json = { version = "1.0", default-features = false }
+log = { version = "0.4.22", optional = true }
+jsonrpc = { version = "0.18.0", default-features = false }
+serde_json = { version = "1.0.120", default-features = false }
 
 # http backend
-surf = { version = "2.3.1", default-features = false, optional = true }
+surf = { version = "2.3.2", default-features = false, optional = true }
 
 # ws backend
-futures-channel = { version = "0.3.17", default-features = false, features = [
+futures-channel = { version = "0.3.30", default-features = false, features = [
     "alloc",
 ], optional = true }
-futures-util = { version = "0.3.17", default-features = false, features = [
+futures-util = { version = "0.3.30", default-features = false, features = [
     "sink",
 ], optional = true }
 async-mutex = { version = "1.4.0", optional = true }
 async-tls = { version = "0.11.0", default-features = false, optional = true }
-async-std = { version = "1.10.0", default-features = false, optional = true }
+async-std = { version = "1.12.0", default-features = false, optional = true }
 
 smoldot-light = { version = "0.2", optional = true }
-lazy_static = { version = "1.4", optional = true }
+lazy_static = { version = "1.5", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "0.2", default-features = false }
@@ -42,7 +42,7 @@ web-sys = { version = "0.3", features = [
 js-sys = { version = "0.3", features = [], default-features = false }
 console_log = { version = "0.2", optional = true }
 async-oneshot = "0.5"
-pollster = "0.2.5" # needed for block_on in a browser callback
+pollster = "0.3.0" # needed for block_on in a browser callback
 gloo-timers = {version = "0.2.4", features = ["futures"]}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -53,9 +53,9 @@ futures = { version = "0.3", optional = true }
 
 [dev-dependencies]
 console_error_panic_hook = "^0.1"
-async-std = { version = "1.10.0", features = ["attributes"] }
-hex-literal = "0.3.3"
-env_logger = "0.9"
+async-std = { version = "1.12.0", features = ["attributes"] }
+hex-literal = "0.3.4"
+env_logger = "0.11"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"

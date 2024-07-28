@@ -23,6 +23,7 @@ impl Texture {
 			dimension: wgpu::TextureDimension::D2,
 			format: Self::DEPTH_FORMAT,
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+			view_formats: std::default::Default::default()
 		};
 		let texture = device.create_texture(&desc);
 
@@ -36,7 +37,7 @@ impl Texture {
 			min_filter: wgpu::FilterMode::Linear,
 			mipmap_filter: wgpu::FilterMode::Nearest,
 			compare: Some(wgpu::CompareFunction::LessEqual), // 5.
-			lod_min_clamp: -100.0,
+			lod_min_clamp: 0.0, // Was -100 but apparently that's nonsense.
 			lod_max_clamp: 100.0,
 			..Default::default()
 		});

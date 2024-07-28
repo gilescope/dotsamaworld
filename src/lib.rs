@@ -5,7 +5,7 @@
 #![allow(clippy::type_complexity)]
 use crate::{
 	camera::CameraUniform,
-	movement::Destination,
+	// movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
 use chrono::prelude::*;
@@ -30,7 +30,7 @@ use std::{
 };
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
-	dpi::{LogicalSize, PhysicalPosition, PhysicalSize},
+	dpi::{PhysicalPosition, PhysicalSize},
 	event::{WindowEvent, *},
 	event_loop::EventLoop,
 	window::{Window, WindowId},
@@ -58,9 +58,9 @@ macro_rules! log {
 #[inline]
 fn default<T>() -> T
 where
-	T: Default,
+	T: std::default::Default,
 {
-	Default::default()
+	std::default::Default::default()
 }
 
 mod camera;
@@ -171,6 +171,7 @@ pub struct ChainInfo {
 
 use chrono::DateTime;
 use core::sync::atomic::AtomicU64;
+// use egui::CursorIcon::Default;
 
 #[derive(Default)]
 pub struct ChainStats {
@@ -602,7 +603,7 @@ async fn async_main() -> std::result::Result<(), ()> {
 
 	// html_body::get().request_pointer_lock();
 
-	let event_loop = winit::event_loop::EventLoopBuilder::<()>::with_user_event().build();
+	let event_loop = winit::event_loop::EventLoopBuilder::<()>::with_user_event().build().unwrap();
 
 	let mut winit_window_builder = winit::window::WindowBuilder::new();
 
@@ -651,14 +652,14 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let sovereigns = Sovereigns { relays: vec![], default_track_speed: 1. };
 
 	let mut anchor = Anchor::default();
-	let mut destination = movement::Destination::default();
+	// let mut destination = movement::Destination::default();
 	let mut inspector = Inspector::default();
 	let mut occupied_screen_space = ui::OccupiedScreenSpace::default();
 
-	let instance = wgpu::Instance::new(wgpu::Backends::all());
+	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 	// SAFETY: `window` Handle must be a valid object to create a surface upon
 	// and must remain valid for the lifetime of the returned surface.
-	let mut surface = unsafe { instance.create_surface(&window) };
+	let mut surface = instance.create_surface(&window).unwrap();
 
 	let adapter = instance
 		.request_adapter(&wgpu::RequestAdapterOptions {
@@ -676,17 +677,25 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		wgpu::Features::default()
 	};
 
-	let (device, queue) = pollster::block_on(adapter.request_device(
+	let (device, queue) = adapter.request_device(
 		&wgpu::DeviceDescriptor {
-			features,
-			limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
+			required_features: features,
+			required_limits: wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
 			label: None,
 		},
 		None,
-	))
+	).await
 	.unwrap();
 
 	let mut size: PhysicalSize<u32> = window.inner_size();
+
+	// Sometimes we're rendering before the window size has been set...
+	while size.width <= 0 {
+		log!("Waiting for window size to be non-zero...");
+		async_std::task::sleep(Duration::from_millis(300)).await;
+		size = window.inner_size();
+	}
+
 	let mut hidpi_factor = window.scale_factor(); // 2.0 <-- this is why quaters!
 	log!("hidpi factor {:?}", hidpi_factor);
 
@@ -702,14 +711,28 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let resize_receiver = Mutex::new(channel.1);
 	resize::setup_viewport_resize_system(Mutex::new(resize_sender));
 
-	let surface_format = surface.get_supported_formats(&adapter)[0];
+	// let preferred = adapter.adapter_get_swap_chain_preferred_format(&surface);
+	let surface_format = TextureFormat::Bgra8Unorm;
+
+	// let surface_caps = surface.get_capabilities(&adapter);
+	// // Shader code in this tutorial assumes an sRGB surface texture. Using a different
+	// // one will result in all the colors coming out darker. If you want to support non
+	// // sRGB surfaces, you'll need to account for that when drawing to the frame.
+	// let surface_format = surface_caps.formats.iter()
+	// 	.find(|f| f.is_srgb())
+	// 	.copied()
+	// 	.unwrap_or(surface_caps.formats[0]);
+	// //BGRA8Unorm
+
 	let mut surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-		format: surface_format,
+		format: surface_format, //TODO choose preferred one
 		width: size.width,
 		height: size.height,
 		present_mode: wgpu::PresentMode::Fifo, //Immediate not supported on web
 		alpha_mode: wgpu::CompositeAlphaMode::Auto,
+		desired_maximum_frame_latency: 3,
+		view_formats: std::default::Default::default(),
 	};
 	surface.configure(&device, &surface_config);
 
@@ -882,7 +905,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	let start_textured = vertices.len(); // textured rectangle
 	vertices.extend(&rect_instances(texture_map.len()));
 
-	// vertices.extend(cube(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
+	vertices.extend(cube(ground_width, 0.00001, ground_width, 0.0, 0.0, 0.));
 
 	let mut indicies: Vec<u16> = vec![];
 	indicies.extend(cube_indicies(start_cube as u16));
@@ -929,16 +952,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		// Instance{ position: [-ground_width/2.0,1000.,-ground_width/2.0], color: 344411 }
 	];
 
-	let mut chain_instance_data = vec![];
-	let mut block_instance_data = vec![];
+	let mut chain_instance_data: Vec<Instance> = vec![];
+	let mut block_instance_data: Vec<Instance> = vec![];
 	let mut extrinsic_instance_data : Vec<Instance> = vec![];
 	let mut event_instance_data : Vec<Instance> = vec![];
-	let mut selected_instance_data = vec![];
+	let mut selected_instance_data: Vec<Instance> = vec![];
 	let mut textured_instance_data: Vec<Instance> = vec![];
 
 	let mut extrinsic_target_heights: Vec<f32> = vec![];
 	let mut event_target_heights: Vec<f32> = vec![];
-	//let instance_data = instances;//.iter().map(Instance::to_raw).collect::<Vec<_>>();
 
 	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 		label: Some("Render Pipeline Layout"),
@@ -953,6 +975,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			module: &shader,
 			entry_point: "vs_main",
 			buffers: &[Vertex::desc(), Instance::desc()],
+			compilation_options: std::default::Default::default()
 		},
 		fragment: Some(wgpu::FragmentState {
 			// 3.
@@ -960,10 +983,11 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			entry_point: "fs_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				// 4.
-				format: TextureFormat::Rgba8UnormSrgb,
+				format: TextureFormat::Bgra8Unorm, // Rgba8UnormSrgb
 				blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
+			compilation_options: std::default::Default::default()
 		}),
 
 		primitive: wgpu::PrimitiveState {
@@ -995,7 +1019,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		multiview: None,
 	});
 
-	let mut last_render_time = Utc::now();
+	// let mut last_render_time = Utc::now();
 
 	let mut frames = 0u64;
 	let mut fps = 0;
@@ -1020,14 +1044,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	);
 
 	// let mut ctx = egui::Context::default();
-	let mut mouse_pressed = false;
+	let mut mouse_pressed: bool = false;
 
 	use crate::camera::OPENGL_TO_WGPU_MATRIX;
-
-	// #[cfg(target_family = "wasm")]
-	// let viewport_size = get_viewport_size();
-	// #[cfg(not(target_family = "wasm"))]
-	// let viewport_size = window.inner_size();
 
 	let matrix = OPENGL_TO_WGPU_MATRIX;
 	let x: glam::Vec4 = glam::Vec4::new(matrix.x.x, matrix.x.y, matrix.x.z, matrix.x.w);
@@ -1040,7 +1059,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		(PhysicalPosition<f64>, DateTime<Utc>, Option<(PhysicalPosition<f64>, DateTime<Utc>)>),
 	> = default();
 
-	let mut last_mouse_position = None;
+	let mut last_mouse_position: Option<PhysicalPosition<f64>> = None;
 	let window_id = window.id();
 
 	let mut ground_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1068,25 +1087,25 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		usage: wgpu::BufferUsages::VERTEX,
 	});
 	let mut block_instance_data_count = block_instance_data.len();
-	// let mut extrinsic_instance_buffer =
+	// let extrinsic_instance_buffer =
 	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 	// 		label: Some("cube Instance Buffer"),
 	// 		contents: bytemuck::cast_slice(&extrinsic_instance_data),
 	// 		usage: wgpu::BufferUsages::VERTEX,
 	// 	});
-	// let mut event_instance_buffer =
+	// let event_instance_buffer =
 	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 	// 		label: Some("cube Instance Buffer"),
 	// 		contents: bytemuck::cast_slice(&event_instance_data),
 	// 		usage: wgpu::BufferUsages::VERTEX,
 	// 	});
 	// let mut cube_instance_data_count = cube_instance_data.len();
-	//  =
-	// 	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-	// 		label: Some("selected Instance Buffer"),
-	// 		contents: bytemuck::cast_slice(&selected_instance_data),
-	// 		usage: wgpu::BufferUsages::VERTEX,
-	// 	});
+
+		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("selected Instance Buffer"),
+			contents: bytemuck::cast_slice(&selected_instance_data),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
 	// let mut selected_instance_data_count = selected_instance_data.len();
 
 	// let mut loaded_textures = false;
@@ -1094,7 +1113,10 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 	// let diffuse_sampler : wgpu::Sampler;
 
 	// let mut last_movement_time = Utc::now();
-	event_loop.run(move |event, _, _control_flow| {
+	//EventLoopExtWebSys::spawn();
+	use winit::platform::web::EventLoopExtWebSys;
+	event_loop.run(  |event, _control_flow| {
+		log!("loggging1");
 		let selected_instance_buffer;
 		let event_instance_buffer;
 		let extrinsic_instance_buffer;
@@ -1127,18 +1149,19 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		#[cfg(target_family = "wasm")]
 		if let Some(new_size) = resize::viewport_resize_system(&resize_receiver) {
 			log!("set new size width: {} height: {}", new_size.width, new_size.height);
-			// window.set_inner_size(new_size);
-			window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
-		// 	projection.resize(new_size.width, new_size.height);
-		// 	size = new_size;
-		// 	surface.configure(&device, &surface_config);
-		// 	depth_texture =
-		// 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
-
-			// TODO can we set canvas size?
-
-			size = new_size;
 			hidpi_factor = window.scale_factor();
+			size = PhysicalSize::new((new_size.width as f64 * hidpi_factor) as u32, (new_size.height as f64 * hidpi_factor) as u32);
+			window.set_min_inner_size(Some(size.clone()));
+			window.set_max_inner_size(Some(size.clone()));
+			// 	projection.resize(new_size.width, new_size.height);
+			// 	size = new_size;
+			// 	surface.configure(&device, &surface_config);
+			// 	depth_texture =
+			// 		texture::Texture::create_depth_texture(&device, &surface_config, "depth_texture");
+
+			// TODO: can we set canvas size?
+
+			// size = new_size;
 			resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform, &mut camera, sample_count, &mut platform, &window_id);
 		}
 
@@ -1257,7 +1280,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 										let before = camera_controller.rotate_horizontal_stack.len();
 										add(&mut camera_controller.rotate_horizontal_stack, per_frame_horiz, elapsed_frames as usize);
 										add(&mut camera_controller.rotate_vertical_stack, per_frame_vert, elapsed_frames as usize);
-										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(), 
+										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(),
 										per_frame_horiz, millies_elapsed );
 									}
 								}
@@ -1288,8 +1311,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				}
 				if let WindowEvent::Resized(new_size) = event {
 					log!("WINIT: set new size width: {} height: {}", new_size.width, new_size.height);
-					// window.set_inner_size(*new_size);       
-					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+					// window.set_inner_size(*new_size);
+					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
 					// size = new_size.clone();
 					// surface_config.width = size.width;
 					// surface_config.height = size.height;
@@ -1300,31 +1323,34 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					size = *new_size;
 					hidpi_factor = window.scale_factor();
 					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform,&mut camera, sample_count, &mut platform, &window_id);
-				} else if let WindowEvent::ScaleFactorChanged { new_inner_size, .. } = event {
-					size = **new_inner_size;
-					hidpi_factor = window.scale_factor();
+				} else if let WindowEvent::ScaleFactorChanged { scale_factor, .. } = event {
+					// size = inner_size_writer.lock().clone();
+					hidpi_factor = *scale_factor; // window.scale_factor();
 					resize(&size, &device, &mut surface_config, &mut projection, &mut surface, &mut depth_texture, hidpi_factor, &mut camera_uniform, &mut camera, sample_count, &mut platform, &window_id);
 				}
 			},
-			Event::RedrawRequested(window_id) if window_id == window.id() => {
-				let now = Utc::now();
-				let dt = now - last_render_time;
-				last_render_time = now;
-
-				camera_controller.update_camera(&mut camera, dt);
-				camera_uniform.update_view_proj(&camera, &projection);
-				queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
-			},
-			Event::MainEventsCleared => {
-				// RedrawRequested will only trigger once, unless we manually
-				// request it.
-				window.request_redraw();
-			},
+			//TODO needed?
+			// Event::RedrawRequested(window_id) if window_id == window.id() => {
+			// 	let now = Utc::now();
+			// 	let dt = now - last_render_time;
+			// 	last_render_time = now;
+			//
+			// 	camera_controller.update_camera(&mut camera, dt);
+			// 	camera_uniform.update_view_proj(&camera, &projection);
+			// 	queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
+			// },
+			// Event::MainEventsCleared => {
+			// 	// RedrawRequested will only trigger once, unless we manually
+			// 	// request it.
+			// 	window.request_redraw();
+			// },
 			_ => {},
 		}
 
+		redraw = true;
 		if redraw {
 			frames += 1;
+			
 
 			// let mut data_update: Option<DataUpdate> = None;
 			if let Ok(render_update) = &mut UPDATE_QUEUE.lock() {
@@ -1378,6 +1404,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				rain(&mut extrinsic_instance_data, &mut extrinsic_target_heights);
 				rain(&mut event_instance_data, &mut event_target_heights);
 			}
+			
 
 			// TODO: when refreshing a buffer can we append to it???
 			if ground_instance_data_count != ground_instance_data.len() {
@@ -1461,7 +1488,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				&mut urlbar,
 				&mut anchor,
 				&mut inspector,
-				&mut destination,
+				// &mut destination,
 				fps,
 				tps,
 				selected_details,
@@ -1469,7 +1496,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 			// End the UI frame. We could now handle the output and draw the UI with the backend.
 			let full_output = platform.end_frame(Some(&window));
-			let paint_jobs = platform.context().tessellate(full_output.shapes);
+			let paint_jobs = platform.context().tessellate(full_output.shapes, full_output.pixels_per_point);
 
 			let mut encoder = device
 				.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("encoder") });
@@ -1518,18 +1545,20 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 						Some(wgpu::RenderPassColorAttachment {
 							view: &output_view,
 							resolve_target: None,
-							ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+							ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
 						}),
 					],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &depth_texture.view,
 						depth_ops: Some(wgpu::Operations {
-							load: //wgpu::LoadOp::Load, 
+							load: //wgpu::LoadOp::Load,
 							wgpu::LoadOp::Clear(1.0),
-							store: true,
+							store: wgpu::StoreOp::Store,//true,
 						}),
 						stencil_ops: None,
 					}),
+					occlusion_query_set: std::default::Default::default(),
+					timestamp_writes: std::default::Default::default()
 				});
 
 				render_pass.set_pipeline(&render_pipeline);
@@ -1586,35 +1615,44 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				);
 
 				// Draw blocks
-				render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
-				render_pass.draw_indexed(
-					indicies_block.clone(),
-					//36..((36 + 36) as u32),
-					0,
-					0..block_instance_data.len() as _,
-				);
+				if !block_instance_data.is_empty() {
+					render_pass.set_vertex_buffer(1, block_instance_buffer.slice(..));
+					render_pass.draw_indexed(
+						indicies_block.clone(),
+						//36..((36 + 36) as u32),
+						0,
+						0..block_instance_data.len() as _,
+					);
+				}
 
 				// Draw cubes - todo these draw calls can be combined.
-				render_pass.set_vertex_buffer(1, extrinsic_instance_buffer.slice(..));
-				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..extrinsic_instance_data.len() as _);
-				render_pass.set_vertex_buffer(1, event_instance_buffer.slice(..));
-				render_pass.draw_indexed(indicies_cube.clone(), 0, 0..event_instance_data.len() as _);
+				if !extrinsic_instance_data.is_empty() {
+					render_pass.set_vertex_buffer(1, extrinsic_instance_buffer.slice(..));
+					render_pass.draw_indexed(indicies_cube.clone(), 0, 0..extrinsic_instance_data.len() as _);
+				}
+				if !event_instance_data.is_empty() {
+					render_pass.set_vertex_buffer(1, event_instance_buffer.slice(..));
+					render_pass.draw_indexed(indicies_cube.clone(), 0, 0..event_instance_data.len() as _);
+				}
+				if !selected_instance_data.is_empty() {
+					render_pass.set_vertex_buffer(1, selected_instance_buffer.slice(..));
+					render_pass.draw_indexed(
+						indicies_selected.clone(),
+						// (36 + 36 + 36 + 36)..((36 + 36 + 36 + 36 + 36) as u32),
+						0,
+						0..selected_instance_data.len() as _,
+					);
+				}
 
-				render_pass.set_vertex_buffer(1, selected_instance_buffer.slice(..));
-				render_pass.draw_indexed(
-					indicies_selected.clone(),
-					// (36 + 36 + 36 + 36)..((36 + 36 + 36 + 36 + 36) as u32),
-					0,
-					0..selected_instance_data.len() as _,
-				);
-
-				render_pass.set_vertex_buffer(1, textured_instance_buffer.slice(..));
-				// log!("render textured_instance_data.len() is {} ",textured_instance_data.len());
-				render_pass.draw_indexed(
-					indicies_textured.clone(),
-					0,
-					0..textured_instance_data.len() as _,
-				);
+				if !textured_instance_data.is_empty() {
+					render_pass.set_vertex_buffer(1, textured_instance_buffer.slice(..));
+					// log!("render textured_instance_data.len() is {} ",textured_instance_data.len());
+					render_pass.draw_indexed(
+						indicies_textured.clone(),
+						0,
+						0..textured_instance_data.len() as _,
+					);
+				}
 			}
 			queue.submit(std::iter::once(encoder.finish(
 		// 		&wgpu::RenderBundleDescriptor {
@@ -2057,6 +2095,7 @@ async fn load_textures(
 		// COPY_DST means that we want to copy data to this texture
 		usage,
 		label: Some("diffuse_texture"),
+		view_formats: std::default::Default::default(),
 	});
 
 	queue.write_texture(
@@ -2072,7 +2111,7 @@ async fn load_textures(
 		// The layout of the texture
 		wgpu::ImageDataLayout {
 			offset: 0, //TODO for different layouts
-			bytes_per_row: std::num::NonZeroU32::new(4 * width),
+			bytes_per_row: Some(4u32 * width),
 			rows_per_image: None,
 		},
 		texture_size,
@@ -2489,6 +2528,7 @@ async fn load_textures_emoji(
 		// COPY_DST means that we want to copy data to this texture
 		usage,
 		label: Some("diffuse_texture"),
+		view_formats: std::default::Default::default(),
 	});
 
 	queue.write_texture(
@@ -2504,7 +2544,7 @@ async fn load_textures_emoji(
 		// The layout of the texture
 		wgpu::ImageDataLayout {
 			offset: 0, //TODO for different layouts
-			bytes_per_row: std::num::NonZeroU32::new(4 * width),
+			bytes_per_row: Some(4u32 * width),
 			rows_per_image: None,
 		},
 		texture_size,
@@ -2776,14 +2816,15 @@ fn resize(
 		}),
 	});
 
-	let mut s = *size;
-	platform.handle_event::<winit::event::WindowEvent>(&WindowEvent {
-		window_id: *window_id,
-		event: winit::event::WindowEvent::ScaleFactorChanged {
-			scale_factor: hidpi_factor_f64,
-			new_inner_size: &mut s,
-		},
-	});
+	//TODO: deps upgrade
+	// let mut s = *size;
+	// platform.handle_event(&WindowEvent {
+	// 	window_id: *window_id,
+	// 	event: winit::event::WindowEvent::ScaleFactorChanged {
+	// 		scale_factor: hidpi_factor_f64,
+	// 		inner_size_writer: InnerSizeWriter::new(Weak::new(Mutex::new(s.clone()))),
+	// 	},
+	// });
 }
 
 // struct DataSourceStreamEvent(ChainInfo, datasource::DataUpdate);

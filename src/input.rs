@@ -3,8 +3,10 @@ use cgmath::{InnerSpace, Rad, Vector3};
 use core::f32::consts::FRAC_PI_2;
 use winit::{
 	dpi::PhysicalPosition,
-	event::{ElementState, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent},
+	event::{ElementState, MouseScrollDelta, WindowEvent},
 };
+use winit::event::KeyEvent;
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
@@ -61,8 +63,8 @@ impl CameraController {
 		}
 	}
 
-	pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
-		if let VirtualKeyCode::LShift = key {
+	pub fn process_keyboard(&mut self, key: PhysicalKey, state: ElementState) -> bool {
+		if let PhysicalKey::Code(KeyCode::ShiftLeft) = key {
 			if state == ElementState::Pressed {
 				self.boost_pressed = true;
 			} else {
@@ -70,28 +72,51 @@ impl CameraController {
 			}
 		}
 		let amount = if state == ElementState::Pressed { 0.1 * self.boost() } else { 0.0 };
+		// let a = SmolStr::from("a");
+		// let w = SmolStr::from("w");
+		// let s = SmolStr::from("s");
+		// let d = SmolStr::from("d");
+
+		//TODO: too hard????
+		// if key == Character(Character(w)) {
+		// 	self.amount_forward = amount;
+		// 	return true;
+		// }
+		// if key == Character(Character(s)) {
+		// 	self.amount_backward = amount;
+		// 	return true;
+		// }
+		// if key == Character(Character(a)) {
+		// 	self.amount_left = amount;
+		// 	return true;
+		// }
+		// if key == Character(Character(d)) {
+		// 	self.amount_right = amount;
+		// 	return true;
+		// }
+
 		match key {
-			VirtualKeyCode::W | VirtualKeyCode::Up => {
+			PhysicalKey::Code(KeyCode::ArrowUp) => {
 				self.amount_forward = amount;
 				true
 			},
-			VirtualKeyCode::S | VirtualKeyCode::Down => {
+			PhysicalKey::Code(KeyCode::ArrowDown) => {
 				self.amount_backward = amount;
 				true
 			},
-			VirtualKeyCode::A | VirtualKeyCode::Left => {
+			PhysicalKey::Code(KeyCode::ArrowLeft)=> {
 				self.amount_left = amount;
 				true
 			},
-			VirtualKeyCode::D | VirtualKeyCode::Right => {
+			PhysicalKey::Code(KeyCode::ArrowRight) => {
 				self.amount_right = amount;
 				true
 			},
-			VirtualKeyCode::Space => {
+			PhysicalKey::Code(KeyCode::Space) => {
 				self.amount_up = amount;
 				true
 			},
-			VirtualKeyCode::LShift => {
+			PhysicalKey::Code(KeyCode::ShiftLeft) => {
 				self.amount_down = amount;
 				true
 			},
@@ -177,7 +202,7 @@ pub(crate) fn input(
 ) -> bool {
 	match event {
 		WindowEvent::KeyboardInput {
-			input: KeyboardInput { virtual_keycode: Some(key), state, .. },
+			event: KeyEvent { physical_key: key, state, .. },
 			..
 		} => camera_controller.process_keyboard(*key, *state),
 		WindowEvent::MouseWheel { delta, .. } => {

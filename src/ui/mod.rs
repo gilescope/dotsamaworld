@@ -2,9 +2,9 @@
 
 pub mod details;
 pub mod doturl;
-use crate::{log, Anchor, ChainInfo, Destination, Env, Inspector, FREE_TXS};
+use crate::{log, Anchor, ChainInfo, Env, Inspector, FREE_TXS};
 use cgmath::Point3;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime};
 pub use details::Details;
 pub use doturl::DotUrl;
 use std::{collections::HashMap, sync::atomic::Ordering};
@@ -22,12 +22,12 @@ pub struct OccupiedScreenSpace {
 
 pub fn ui_bars_system(
 	egui_context: &mut egui::Context,
-	mut occupied_screen_space: &mut OccupiedScreenSpace,
+	occupied_screen_space: &mut OccupiedScreenSpace,
 	viewpoint: &Point3<f32>,
 	spec: &mut UrlBar,
 	mut anchor: &mut Anchor,
 	inspector: &mut Inspector,
-	_destination: &mut Destination,
+	// _destination: &mut Destination,
 	fps: u32,
 	tps: u32,
 	selected_details: Vec<(u32, Details, ChainInfo)>,
@@ -304,38 +304,38 @@ pub fn ui_bars_system(
 				// );
 
 				//TODO: location = alpha blend to 10% everything but XXXX
-				let response = ui.text_edit_singleline(&mut spec.find);
+				// let response = ui.text_edit_singleline(&mut spec.find);
 				let found = 0;
-				if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
-					if spec.find.len() <= 4 {
-						// if let Ok(para_id) = spec.find.parse() {
-						// for (loc, details) in entities.iter() {
-						// 	if details.doturl.para_id == Some(para_id) &&
-						// 		details.doturl.block_number.is_some()
-						// 	{
-						// 		destination.location = Some(loc.translation());
-						// 		inspector.selected = Some(details.clone());
-						// 		found += 1;
-						// 	}
-						// }
-						// }
-					}
-					// for (loc, details) in entities.iter() {
-					// 	if spec.find.len() <= details.pallet.len() &&
-					// 		spec.find.as_bytes().eq_ignore_ascii_case(
-					// 			&details.pallet.as_bytes()[..spec.find.len()],
-					// 		)
-					// 	// if details.pallet.contains(&spec.find) ||
-					// 	// details.variant.contains(&spec.find)
-					// 	{
-					// 		destination.location = Some(loc.translation());
-					// 		inspector.selected = Some(details.clone());
-					// 		found += 1;
-					// 	}
-					// }
-
-					println!("find {}", spec.find);
-				}
+				// if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
+				// 	if spec.find.len() <= 4 {
+				// 		// if let Ok(para_id) = spec.find.parse() {
+				// 		// for (loc, details) in entities.iter() {
+				// 		// 	if details.doturl.para_id == Some(para_id) &&
+				// 		// 		details.doturl.block_number.is_some()
+				// 		// 	{
+				// 		// 		destination.location = Some(loc.translation());
+				// 		// 		inspector.selected = Some(details.clone());
+				// 		// 		found += 1;
+				// 		// 	}
+				// 		// }
+				// 		// }
+				// 	}
+				// 	// for (loc, details) in entities.iter() {
+				// 	// 	if spec.find.len() <= details.pallet.len() &&
+				// 	// 		spec.find.as_bytes().eq_ignore_ascii_case(
+				// 	// 			&details.pallet.as_bytes()[..spec.find.len()],
+				// 	// 		)
+				// 	// 	// if details.pallet.contains(&spec.find) ||
+				// 	// 	// details.variant.contains(&spec.find)
+				// 	// 	{
+				// 	// 		destination.location = Some(loc.translation());
+				// 	// 		inspector.selected = Some(details.clone());
+				// 	// 		found += 1;
+				// 	// 	}
+				// 	// }
+				//
+				// 	println!("find {}", spec.find);
+				// }
 				if !spec.find.is_empty() {
 					ui.heading(format!("found: {}", found));
 				}
@@ -362,9 +362,7 @@ pub fn ui_bars_system(
 					let z = viewpoint.z;
 
 					let timestamp = super::x_to_timestamp(viewpoint.x);
-					let naive = NaiveDateTime::from_timestamp_opt(timestamp, 0).unwrap();
-					let datetime: DateTime<chrono::Utc> = DateTime::from_utc(naive, Utc);
-					let datetime: DateTime<chrono::Local> = datetime.into();
+					let datetime = DateTime::from_timestamp(timestamp, 0).unwrap();
 
 					let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
 

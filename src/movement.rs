@@ -1,16 +1,16 @@
 #[cfg(feature = "spacemouse")]
 use crate::MovementSettings;
 // use crate::{Anchor, Viewport, LAST_KEYSTROKE_TIME, PAUSE_DATA_FETCH};
-use glam::{Quat, Vec3};
+// use glam::{Quat, Vec3};
 
-#[derive(Default)]
-pub struct Destination {
-	pub location: Option<Vec3>,
-	pub look_at: Option<Quat>,
-	// how many seconds should the transition take?
-	//pub time: Option<f32>
-	// pub set: bool
-}
+// #[derive(Default)]
+// pub struct Destination {
+// 	pub location: Option<Vec3>,
+// 	pub look_at: Option<Quat>,
+// 	// how many seconds should the transition take?
+// 	//pub time: Option<f32>
+// 	// pub set: bool
+// }
 
 // Handles keyboard input and movement
 // pub fn player_move_arrows(

@@ -31,7 +31,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec3<f32>,
     @location(1) tex: vec2<f32>,
-    @location(2) tex_index: u32,
+    @location(2) @interpolate(flat) tex_index: u32,
 }
 
 // TODO: add in global time, have rain happen in vertex shader.
@@ -84,9 +84,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let fog_color = vec4<f32>(1.0,1.0,1.0,1.0);
 
     // Calc fog factor    
-    let z = in.clip_position[2] / in.clip_position[3];
-    let fog_factor = exp2( log_density * z * z );
-    let fog_factor = clamp(fog_factor, 0.0, 1.0);
+    let zed = in.clip_position[2] / in.clip_position[3];
+    let fog_factor_a = exp2( log_density * zed * zed );
+    let fog_factor = clamp(fog_factor_a, 0.0, 1.0);
     
     //TODO: we are sampling every pixel, even ones we don't need to.
     let z = textureSample(t_diffuse, s_diffuse, vec2<f32>(in.color[0], in.color[1]));//1. - 

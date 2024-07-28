@@ -25,15 +25,15 @@ members = [
 
 [dependencies]
 emojidot = { path="./crates/emojidot" }
-glam = "0.22.0"
-winit = { version = "0.27.5", features = ["x11"] }
+glam = "0.28.0"
 cgmath = "0.18.0"
 
-pollster = "0.2.5"
-egui_wgpu_backend = "0.20.0"
-egui_winit_platform = { version = "0.16.0", features = [] } #"webbrowser" , "clipboard"
-wgpu = { version = "0.14.2", features = ["webgl"] }
-primitive-types = { version = "0.12.1", default-features = false, features = [
+winit = { version = "0.29.15", features = ["x11"] }
+egui = { version = "0.27.2", default-features = false }
+egui_wgpu_backend = "0.29.0"
+egui_winit_platform = { version = "0.22.0", features = [] } #"webbrowser" , "clipboard"
+wgpu = { version = "0.20.1", features = ["webgl"] }
+primitive-types = { version = "0.12.2", default-features = false, features = [
     "serde_no_std",
 ] }
 log = { version = "0.4.22", default-features = false }
@@ -71,7 +71,7 @@ form_urlencoded = "1.2.1"
 frame-metadata = { version = "16.0.0", default-features = false, features = ["current", "decode"] }
 
 
-scale-info = { version = "2.3.1", features = ["serde"] }
+scale-info = { version = "2.11.3", features = ["serde"] }
 
 scale-value = {  workspace = true }
 # scale-value = { git = "https://github.com/gilescope/scale-value", branch = "wasm32", features= ["from_string"] }
@@ -88,7 +88,6 @@ scale-value-to-borrowed = { path= "crates/scale-value-to-borrowed", features = [
 polkadyn = { path = "crates/polkadyn" }
 # contract-transcode = { git = "https://github.com/paritytech/cargo-contract.git" }
 
-egui = { version = "0.19.0", default-features = false }
 # egui-datepicker = { git = "https://github.com/gilescope/egui-datepicker.git", branch = "for-project-use", default-features = false }
 # egui extras has a date but not time chooser
 # egui_extras = { version = "0.18", default-features=false, features=["chrono"] }# features = ["image", "image"] }
@@ -181,7 +180,7 @@ features = [
 ]
 
 [dev-dependencies]
-pollster = "0.2.5"
+pollster = "0.3.0"
 
 [profile.dev]
 opt-level = 1
