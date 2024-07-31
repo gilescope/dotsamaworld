@@ -8,7 +8,7 @@ use crate::{
 	// movement::Destination,
 	ui::{ui_bars_system, Details, DotUrl, UrlBar},
 };
-use chrono::prelude::*;
+use chrono::{prelude::*, TimeDelta};
 use core::num::NonZeroI64;
 use datasource::DataUpdate;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -28,6 +28,7 @@ use std::{
 	},
 	time::Duration,
 };
+use web_time::Instant;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::{
 	dpi::{PhysicalPosition, PhysicalSize},
@@ -171,6 +172,7 @@ pub struct ChainInfo {
 
 use chrono::DateTime;
 use core::sync::atomic::AtomicU64;
+use winit::event_loop::ControlFlow;
 // use egui::CursorIcon::Default;
 
 #[derive(Default)]
@@ -620,6 +622,9 @@ async fn async_main() -> std::result::Result<(), ()> {
 		}
 	}
 
+	use winit::event_loop::ControlFlow;
+	event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(1000)));
+
 	log!("about to run event loop");
 	let window = winit_window_builder.build(&event_loop).unwrap();
 	#[cfg(target_family = "wasm")]
@@ -729,7 +734,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		format: surface_format, //TODO choose preferred one
 		width: size.width,
 		height: size.height,
-		present_mode: wgpu::PresentMode::Fifo, //Immediate not supported on web
+		// Rather than FiFO, use AuthoVsync so that it's not doing frame rates
+		// higher than the output device.
+		present_mode: wgpu::PresentMode::AutoVsync, //Immediate not supported on web
 		alpha_mode: wgpu::CompositeAlphaMode::Auto,
 		desired_maximum_frame_latency: 3,
 		view_formats: std::default::Default::default(),
@@ -785,7 +792,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 		camera::Camera::new((-200.0, 100.0, 0.0), cgmath::Deg(0.0), cgmath::Deg(-20.0));
 	let mut projection =
 		camera::Projection::new(size.width, size.height, cgmath::Deg(45.0), 0.1, 400000.0);
-	let mut camera_controller = input::CameraController::new(4.0, 0.4);
+	let mut camera_controller = input::CameraController::new(4.0, 40.);
 
 	let mut camera_uniform = CameraUniform::new();
 	camera_uniform.update_view_proj(&camera, &projection);
@@ -1114,9 +1121,15 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 	// let mut last_movement_time = Utc::now();
 	//EventLoopExtWebSys::spawn();
-	use winit::platform::web::EventLoopExtWebSys;
-	event_loop.run(  |event, _control_flow| {
-		log!("loggging1");
+	//TODO: in v30 of winit we can avoid the exception
+	// use winit::platform::web::EventLoopExtWebSys;
+	let mut last_frame_time : Instant = Instant::now();
+	event_loop.run(  |event, control_flow| {
+		control_flow.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(20)));
+		let now_frame_time = Instant::now();
+
+		// event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(1000)));
+
 		let selected_instance_buffer;
 		let event_instance_buffer;
 		let extrinsic_instance_buffer;
@@ -1125,9 +1138,9 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 		let scale_x = size.width as f32 / hidpi_factor as f32;
 		let scale_y = size.height as f32 / hidpi_factor as f32;
-
+		
 		if anchor.follow_chain {
-			camera.position.x += 0.01;
+			camera.desired_position.x += 0.01;
 		}
 
 		// Pass the winit events to the platform integration.
@@ -1167,6 +1180,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 
 		//if frames % 10 == 1
 		let mut redraw = true;
+		
 		match event {
 			 Event::DeviceEvent { event: DeviceEvent::MouseMotion{ delta },
 			    .. // We're not using device_id currently
@@ -1347,6 +1361,12 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			_ => {},
 		}
 
+		let dt = now_frame_time - last_frame_time;
+		
+		camera_controller.update_camera(&mut camera, TimeDelta::new(dt.as_secs().try_into().unwrap(), dt.subsec_nanos() as u32).unwrap());
+		camera_uniform.update_view_proj(&camera, &projection);
+		queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
+
 		redraw = true;
 		if redraw {
 			frames += 1;
@@ -1400,10 +1420,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			}
 
 			//todo rain in gpu
-			if frames % 4 == 0 {
-				rain(&mut extrinsic_instance_data, &mut extrinsic_target_heights);
-				rain(&mut event_instance_data, &mut event_target_heights);
-			}
+			rain(last_frame_time, now_frame_time, &mut extrinsic_instance_data, &mut extrinsic_target_heights);
+			rain(last_frame_time, now_frame_time, &mut event_instance_data, &mut event_target_heights);
 			
 
 			// TODO: when refreshing a buffer can we append to it???
@@ -1484,7 +1502,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 			ui_bars_system(
 				&mut platform.context(),
 				&mut occupied_screen_space,
-				&camera.position,
+				&camera.current_position,
 				&mut urlbar,
 				&mut anchor,
 				&mut inspector,
@@ -1688,7 +1706,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
 				}
 		}
-	});
+		last_frame_time = now_frame_time;
+	}).unwrap();
 }
 
 //TODO: use https://github.com/gfx-rs/wgpu/pull/2781
@@ -4203,36 +4222,39 @@ macro_rules! min {
 }
 
 fn rain(
+	last_frame_time: Instant,
+	current_time: Instant,
 	// time: Res<Time>,
 	drops: &mut [Instance],
 	drops_target: &mut [f32], // mut timer: ResMut<UpdateTimer>,
 ) {
-	let delta = 1.;
+	let duration: std::time::Duration = current_time - last_frame_time;
+
+	//Mouse moves
+	if duration.subsec_nanos() < 100 {
+		return;
+	}
+	if duration.as_secs() > 0 {
+		log!("More than a second between frames!");
+	}
+	let delta: f32 = duration.subsec_nanos() as f32 / 1000_000_00.;
+	// log!("delta {delta}");
+	// let delta = 1.;
 	// if timer.timer.tick(time.delta()).just_finished() {
 	// for mut rainable in drops.iter_mut() {
 	for (i, r) in drops.iter_mut().enumerate() {
 		let dest = drops_target[i]; //TODO zip
 		if dest != 0. {
 			let y = r.position[1];
-			if dest > 0. {
-				if y > dest {
-					let todo = y - dest;
-					let delta = min!(1., delta * (todo / dest));
+			// if dest > 0. {
+			if y > dest {
+				let todo = y - dest;
+				let delta = delta * (todo / dest);
 
-					r.position[1] = max!(dest, y - delta);
-					// Stop raining...
-					if delta < f32::EPSILON {
-						drops_target[i] = 0.;
-					}
-				}
-			} else {
-				// Austrialian down under world. Balls coming up from the depths...
-				if y < dest {
-					r.position[1] = min!(dest, y + delta);
-					// Stop raining...
-					if delta < f32::EPSILON {
-						drops_target[i] = 0.;
-					}
+				r.position[1] = max!(dest, y - delta);
+				// Stop raining...
+				if delta < f32::EPSILON {
+					drops_target[i] = 0.;
 				}
 			}
 		}

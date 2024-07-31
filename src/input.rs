@@ -144,30 +144,30 @@ impl CameraController {
 	}
 
 	pub fn update_camera(&mut self, camera: &mut Camera, dt: chrono::Duration) {
-		let dt = (dt.num_milliseconds() as f32 / 1000.) + dt.num_seconds() as f32;
+		let dt = dt.num_seconds() as f32 + (dt.num_milliseconds() as f32 / 1000.);
 
 		// Move forward/backward and left/right
-		let (yaw_sin, yaw_cos) = camera.yaw.0.sin_cos();
+		let (yaw_sin, yaw_cos) = camera.desired_yaw.0.sin_cos();
 		let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
 		let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-		camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-		camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+		camera.desired_position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
+		camera.desired_position += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
 		// Move in/out (aka. "zoom")
 		// Note: this isn't an actual zoom. The camera's position
 		// changes when zooming. I've added this to make it easier
 		// to get closer to an object you want to focus on.
-		let (pitch_sin, pitch_cos) = camera.pitch.0.sin_cos();
+		let (pitch_sin, pitch_cos) = camera.desired_pitch.0.sin_cos();
 		let scrollward =
 			Vector3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
-		camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+		camera.desired_position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
 		self.scroll = 0.0;
 
 		// Move up/down. Since we don't use roll, we can just
 		// modify the y coordinate directly.
-		camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
-		if camera.position.y < 3.0 {
-			camera.position.y = 3.0;
+		camera.desired_position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+		if camera.desired_position.y < 3.0 {
+			camera.desired_position.y = 3.0;
 		}
 
 		if let Some(val) = self.rotate_horizontal_stack.pop() {
@@ -177,8 +177,8 @@ impl CameraController {
 			self.rotate_vertical += val;
 		}
 		// Rotate
-		camera.yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
-		camera.pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
+		camera.desired_yaw += Rad(self.rotate_horizontal) * self.sensitivity * dt;
+		camera.desired_pitch += Rad(-self.rotate_vertical) * self.sensitivity * dt;
 
 		// If process_mouse isn't called every frame, these values
 		// will not get set to zero, and the camera will rotate
@@ -187,12 +187,27 @@ impl CameraController {
 		self.rotate_vertical = 0.0;
 
 		// Keep the camera's angle from going too high/low.
-		if camera.pitch < -Rad(SAFE_FRAC_PI_2) {
-			camera.pitch = -Rad(SAFE_FRAC_PI_2);
-		} else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
-			camera.pitch = Rad(SAFE_FRAC_PI_2);
+		if camera.desired_pitch < -Rad(SAFE_FRAC_PI_2) {
+			camera.desired_pitch = -Rad(SAFE_FRAC_PI_2);
+		} else if camera.desired_pitch > Rad(SAFE_FRAC_PI_2) {
+			camera.desired_pitch = Rad(SAFE_FRAC_PI_2);
 		}
+
+		//
+		// Smoothing (linear)
+		//
+		camera.current_position.x = calc_frame_next(camera.current_position.x, camera.desired_position.x, 0.01);
+		camera.current_position.y = calc_frame_next(camera.current_position.y, camera.desired_position.y, 0.01);
+		camera.current_position.z = calc_frame_next(camera.current_position.z, camera.desired_position.z, 0.01);
+		camera.current_pitch.0 = calc_frame_next(camera.current_pitch.0, camera.desired_pitch.0, 0.01);
+		camera.current_yaw.0 = calc_frame_next(camera.current_yaw.0, camera.desired_yaw.0, 0.01);
+
+
 	}
+}
+
+fn calc_frame_next(current: f32, dest: f32, sensitivity: f32) -> f32 {
+	current  + (dest - current) * sensitivity
 }
 
 pub(crate) fn input(
