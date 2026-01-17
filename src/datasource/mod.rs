@@ -161,7 +161,7 @@ where
 		let mut source = RawDataSource::new(url.clone());
 
 		let para_id = chain_info.chain_url.para_id;
-		
+
 
 		let our_data_epoc = DATASOURCE_EPOC.load(Ordering::SeqCst);
 		// println!("our epoc for watching blocks is {}", our_data_epoc);
@@ -496,10 +496,10 @@ where
 			let ex_slice = &the_extrinsic.raw[..];
 			// let ex_slice = &ext_bytes.0;
 			let decode_result = polkadyn::decode_extrinsic(&metad, ex_slice);
-			
+
 
 			if let Ok(extrinsic2) = decode_result {
-				
+
 				// if let frame_metadata::RuntimeMetadata::V14(metadd) = &metad.1 {
 				// 	let id = extrinsic2.context;
 				// 	let r = (metadd).types.resolve(unsafe { std::mem::transmute(id) }).unwrap();
@@ -680,7 +680,7 @@ async fn process_extrinsic<'a, 'scale>(
 				// }
 			},
 			("Balances", "deposit") => {
-				
+
 				// start_link//
 				// end_link//
 			},
@@ -1665,13 +1665,13 @@ pub fn associate_events(
 					_ => false,
 				})
 				.map(|(i,s)| (i,s.clone())).collect();
-			
+
 			for (index, _event) in selected_events.iter().rev() {
 				events.remove(*index);
 			}
 			let res: (Option<DataEntity>, Vec<(usize, DataEvent)>) = (
 				Some(extrinsic),
-				selected_events.into_iter().map(|(_, e)| (e.clone())).collect(),
+				selected_events.into_iter().map(|(_, e)| e.clone()).collect(),
 			);
 			res
 		})

@@ -85,11 +85,19 @@ mod networks;
 pub mod recorder;
 use networks::Env;
 
-/// Pick a faster allocator.
-#[cfg(all(not(target_env = "msvc"), not(target_arch = "wasm32")))]
+/// Pick a faster allocator (opt-in via `--features jemalloc`).
+#[cfg(all(
+	not(target_env = "msvc"),
+	not(target_arch = "wasm32"),
+	feature = "jemalloc"
+))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(all(not(target_env = "msvc"), not(target_arch = "wasm32")))]
+#[cfg(all(
+	not(target_env = "msvc"),
+	not(target_arch = "wasm32"),
+	feature = "jemalloc"
+))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
@@ -182,7 +190,7 @@ pub struct ChainStats {
 
 impl ChainStats {
 	fn avg_free_transactions(&self) -> Option<u64> {
-							 
+
 		//currently max ever seen + 100m
 		let max_block_size = 500_227_690_912u64; //todo: get from system state call
 										 // let min_block_weight = 5_000_000_000u64;
@@ -1257,7 +1265,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 										let before = camera_controller.rotate_horizontal_stack.len();
 										add(&mut camera_controller.rotate_horizontal_stack, per_frame_horiz, elapsed_frames as usize);
 										add(&mut camera_controller.rotate_vertical_stack, per_frame_vert, elapsed_frames as usize);
-										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(), 
+										log!("stack before {} len {}, amount: {} duration: {} ",before, camera_controller.rotate_horizontal_stack.len(),
 										per_frame_horiz, millies_elapsed );
 									}
 								}
@@ -1288,8 +1296,8 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 				}
 				if let WindowEvent::Resized(new_size) = event {
 					log!("WINIT: set new size width: {} height: {}", new_size.width, new_size.height);
-					// window.set_inner_size(*new_size);       
-					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));  
+					// window.set_inner_size(*new_size);
+					//window.set_inner_size(LogicalSize::new(new_size.width, new_size.height));
 					// size = new_size.clone();
 					// surface_config.width = size.width;
 					// surface_config.height = size.height;
@@ -1524,7 +1532,7 @@ async fn run(event_loop: EventLoop<()>, window: Window, params: HashMap<String, 
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &depth_texture.view,
 						depth_ops: Some(wgpu::Operations {
-							load: //wgpu::LoadOp::Load, 
+							load: //wgpu::LoadOp::Load,
 							wgpu::LoadOp::Clear(1.0),
 							store: true,
 						}),

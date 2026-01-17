@@ -13,6 +13,7 @@ default = []
 spacemouse = []
 bake = ["jpeg-encoder", "png"]
 raw_images = []
+jemalloc = ["tikv-jemallocator"]
 
 [workspace]
 members = [
@@ -81,7 +82,7 @@ scale-borrow = { path= "crates/scale-borrow", features = [
     "display",
 ] }
 scale-value-to-borrowed = { path= "crates/scale-value-to-borrowed", features = [
-    
+
 ] }
 # scale-value-to-borrowed = { path = "/home/gilescope/git/scale-value-to-borrowed", features=["bitvec"] }
 polkadyn = { path = "crates/polkadyn" }
@@ -104,7 +105,7 @@ jpeg-encoder = { version = "0.5.1", optional = true }
 # bevy_polyline = "0.3"
 
 [target.'cfg(all(not(target_env = "msvc"),not(target_arch = "wasm32")))'.dependencies]
-tikv-jemallocator = "0.5.0"
+tikv-jemallocator = { version = "0.5.0", optional = true }
 
 #
 # Dependencies for native only.
@@ -135,7 +136,7 @@ console_error_panic_hook = "0.1.7"
 chrono = { version = "0.4.23", default-features = false, features = ["wasmbind","clock"] }
 getrandom = { version = "0.2.8", features = ["wasm-bindgen", "js"] }
 #tracing-wasm = "*"
-wasm-bindgen = "0.2.83"
+wasm-bindgen = "0.2.88"
 ws_stream_wasm = "0.7.3"
 # wasm32 branch
 polkapipe = { path= "crates/polkapipe", features = [
